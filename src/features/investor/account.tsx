@@ -276,7 +276,8 @@ function TwoFactorSection() {
           <form onSubmit={handleVerify} className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Add this account to your authenticator app using the setup key below. The setup secret stays in this demo and is not sent to a QR-code service.
+                Add this account to your authenticator app using the setup key below. The setup
+                secret stays in this demo and is not sent to a QR-code service.
               </p>
               <div className="rounded-lg bg-muted p-3">
                 <p className="mb-1 text-xs text-muted-foreground">Secret key</p>
@@ -339,89 +340,110 @@ export default function AccountPage() {
   return (
     <div className="w-full max-w-5xl space-y-4">
       <Tabs value={section} onValueChange={(value) => value && setSection(value)}>
-        <TabsList><TabsTrigger value="profile">Profile</TabsTrigger><TabsTrigger value="privacy">Consent &amp; privacy</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger></TabsList>
+        <TabsList>
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="privacy">Consent &amp; privacy</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+        </TabsList>
       </Tabs>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
 
       {!isLoading && profile && (
         <>
-        {section === "profile" && <div className="grid items-stretch gap-4 lg:grid-cols-2">
-          {/* Profile card */}
-          <Card className="h-full">
-            <CardContent className="flex items-center gap-4 pt-6">
-              <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-                <UserIcon className="size-6 text-muted-foreground" />
-              </div>
+          {section === "profile" && (
+            <div className="grid items-stretch gap-4 lg:grid-cols-2">
+              {/* Profile card */}
+              <Card className="h-full">
+                <CardContent className="flex items-center gap-4 pt-6">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                    <UserIcon className="size-6 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold">{displayName(profile)}</p>
+                    <p className="text-sm text-muted-foreground">{user?.email}</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      {user?.verified ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary">
+                          <CheckCircleIcon className="size-3" />
+                          Verified
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                          Pending
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">Individual</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Application details */}
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                    Application
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <dt className="text-sm text-muted-foreground">Reference</dt>
+                      <dd className="font-mono text-sm font-medium">
+                        AK-{new Date().getFullYear()}-{String(profile.id).padStart(4, "0")}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-sm text-muted-foreground">Verification status</dt>
+                      <dd className="text-sm font-medium">
+                        {user?.verified ? "Verified" : "Pending"}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-sm text-muted-foreground">Account type</dt>
+                      <dd className="text-sm font-medium">Individual</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-sm text-muted-foreground">Country</dt>
+                      <dd className="text-sm font-medium">{profile.country}</dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="text-sm text-muted-foreground">Nationality</dt>
+                      <dd className="text-sm font-medium">{profile.nationality}</dd>
+                    </div>
+                  </dl>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {section === "privacy" && (
+            <section className="max-w-4xl space-y-3">
               <div>
-                <p className="text-lg font-semibold">{displayName(profile)}</p>
-                <p className="text-sm text-muted-foreground">{user?.email}</p>
-                <div className="mt-1 flex items-center gap-2">
-                  {user?.verified ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary">
-                      <CheckCircleIcon className="size-3" />
-                      Verified
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                      Pending
-                    </span>
-                  )}
-                  <span className="text-xs text-muted-foreground">Individual</span>
-                </div>
+                <h2 className="text-lg font-semibold">Consent &amp; privacy</h2>
+                <p className="text-sm text-muted-foreground">
+                  Review your account permissions and communication preferences.
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <ConsentList mode="management" />
+            </section>
+          )}
 
-          {/* Application details */}
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                Application
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <dt className="text-sm text-muted-foreground">Reference</dt>
-                  <dd className="font-mono text-sm font-medium">
-                    AK-{new Date().getFullYear()}-{String(profile.id).padStart(4, "0")}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-sm text-muted-foreground">Verification status</dt>
-                  <dd className="text-sm font-medium">{user?.verified ? "Verified" : "Pending"}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-sm text-muted-foreground">Account type</dt>
-                  <dd className="text-sm font-medium">Individual</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-sm text-muted-foreground">Country</dt>
-                  <dd className="text-sm font-medium">{profile.country}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-sm text-muted-foreground">Nationality</dt>
-                  <dd className="text-sm font-medium">{profile.nationality}</dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
-
-        </div>}
-
-        {section === "privacy" && <section className="max-w-4xl space-y-3">
-          <div><h2 className="text-lg font-semibold">Consent &amp; privacy</h2><p className="text-sm text-muted-foreground">Review your account permissions and communication preferences.</p></div>
-          <ConsentList mode="management" />
-        </section>}
-
-        {section === "security" && <section className="space-y-3">
-          <div><h2 className="text-lg font-semibold">Security</h2><p className="text-sm text-muted-foreground">Manage your sign-in credentials and second factor.</p></div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ChangePasswordSection />
-            <TwoFactorSection />
-          </div>
-        </section>}
+          {section === "security" && (
+            <section className="space-y-3">
+              <div>
+                <h2 className="text-lg font-semibold">Security</h2>
+                <p className="text-sm text-muted-foreground">
+                  Manage your sign-in credentials and second factor.
+                </p>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <ChangePasswordSection />
+                <TwoFactorSection />
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>
