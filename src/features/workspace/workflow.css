@@ -215,6 +215,188 @@
   font-size: 11px;
   color: #728198;
 }
+.wf-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 280px) auto;
+  align-items: end;
+  gap: 14px;
+  margin: 18px 0 8px;
+}
+.wf-toolbar .wf-field,
+.wf-search {
+  max-width: none;
+}
+.wf-result-count {
+  padding-bottom: 9px;
+  color: #728198;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.wf-empty {
+  padding: 16px;
+  border: 1px dashed #d4dce6;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+.wf-table-wrap {
+  overflow-x: auto;
+  margin-top: 16px;
+  border: 1px solid #e0e6ed;
+  border-radius: 8px;
+}
+.wf-table {
+  width: 100%;
+  min-width: 850px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.wf-table th,
+.wf-table td {
+  padding: 11px 13px;
+  border-bottom: 1px solid #e8edf2;
+  text-align: left;
+  vertical-align: top;
+}
+.wf-table th {
+  background: #f5f7fa;
+  color: #617087;
+  font-weight: 600;
+}
+.wf-table td small {
+  display: block;
+  margin-top: 4px;
+  color: #758297;
+  font-size: 11px;
+}
+.wf-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.wf-shortcuts button {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #e0e6ed;
+  border-radius: 8px;
+  text-align: left;
+}
+.wf-shortcuts button:hover,
+.wf-opportunity:hover {
+  background: #f8fafc;
+}
+.wf-shortcuts span {
+  color: #617087;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.wf-opportunity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.wf-opportunity {
+  min-width: 0;
+  padding: 17px;
+  border: 1px solid #e0e6ed;
+  border-radius: 9px;
+}
+.wf-opportunity-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wf-opportunity-head .wf-eyebrow {
+  letter-spacing: 0.08em;
+}
+.wf-opportunity-head h3 {
+  margin-top: 5px;
+  font-size: 18px;
+}
+.wf-status {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eaf4ef;
+  color: #26704a;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.wf-opportunity .wf-opportunity-descriptor {
+  margin-top: 12px;
+  color: #263d58;
+  font-weight: 600;
+}
+.wf-opportunity-meta {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 5px 12px;
+  margin: 14px 0;
+  padding: 11px 0;
+  border-top: 1px solid #e8edf2;
+  border-bottom: 1px solid #e8edf2;
+  font-size: 12px;
+}
+.wf-opportunity-meta span {
+  color: #728198;
+}
+.wf-opportunity details summary {
+  cursor: pointer;
+  color: #285f80;
+  font-size: 12px;
+}
+.wf-opportunity details ul {
+  padding-left: 20px;
+  color: #617087;
+  font-size: 12px;
+}
+.wf-recommend {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e8edf2;
+}
+.wf-doc-list {
+  margin-top: 14px;
+  border-top: 1px solid #e3e8ef;
+}
+.wf-doc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 13px 2px;
+  border-bottom: 1px solid #e8edf2;
+}
+.wf-doc-row h3 {
+  font-size: 13px;
+}
+.wf-doc-row p {
+  margin: 3px 0 0;
+  font-size: 11px;
+}
+.wf-doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.wf-doc-row .wf-document {
+  flex-basis: 100%;
+}
+.wf-closed-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #e8edf2;
+  font-size: 12px;
+}
+.wf-closed-list span {
+  color: #728198;
+  text-align: right;
+}
 .wf-main footer {
   font-size: 11px;
   color: #7b899c;
@@ -429,6 +611,16 @@
   }
   .wf-grid {
     grid-template-columns: 1fr;
+  }
+  .wf-shortcuts,
+  .wf-opportunity-grid {
+    grid-template-columns: 1fr;
+  }
+  .wf-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .wf-result-count {
+    padding: 0;
   }
   .wf-panel {
     padding: 18px;
