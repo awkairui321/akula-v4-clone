@@ -400,7 +400,11 @@ export default function WorkflowPage() {
             <p className="wf-eyebrow">CONNECTED RECORDS</p>
             <h1>{tab}</h1>
           </div>
-          <div className="wf-header-tools"><Link to="/live-demo">View roles live →</Link><DemoResetButton compact /><span>{d.actor.email}</span></div>
+          <div className="wf-header-tools">
+            <Link to="/live-demo">View roles live →</Link>
+            <DemoResetButton compact />
+            <span>{d.actor.email}</span>
+          </div>
         </header>
         <div className="wf-banner">
           SIMULATION · Fictional processing · Browser-local records · No real money or signatures
