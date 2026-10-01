@@ -38,6 +38,10 @@ const RM_TAB_ICONS: Record<string, typeof Circle> = {
   Relationships: UsersIcon,
   "Client reports": ChartNoAxesColumnIncreasing,
   Reports: ChartNoAxesColumnIncreasing,
+  Investments: TrendingUp,
+  Publication: FileTextIcon,
+  Demand: UsersIcon,
+  Reporting: ChartNoAxesColumnIncreasing,
 };
 const date = (v: string) =>
   new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -994,6 +998,136 @@ function RMReports({ data: d }: { data: WorkflowView }) {
   );
 }
 
+const archivedInvestment = (s: WorkflowView["subscriptions"][number]) =>
+  !!s.holdingId || ["not_allocated", "funds_returned", "cancelled", "rejected"].includes(s.status);
+
+function OpsInvestmentQueue({
+  data,
+  selectedId,
+  onSelect,
+  onArchiveChange,
+}: {
+  data: WorkflowView;
+  selectedId: string;
+  onSelect: (id: string) => void;
+  onArchiveChange: (archived: boolean) => void;
+}) {
+  const [archive, setArchive] = useState(false);
+  const [vehicle, setVehicle] = useState("all");
+  const [channel, setChannel] = useState("all");
+  const [query, setQuery] = useState("");
+  const channels = Array.from(
+    new Set(data.clients.map((c) => c.eamFirm || "Direct / LUCA")),
+  ).sort();
+  const rows = data.subscriptions.filter((s) => {
+    const client = data.clients.find((c) => c.id === s.investor_id);
+    return (
+      archivedInvestment(s) === archive &&
+      (vehicle === "all" || String(s.fund_id) === vehicle) &&
+      (channel === "all" || (client?.eamFirm || "Direct / LUCA") === channel) &&
+      `${s.investor_name} ${client?.code || ""} ${s.asset_name} ${s.id}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase())
+    );
+  });
+  return (
+    <Panel title="Investment processing">
+      <p>
+        Choose a vehicle, distribution channel, then final investor. Open work stays in the task
+        list; issued and closed records remain searchable in the archive.
+      </p>
+      <div className="wf-queue-tabs">
+        <Button
+          variant={!archive ? "default" : "outline"}
+          onClick={() => {
+            setArchive(false);
+            onArchiveChange(false);
+          }}
+        >
+          Task list · {data.subscriptions.filter((s) => !archivedInvestment(s)).length}
+        </Button>
+        <Button
+          variant={archive ? "default" : "outline"}
+          onClick={() => {
+            setArchive(true);
+            onArchiveChange(true);
+          }}
+        >
+          Completed archive · {data.subscriptions.filter(archivedInvestment).length}
+        </Button>
+      </div>
+      <div className="wf-queue-filters">
+        <label className="wf-field">
+          Investment vehicle
+          <select value={vehicle} onChange={(e) => setVehicle(e.target.value)}>
+            <option value="all">All vehicles</option>
+            {data.funds.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name} · {f.company}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="wf-field">
+          Channel / client group
+          <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+            <option value="all">All channels</option>
+            {channels.map((name) => (
+              <option key={name}>{name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="wf-field">
+          Final investor
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Name, client tag or record #"
+          />
+        </label>
+      </div>
+      <p className="wf-result-count">
+        {rows.length} matching {archive ? "archived records" : "tasks"}
+      </p>
+      <div className="wf-queue-list">
+        {rows.map((s) => {
+          const client = data.clients.find((c) => c.id === s.investor_id);
+          const active = selectedId === String(s.id);
+          return (
+            <button
+              className={`wf-queue-row ${active ? "wf-queue-row-active" : ""}`}
+              key={s.id}
+              onClick={() => onSelect(String(s.id))}
+            >
+              <span>
+                <strong>{s.asset_name}</strong>
+                <small>
+                  #{s.id} · {client?.eamFirm || "Direct / LUCA"}
+                </small>
+              </span>
+              <span>
+                <strong>{s.investor_name}</strong>
+                <small>{client?.code}</small>
+              </span>
+              <span>
+                <strong>{money(s.amount, s.currency)}</strong>
+                <small>
+                  {s.holdingId ? `Holding #${s.holdingId}` : s.status.replaceAll("_", " ")}
+                </small>
+              </span>
+            </button>
+          );
+        })}
+        {!rows.length && (
+          <p className="wf-empty">
+            No records match. Change the vehicle, channel or investor search.
+          </p>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 export default function WorkflowPage() {
   const q = useWorkspace(),
     { logout } = useAuth();
@@ -1002,7 +1136,7 @@ export default function WorkflowPage() {
   const [sid, setSid] = useState("");
   const [preview, setPreview] = useState<number | null>(null);
   const [documentSearch, setDocumentSearch] = useState("");
-  const [documentFund, setDocumentFund] = useState("all");
+  const [opsArchive, setOpsArchive] = useState(false);
   const [relationshipSearch, setRelationshipSearch] = useState("");
   const [relationshipView, setRelationshipView] = useState("clients");
   const [reviewSignal, setReviewSignal] = useState(0);
@@ -1029,7 +1163,10 @@ export default function WorkflowPage() {
     rm = d.actor.role === "rm",
     staff = manager || ops || rm,
     privileged = manager || ops;
-  const sub = d.subscriptions.find((s) => String(s.id) === sid) || d.subscriptions[0];
+  const sub =
+    d.subscriptions.find(
+      (s) => String(s.id) === sid && (!ops || archivedInvestment(s) === opsArchive),
+    ) || d.subscriptions.find((s) => !ops || archivedInvestment(s) === opsArchive);
   const receipts = d.receipts.filter((r) => r.subscriptionId === sub?.id);
   const allocation = d.allocations.find((a) => a.subscriptionId === sub?.id && !a.voided);
   const returns = d.returns.filter((r) => r.subscriptionId === sub?.id);
@@ -1038,10 +1175,7 @@ export default function WorkflowPage() {
       const query = documentSearch.trim().toLowerCase();
       const title =
         `${version.snapshot.codename} ${version.snapshot.name} ${version.status} ${version.number}`.toLowerCase();
-      return (
-        (!query || title.includes(query)) &&
-        (documentFund === "all" || String(version.fundId) === documentFund)
-      );
+      return !query || title.includes(query);
     })
     .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const visibleClients = d.clients
@@ -1064,29 +1198,33 @@ export default function WorkflowPage() {
     .sort((a, b) => a.name.localeCompare(b.name));
   const tabs = rm
     ? ["Overview", "Reports", "Opportunities", "Documents", "Relationships", "Support"]
-    : [
-        "Overview",
-        "Investments",
-        "Documents",
-        "Support",
-        ...(privileged ? ["Publication", "Demand"] : []),
-        ...(manager ? ["Relationships"] : []),
-        "Reporting",
-        ...(!staff ? ["Company requests"] : []),
-      ];
+    : ops
+      ? ["Overview", "Investments", "Documents", "Publication", "Demand", "Reporting", "Support"]
+      : [
+          "Overview",
+          "Investments",
+          "Documents",
+          "Support",
+          ...(privileged ? ["Publication", "Demand"] : []),
+          ...(manager ? ["Relationships"] : []),
+          "Reporting",
+          ...(!staff ? ["Company requests"] : []),
+        ];
   const home = manager ? "/luca" : d.actor.role === "eam" ? "/eam" : "/portfolio";
   return (
-    <div className={`wf-shell ${rm ? "rm-shell" : ""}`}>
+    <div className={`wf-shell ${rm || ops ? "rm-shell" : ""}`}>
       <aside
-        className={`wf-sidebar ${rm ? `rm-sidebar ${collapsed ? "rm-sidebar-collapsed" : ""}` : ""}`}
+        className={`wf-sidebar ${rm || ops ? `rm-sidebar ${collapsed ? "rm-sidebar-collapsed" : ""}` : ""}`}
       >
-        {rm ? (
+        {rm || ops ? (
           <>
             <Link to="/workflows" className={`rm-brand ${collapsed ? "justify-center" : ""}`}>
               <Circle className="size-5 shrink-0" />
-              {!collapsed && <span>LUCA · RELATIONSHIP MANAGER</span>}
+              {!collapsed && (
+                <span>{ops ? "AKULA · OPERATIONS" : "LUCA · RELATIONSHIP MANAGER"}</span>
+              )}
             </Link>
-            <nav aria-label="RM workspace navigation">
+            <nav aria-label={`${ops ? "Akula Ops" : "RM"} workspace navigation`}>
               {tabs.map((t) => {
                 const TabIcon = RM_TAB_ICONS[t] ?? Circle;
                 return (
@@ -1107,7 +1245,11 @@ export default function WorkflowPage() {
               })}
             </nav>
             <div className="rm-sidebar-foot">
-              {collapsed ? "RM" : "LUCA Beta · Simulated workspace"}
+              {collapsed
+                ? ops
+                  ? "OPS"
+                  : "RM"
+                : `${ops ? "Akula Ops" : "LUCA Beta"} · Simulated workspace`}
             </div>
           </>
         ) : (
@@ -1138,8 +1280,8 @@ export default function WorkflowPage() {
           </>
         )}
       </aside>
-      <main className={`wf-main ${rm ? "rm-main" : ""}`}>
-        {rm ? (
+      <main className={`wf-main ${rm || ops ? "rm-main" : ""}`}>
+        {rm || ops ? (
           <header className="rm-header">
             <div className="rm-header-title">
               <Button
@@ -1168,7 +1310,7 @@ export default function WorkflowPage() {
                 <DropdownMenuContent>
                   <DropdownMenuGroup>
                     <DropdownMenuItem onClick={() => setTab("Overview")}>
-                      RM workspace
+                      {ops ? "Ops workspace" : "RM workspace"}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
                   </DropdownMenuGroup>
@@ -1189,7 +1331,7 @@ export default function WorkflowPage() {
             </div>
           </header>
         )}
-        <div className={`wf-banner ${rm ? "rm-banner" : ""}`}>
+        <div className={`wf-banner ${rm || ops ? "rm-banner" : ""}`}>
           SIMULATION · Fictional processing · Browser-local records · No real money or signatures
         </div>
         {d.storageWarning && (
@@ -1212,6 +1354,43 @@ export default function WorkflowPage() {
                 setTab("Relationships");
               }}
             />
+          ) : ops ? (
+            <>
+              <Panel title="Operations at a glance">
+                <p>
+                  Start with the live processing queue. LUCA decides allocations; Akula Ops matches
+                  cash, issues approved holdings and publishes approved materials.
+                </p>
+                <div className="wf-grid">
+                  <button className="wf-tile" onClick={() => setTab("Investments")}>
+                    <h3>
+                      {d.subscriptions.filter((s) => !archivedInvestment(s)).length} investment
+                      tasks →
+                    </h3>
+                    <p>Receipts, matching, registry issuance and returns</p>
+                  </button>
+                  <button className="wf-tile" onClick={() => setTab("Support")}>
+                    <h3>
+                      {d.cases.filter((c) => c.status === "open" && c.owner === "ops").length}{" "}
+                      routed cases →
+                    </h3>
+                    <p>Respond through tracked case history</p>
+                  </button>
+                  <button className="wf-tile" onClick={() => setTab("Publication")}>
+                    <h3>
+                      {d.versions.filter((v) => v.status !== "published").length} publication
+                      versions →
+                    </h3>
+                    <p>Edit the overview and advance approved materials</p>
+                  </button>
+                  <button className="wf-tile" onClick={() => setTab("Reporting")}>
+                    <h3>{d.holdings.length} issued holdings →</h3>
+                    <p>Inspect vehicle owners, investors and reported values</p>
+                  </button>
+                </div>
+              </Panel>
+              <Analytics data={d} />
+            </>
           ) : (
             <>
               <Analytics data={d} />
@@ -1293,127 +1472,182 @@ export default function WorkflowPage() {
         {rm && tab === "Opportunities" && <RMOpportunities data={d} />}
         {tab === "Investments" && (
           <>
-            <Panel title="Investment record">
-              <label className="wf-field">
-                Choose investment
-                <select value={sub?.id || ""} onChange={(e) => setSid(e.target.value)}>
-                  {d.subscriptions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      #{s.id} · {s.investor_name} · {s.asset_name} · {s.status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {sub ? (
-                <>
-                  <h3>
-                    #{sub.id} · {sub.asset_name}
-                  </h3>
-                  <p>
-                    {sub.investor_name} · {sub.status.replaceAll("_", " ")}
-                    {sub.holdingId
-                      ? " · Holding issued"
-                      : allocation?.principal
-                        ? " · Registry issuance pending"
-                        : ""}
-                  </p>
-                  <div className="wf-stats">
-                    <div>
-                      <span>Requested capital</span>
-                      <strong>{money(sub.amount, sub.currency)}</strong>
+            {ops && (
+              <OpsInvestmentQueue
+                data={d}
+                selectedId={String(sub?.id || "")}
+                onSelect={setSid}
+                onArchiveChange={(archived) => {
+                  setOpsArchive(archived);
+                  setSid("");
+                }}
+              />
+            )}
+            {!ops && (
+              <Panel title="Investment record">
+                <label className="wf-field">
+                  Choose investment
+                  <select value={sub?.id || ""} onChange={(e) => setSid(e.target.value)}>
+                    {d.subscriptions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        #{s.id} · {s.investor_name} · {s.asset_name} · {s.status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {sub ? (
+                  <>
+                    <h3>
+                      #{sub.id} · {sub.asset_name}
+                    </h3>
+                    <p>
+                      {sub.investor_name} · {sub.status.replaceAll("_", " ")}
+                      {sub.holdingId
+                        ? " · Holding issued"
+                        : allocation?.principal
+                          ? " · Registry issuance pending"
+                          : ""}
+                    </p>
+                    <div className="wf-stats">
+                      <div>
+                        <span>Requested capital</span>
+                        <strong>{money(sub.amount, sub.currency)}</strong>
+                      </div>
+                      <div>
+                        <span>Matched cash</span>
+                        <strong>
+                          {money(
+                            receipts
+                              .filter((r) => r.matched && !r.supersededBy)
+                              .reduce((n, r) => n + r.amount, 0),
+                            sub.currency,
+                          )}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Allocated capital / fee</span>
+                        <strong>
+                          {allocation ? money(allocation.principal, sub.currency) : "Pending"}
+                        </strong>
+                        <small>{allocation ? money(allocation.fee, sub.currency) : ""}</small>
+                      </div>
                     </div>
-                    <div>
-                      <span>Matched cash</span>
-                      <strong>
-                        {money(
-                          receipts
-                            .filter((r) => r.matched && !r.supersededBy)
-                            .reduce((n, r) => n + r.amount, 0),
-                          sub.currency,
-                        )}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>Allocated capital / fee</span>
-                      <strong>
-                        {allocation ? money(allocation.principal, sub.currency) : "Pending"}
-                      </strong>
-                      <small>{allocation ? money(allocation.fee, sub.currency) : ""}</small>
-                    </div>
-                  </div>
-                  {manager && !sub.holdingId && (
-                    <Action
-                      label="Cancel unissued investment & record return obligation"
-                      command={{ type: "cancel", id: sub.id }}
-                    />
-                  )}
-                </>
-              ) : (
-                <p>No investments in scope.</p>
-              )}
-            </Panel>
+                    {manager && !sub.holdingId && (
+                      <Action
+                        label="Cancel unissued investment & record return obligation"
+                        command={{ type: "cancel", id: sub.id }}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <p>No investments in scope.</p>
+                )}
+              </Panel>
+            )}
             {sub && (
               <>
-                <Panel title="Cash receipts & matching">
-                  {sub.needsReview && (
-                    <div className="wf-banner">
-                      Updated offering document requires investor acknowledgment. Review version #
-                      {sub.needsReview} in Documents.
-                      {sub.investor_id === d.actor.id && (
-                        <Action
-                          label="Acknowledge reviewed version"
-                          command={{ type: "acknowledge", id: sub.id, target: sub.needsReview }}
-                        />
-                      )}
+                {ops && (
+                  <Panel title={`Record #${sub.id} · ${sub.asset_name}`}>
+                    <p>
+                      {sub.investor_name} · {d.clients.find((c) => c.id === sub.investor_id)?.code}{" "}
+                      · {sub.status.replaceAll("_", " ")}
+                    </p>
+                    <div className="wf-stats">
+                      <div>
+                        <span>Requested capital</span>
+                        <strong>{money(sub.amount, sub.currency)}</strong>
+                      </div>
+                      <div>
+                        <span>Matched cash</span>
+                        <strong>
+                          {money(
+                            receipts
+                              .filter((r) => r.matched && !r.supersededBy)
+                              .reduce((total, r) => total + r.amount, 0),
+                            sub.currency,
+                          )}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Allocated principal</span>
+                        <strong>
+                          {allocation ? money(allocation.principal, sub.currency) : "Awaiting LUCA"}
+                        </strong>
+                      </div>
                     </div>
-                  )}
-                  {ops && (
-                    <Action
-                      label="Record fictional receipt"
-                      command={{ type: "receipt", id: sub.id }}
-                    >
-                      <Field name="amount" label="Received amount" type="number" />
-                      <Field name="currency" label="Currency" value={sub.currency} />
-                      <Field name="text" label="Unique bank reference" />
-                    </Action>
-                  )}
-                  {receipts.map((r) => (
-                    <div className="wf-record" key={r.id}>
-                      <h3>
-                        Receipt #{r.id} · {money(r.amount, r.currency)}
-                      </h3>
-                      <p>
-                        {r.reference} ·{" "}
-                        {r.supersededBy ? "Corrected" : r.matched ? "Matched" : "Unmatched"} ·{" "}
-                        {date(r.at)}
-                      </p>
-                      {ops && !r.matched && !r.supersededBy && (
-                        <>
+                  </Panel>
+                )}
+                {(!ops || !opsArchive) && (
+                  <Panel title="Cash receipts & matching">
+                    {sub.needsReview && (
+                      <div className="wf-banner">
+                        Updated offering document requires investor acknowledgment. Review version #
+                        {sub.needsReview} in Documents.
+                        {sub.investor_id === d.actor.id && (
                           <Action
-                            label="Match receipt"
-                            command={{ type: "match", id: sub.id, target: r.id }}
+                            label="Acknowledge reviewed version"
+                            command={{ type: "acknowledge", id: sub.id, target: sub.needsReview }}
                           />
-                          <details>
-                            <summary>Correct erroneous receipt</summary>
+                        )}
+                      </div>
+                    )}
+                    {ops && (
+                      <Action
+                        label="Record fictional receipt"
+                        command={{ type: "receipt", id: sub.id }}
+                      >
+                        <Field name="amount" label="Received amount" type="number" />
+                        <Field name="currency" label="Currency" value={sub.currency} />
+                        <Field name="text" label="Unique bank reference" />
+                      </Action>
+                    )}
+                    {receipts.map((r) => (
+                      <div className="wf-record" key={r.id}>
+                        <h3>
+                          Receipt #{r.id} · {money(r.amount, r.currency)}
+                        </h3>
+                        <p>
+                          {r.reference} ·{" "}
+                          {r.supersededBy ? "Corrected" : r.matched ? "Matched" : "Unmatched"} ·{" "}
+                          {date(r.at)}
+                        </p>
+                        {ops && !r.matched && !r.supersededBy && (
+                          <>
                             <Action
-                              label="Append correction"
-                              command={{ type: "correct-receipt", id: sub.id, target: r.id }}
-                            >
-                              <Field name="amount" label="Correct amount" type="number" />
-                              <Field
-                                name="currency"
-                                label="Correct currency"
-                                value={sub.currency}
-                              />
-                              <Field name="text" label="Correction reference / source" />
-                            </Action>
-                          </details>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </Panel>
+                              label="Match receipt"
+                              command={{ type: "match", id: sub.id, target: r.id }}
+                            />
+                            <details>
+                              <summary>Correct erroneous receipt</summary>
+                              <Action
+                                label="Append correction"
+                                command={{ type: "correct-receipt", id: sub.id, target: r.id }}
+                              >
+                                <Field name="amount" label="Correct amount" type="number" />
+                                <Field
+                                  name="currency"
+                                  label="Correct currency"
+                                  value={sub.currency}
+                                />
+                                <Field name="text" label="Correction reference / source" />
+                              </Action>
+                            </details>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </Panel>
+                )}
                 <Panel title="Allocation & registry">
+                  {ops && (
+                    <p>
+                      {sub.holdingId
+                        ? `Holding #${sub.holdingId} is issued. The archive preserves its allocation and registry trail.`
+                        : allocation?.principal
+                          ? "LUCA approved the allocation. Akula Ops can now confirm simulated registry issuance below."
+                          : "LUCA records the allocation after funds reconciliation. Akula Ops issues the holding only after that approval; until then, use the cash receipt and matching task above where applicable."}
+                    </p>
+                  )}
                   {d.actor.role === "eam" && sub.status === "institution_review" && (
                     <Action
                       label="Complete institution review"
@@ -1500,20 +1734,6 @@ export default function WorkflowPage() {
                   placeholder="Company, version or status"
                 />
               </label>
-              <label className="wf-field">
-                <span>Filter by opportunity</span>
-                <select
-                  value={documentFund}
-                  onChange={(event) => setDocumentFund(event.target.value)}
-                >
-                  <option value="all">All opportunities</option>
-                  {d.funds.map((fund) => (
-                    <option key={fund.id} value={fund.id}>
-                      {fund.company}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <span className="wf-result-count">
                 {visibleVersions.length} of {d.versions.length} versions
               </span>
@@ -1579,9 +1799,24 @@ export default function WorkflowPage() {
           <>
             <Panel title="Offering preparation">
               <p>
-                Use the existing <Link to="/luca/deals">deal editor</Link> to author content.
-                Prepare a version, request review, obtain LUCA approval, then publish as Ops.
+                Edit the shared deal overview, then prepare a version. LUCA reviews and approves the
+                exact version; Akula Ops publishes it.
               </p>
+              <div className="wf-publication-grid">
+                {d.funds.map((fund) => (
+                  <Link
+                    key={fund.id}
+                    className="wf-publication-link"
+                    to={ops ? `/ops/publication/${fund.id}` : `/luca/deals/${fund.id}`}
+                  >
+                    <strong>{fund.company}</strong>
+                    <span>
+                      {fund.name} · {fund.state}
+                    </span>
+                    <small>Edit shared deal overview →</small>
+                  </Link>
+                ))}
+              </div>
               <Action label="Prepare draft version" command={{ type: "prepare" }}>
                 <Choice name="id" label="Offering" items={d.funds} />
               </Action>
@@ -1795,9 +2030,25 @@ export default function WorkflowPage() {
                       {new Set(rows.map((r) => r.investorId)).size} requesting investor(s) ·{" "}
                       {r.status}
                     </p>
+                    {privileged && (
+                      <p>
+                        Illustrative demand:{" "}
+                        {rows.filter((x) => x.amount !== undefined && x.currency === "USD").length}{" "}
+                        USD indications totalling{" "}
+                        {money(
+                          rows
+                            .filter((x) => x.currency === "USD")
+                            .reduce((total, x) => total + (x.amount || 0), 0),
+                        )}
+                        . Nonbinding; not an order book.
+                      </p>
+                    )}
                     {rows.map((x) => (
                       <p key={x.id}>
-                        Request #{x.id}:{" "}
+                        {privileged
+                          ? `${d.clients.find((client) => client.id === x.investorId)?.name || `Investor #${x.investorId}`} · ${d.clients.find((client) => client.id === x.investorId)?.code || ""}`
+                          : `Request #${x.id}`}
+                        :{" "}
                         {x.amount === undefined
                           ? "No amount indicated"
                           : money(x.amount, x.currency)}
@@ -1853,6 +2104,68 @@ export default function WorkflowPage() {
               )}
               {rm ? (
                 <RMReports data={d} />
+              ) : ops ? (
+                d.funds
+                  .filter((fund) => d.holdings.some((holding) => holding.fund_id === fund.id))
+                  .map((fund) => {
+                    const holdings = d.holdings.filter((holding) => holding.fund_id === fund.id);
+                    return (
+                      <details key={fund.id} className="wf-report-group">
+                        <summary>
+                          <strong>
+                            {fund.company} · {fund.name}
+                          </strong>
+                          <span>
+                            {holdings.length} holdings ·{" "}
+                            {money(
+                              holdings.reduce(
+                                (total, holding) => total + Number(holding.committed_amount),
+                                0,
+                              ),
+                            )}{" "}
+                            invested
+                          </span>
+                        </summary>
+                        <div className="wf-report-table">
+                          <div className="wf-report-head">
+                            <span>Holding / investor</span>
+                            <span>Vehicle owner / channel</span>
+                            <span>Buy-in</span>
+                            <span>Reported value</span>
+                          </div>
+                          {holdings.map((holding) => {
+                            const client = d.clients.find((c) => c.id === holding.investor_id);
+                            const valuation = d.valuations
+                              .filter((v) => v.holdingId === holding.id)
+                              .at(-1);
+                            return (
+                              <div key={holding.id} className="wf-report-row">
+                                <span>
+                                  <strong>
+                                    #{holding.id} ·{" "}
+                                    {client?.name || `Investor #${holding.investor_id}`}
+                                  </strong>
+                                  <small>
+                                    {client?.code} · {holding.units} units
+                                  </small>
+                                </span>
+                                <span>{client?.eamFirm || "Direct / LUCA"}</span>
+                                <span>{money(holding.committed_amount)}</span>
+                                <span>
+                                  {money(valuation?.amount ?? holding.current_nav)}
+                                  <small>
+                                    {valuation?.at || holding.nav_as_of
+                                      ? date(valuation?.at || holding.nav_as_of || "")
+                                      : "No report"}
+                                  </small>
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    );
+                  })
               ) : (
                 d.holdings.map((h) => {
                   const v = d.valuations.filter((v) => v.holdingId === h.id).at(-1);
