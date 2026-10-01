@@ -30,15 +30,53 @@ type RmHighlight = {
   created_at: string;
 };
 
-/* No time-series history is available in this demo, so render a snapshot
- * comparison instead of a misleading line chart with a single data point. */
-function SnapshotBars({ nav, invested }: { nav: number; invested: number }) {
-  const max = Math.max(nav, invested, 1);
-  return <div className="space-y-5 rounded-lg border bg-muted/10 p-5 sm:p-6">
-    <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Latest reported snapshot</p><p className="mt-1 text-sm text-muted-foreground">As-reported holding NAV compared with invested capital</p></div>
-    {[{ label: "Estimated portfolio value", value: nav, color: "bg-primary" }, { label: "Invested capital", value: invested, color: "bg-muted-foreground/50" }].map((item) => <div key={item.label} className="space-y-2"><div className="flex items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">{item.label}</span><strong className="tabular-nums">{formatPrice(item.value)}</strong></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }} /></div></div>)}
-    <p className="border-t pt-3 text-xs text-muted-foreground">Holding reports may have different as-of dates. Historical performance is not available; unrealized gain is an estimate from the latest reported NAV.</p>
-  </div>;
+function NavTrend({ nav }: { nav: number }) {
+  const factors = [0.88, 0.92, 0.9, 0.96, 0.94, 0.98, 1];
+  const points = factors
+    .map((factor, index) => `${12 + index * 46},${112 - factor * 82}`)
+    .join(" ");
+  return (
+    <div className="space-y-3 rounded-lg border bg-muted/10 p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Implied NAV trend</p>
+          <p className="text-xs text-muted-foreground">
+            Illustrative monthly history · latest value {formatPrice(nav)}
+          </p>
+        </div>
+        <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
+          Demo estimate
+        </span>
+      </div>
+      <svg
+        viewBox="0 0 300 125"
+        role="img"
+        aria-label="Illustrative seven-month NAV trend"
+        className="h-36 w-full"
+        preserveAspectRatio="none"
+      >
+        <path d="M12 102 H288" stroke="currentColor" className="text-border" strokeWidth="1" />
+        <polyline
+          points={points}
+          fill="none"
+          stroke="currentColor"
+          className="text-primary"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <circle cx="288" cy={112 - 82} r="4" fill="currentColor" className="text-primary" />
+      </svg>
+      <div className="flex justify-between text-[11px] text-muted-foreground">
+        <span>Six months ago</span>
+        <span>Today</span>
+      </div>
+      <p className="border-t pt-2 text-[11px] text-muted-foreground">
+        Historical points are simulated from the latest recorded NAV. A future Zanbato source could
+        supply implied value observations; no live feed is connected in this demo.
+      </p>
+    </div>
+  );
 }
 
 function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
@@ -85,7 +123,7 @@ function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
 
           {/* Right: chart */}
           <div className="min-w-0 flex-1">
-            <SnapshotBars nav={navTotal} invested={invested} />
+            <NavTrend nav={navTotal} />
           </div>
         </div>
       </CardContent>
