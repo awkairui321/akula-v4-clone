@@ -92,12 +92,32 @@ export default function AdminDashboard() {
   return (
     <div className="w-full space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-4">
-        <div><p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">LUCA · Fund manager</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Operations overview</h1><p className="mt-1 text-muted-foreground">A clear view of capital, live deals and decisions requiring attention.</p></div>
-        <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm"><span className="text-muted-foreground">Action queue </span><strong>{pendingReview + (investors?.needs_review ?? 0) + (documents?.received ?? 0)}</strong><span className="ml-1 text-muted-foreground">items across reviews &amp; documents</span></div>
+        <div>
+          <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
+            LUCA · Fund manager
+          </p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">Operations overview</h1>
+          <p className="mt-1 text-muted-foreground">
+            A clear view of capital, live deals and decisions requiring attention.
+          </p>
+        </div>
+        <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+          <span className="text-muted-foreground">Action queue </span>
+          <strong>
+            {pendingReview + (investors?.needs_review ?? 0) + (documents?.received ?? 0)}
+          </strong>
+          <span className="ml-1 text-muted-foreground">items across reviews &amp; documents</span>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Capital in motion" icon={BanknoteIcon} value={formatPrice(aum)} note="Funded and active commitments" to="/luca/deals" />
+        <StatCard
+          title="Capital in motion"
+          icon={BanknoteIcon}
+          value={formatPrice(aum)}
+          note="Funded and active commitments"
+          to="/luca/deals"
+        />
         <StatCard
           title="Confirmed funding"
           icon={CreditCard}
