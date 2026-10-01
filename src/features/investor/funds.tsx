@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { formatPrice, formatPriceCompact, formatPricePrecise } from "@/lib/currency";
 import { ArrowRightIcon, ClockIcon, SearchIcon, CompassIcon } from "lucide-react";
+import "./opportunities.css";
 
 function formatCountdown(dateString: string | null): string | null {
   if (!dateString) return null;
@@ -39,8 +40,9 @@ function FundCard({ fund }: { fund: Fund }) {
   const remaining = total ? total - allocated : null;
 
   return (
-    <Link to={`/funds/${fund.id}`}>
-      <Card className="flex h-full flex-col transition-shadow hover:ring-2 hover:ring-primary/20">
+    <Link to={`/funds/${fund.id}`} className="opportunity-link">
+      <Card className="opportunity-card flex h-full flex-col transition-shadow hover:ring-2 hover:ring-primary/20">
+        <div className="opportunity-card-art"><span>{fund.asset.name.slice(0, 1)}</span><small>{SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}</small></div>
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -205,10 +207,11 @@ export default function FundsPage() {
   const totalAfterStatusSearch = Object.values(sectorCounts).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="opportunities-view flex flex-col gap-4">
       <div className="space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">Opportunities</h1>
-        <p className="text-muted-foreground">Every current Akula opportunity available to you.</p>
+        <p className="opportunities-eyebrow">YOUR INVESTMENT WORKSPACE</p>
+        <h1 className="text-4xl font-medium tracking-tight">Find your next opportunity.</h1>
+        <p className="max-w-2xl text-muted-foreground">The full published LUCA shelf, with terms and source-backed company information for every available deal.</p>
       </div>
 
       <p className="rounded-lg bg-muted/50 px-4 py-2 text-sm text-muted-foreground">
@@ -217,7 +220,7 @@ export default function FundsPage() {
       </p>
 
       {/* Search + status filter */}
-      <div className="flex gap-3">
+      <div className="opportunity-filters flex gap-3">
         <div className="relative flex-1">
           <SearchIcon className="absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" />
           <Input
