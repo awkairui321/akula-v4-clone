@@ -182,15 +182,11 @@ function StageBand({
         <span className="text-xs text-muted-foreground">{subs.length}</span>
         <span className="text-xs text-muted-foreground">{formatPrice(total)}</span>
       </div>
-      <div className={`rounded-lg p-3 ${muted ? "bg-muted/20" : "bg-muted/40"}`}>
+      <div className={`overflow-x-auto rounded-lg border bg-background ${muted ? "opacity-75" : ""}`}>
         {subs.length === 0 ? (
           <p className="p-3 text-center text-xs text-muted-foreground">Nothing here</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {subs.map((s) => (
-              <KanbanCard key={s.id} subscription={s} onClick={() => onCardClick(s)} />
-            ))}
-          </div>
+          <table className="w-full min-w-[760px] text-sm"><thead className="bg-muted/40 text-left text-xs text-muted-foreground"><tr><th className="px-3 py-2">Investor</th><th className="px-3 py-2">Deal / channel</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2">Current action</th></tr></thead><tbody className="divide-y">{subs.map((s) => <tr key={s.id} onClick={() => onCardClick(s)} className="cursor-pointer hover:bg-muted/30"><td className="px-3 py-2.5"><span className="font-medium">{s.investor_name}</span><span className="block text-xs text-muted-foreground">{s.investor_email}</span></td><td className="px-3 py-2.5">{s.asset_name}<span className="block text-xs text-muted-foreground">{s.eam_firm ?? "Direct"}{s.on_hold ? " · On hold" : ""}{s.payment_claimed ? " · Payment claimed" : ""}</span></td><td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatPrice(s.amount)}</td><td className="px-3 py-2.5 text-muted-foreground">{NEXT_ACTION_LABELS[s.next_action] ?? s.next_action}</td></tr>)}</tbody></table>
         )}
       </div>
     </div>
@@ -238,7 +234,7 @@ export default function AdminSubscriptionsPage() {
   }, [statusFromUrl, isLoading]);
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="w-full space-y-4">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Subscriptions</h1>
