@@ -31,6 +31,9 @@ export default function AdminDocumentsPage() {
   const queryClient = useQueryClient();
   const [reviewFilter, setReviewFilter] = useState<DocumentReviewState | "all">("all");
   const [search, setSearch] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [fundFilter, setFundFilter] = useState("all");
+  const [page, setPage] = useState(0);
 
   const params = new URLSearchParams();
   if (reviewFilter !== "all") params.set("review_state", reviewFilter);
@@ -55,6 +58,24 @@ export default function AdminDocumentsPage() {
   });
 
   const documents = data?.documents ?? [];
+  const owners = [...new Set(documents.map((document) => document.owner_name))].sort();
+  const funds = [
+    ...new Set(
+      documents
+        .map((document) => document.fund_name)
+        .filter((name): name is string => Boolean(name)),
+    ),
+  ].sort();
+  const visibleDocuments = documents.filter(
+    (document) =>
+      (ownerFilter === "all" || document.owner_name === ownerFilter) &&
+      (fundFilter === "all" || document.fund_name === fundFilter),
+  );
+  const pageCount = Math.max(1, Math.ceil(visibleDocuments.length / 20));
+  const pageDocuments = visibleDocuments.slice(
+    Math.min(page, pageCount - 1) * 20,
+    (Math.min(page, pageCount - 1) + 1) * 20,
+  );
   const summary = data?.summary;
 
   return (
@@ -67,7 +88,7 @@ export default function AdminDocumentsPage() {
       </div>
 
       {summary && (
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryTile label="Received" value={String(summary.received)} />
           <SummaryTile label="Reviewing" value={String(summary.reviewing)} />
           <SummaryTile label="Filed" value={String(summary.filed)} />
@@ -75,7 +96,7 @@ export default function AdminDocumentsPage() {
         </div>
       )}
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -85,6 +106,39 @@ export default function AdminDocumentsPage() {
             className="pl-9"
           />
         </div>
+      </div>
+      <div className="mb-3 flex flex-wrap gap-2 text-sm">
+        <select
+          aria-label="Filter by owner"
+          className="h-9 rounded-md border bg-background px-2"
+          value={ownerFilter}
+          onChange={(event) => {
+            setOwnerFilter(event.target.value);
+            setPage(0);
+          }}
+        >
+          <option value="all">All owners</option>
+          {owners.map((owner) => (
+            <option key={owner}>{owner}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Filter by deal"
+          className="h-9 rounded-md border bg-background px-2"
+          value={fundFilter}
+          onChange={(event) => {
+            setFundFilter(event.target.value);
+            setPage(0);
+          }}
+        >
+          <option value="all">All deals</option>
+          {funds.map((fund) => (
+            <option key={fund}>{fund}</option>
+          ))}
+        </select>
+        <span className="self-center text-xs text-muted-foreground">
+          {visibleDocuments.length} matching documents
+        </span>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -107,7 +161,7 @@ export default function AdminDocumentsPage() {
         <p className="py-12 text-center text-muted-foreground">No documents match these filters.</p>
       )}
 
-      {documents.length > 0 && (
+      {pageDocuments.length > 0 && (
         <div className="rounded-lg border">
           <div className="grid grid-cols-5 gap-4 border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">
             <span>Document</span>
@@ -116,7 +170,7 @@ export default function AdminDocumentsPage() {
             <span>Intake</span>
             <span className="text-right">Move to</span>
           </div>
-          {documents.map((document) => (
+          {pageDocuments.map((document) => (
             <div
               key={document.id}
               className="grid grid-cols-5 items-center gap-4 border-b px-4 py-3 text-sm last:border-0"
@@ -149,6 +203,29 @@ export default function AdminDocumentsPage() {
           ))}
         </div>
       )}
+      {visibleDocuments.length > 20 && (
+        <div className="mt-3 flex items-center justify-end gap-2 text-xs">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={page <= 0}
+            onClick={() => setPage(page - 1)}
+          >
+            Previous
+          </Button>
+          <span>
+            Page {Math.min(page, pageCount - 1) + 1} of {pageCount}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={page >= pageCount - 1}
+            onClick={() => setPage(page + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -156,7 +233,7 @@ export default function AdminDocumentsPage() {
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="!py-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="mt-1 text-2xl font-bold">{value}</p>
       </CardContent>
