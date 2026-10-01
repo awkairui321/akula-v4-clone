@@ -21,6 +21,7 @@
 //                           incomplete. Exercises dual-profile routing.
 // ---------------------------------------------------------------------------
 
+import { clientCode } from "@/lib/client-code";
 import type {
   Fund,
   Asset,
@@ -2942,7 +2943,7 @@ export function nextWatchlistId(): number {
 // EAM: adviser clients, highlights, discussions
 // ---------------------------------------------------------------------------
 
-export type MockAdviserClient = Omit<AdviserClient, "investor_user_id"> & {
+export type MockAdviserClient = Omit<AdviserClient, "investor_user_id" | "client_code"> & {
   eam_user_id: number;
   investor_id: number;
 };
@@ -3460,6 +3461,7 @@ const adminInvestorSeeds: AdminInvestorSeed[] = [
 export function adminInvestors(): AdminInvestor[] {
   return adminInvestorSeeds.map((seed) => ({
     id: seed.id,
+    client_code: clientCode(seed.id),
     email: seed.email,
     full_name: seed.full_name,
     investor_type: seed.investor_type,
