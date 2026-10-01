@@ -59,9 +59,9 @@ function sectionsFor(_fund: Fund): { id: SectionId; nav: string }[] {
     { id: "market", nav: "Market & competitive" },
     { id: "business", nav: "Business model" },
     { id: "financials", nav: "Financials" },
+    { id: "risks", nav: "Risks" },
     { id: "recording", nav: "Recordings" },
     { id: "documents", nav: "Documents" },
-    { id: "risks", nav: "Risks" },
   ];
 }
 
@@ -197,350 +197,7 @@ function Hero({ fund }: { fund: Fund }) {
           <GlanceRow label="Sector" value={SECTOR_LABELS[asset.sector] ?? asset.sector} />
           <GlanceRow
             label="Founded"
-            value={asset.founded_year ? `${asset.founded_year}, ${asset.headquarters}` : null}
-          />
-          <GlanceRow label="Key customers" value={asset.typical_buyer} />
-          <GlanceRow label="Commercial model" value={asset.commercial_model} />
-        </dl>
-      </div>
-
-      {fund.key_metrics.length > 0 && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {fund.key_metrics.map((m) => (
-            <div key={m.label} className="rounded-lg border bg-card p-3">
-              <strong className="block text-xl font-bold">{m.value}</strong>
-              <span className="block text-xs text-muted-foreground">{m.label}</span>
-              {m.note && <span className="block text-[11px] text-muted-foreground">{m.note}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {total !== null && (
-        <div className="space-y-2 rounded-lg border bg-card p-4">
-          <div className="flex justify-between text-sm">
-            <span className="font-medium">
-              {formatPrice(total - allocated)} of {formatPrice(total)} supply available
-            </span>
-            {days !== null && (
-              <span className="text-muted-foreground">
-                {days === 0 ? "Closes today" : `Closes in ${days} days`}
-              </span>
-            )}
-          </div>
-          <Progress value={pct ?? 0} />
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{formatPrice(allocated)} allocated</span>
-            {pct !== null && <span>{pct}% allocated</span>}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-/* ─── Section shell ─── */
-
-function SectionShell({
-  id,
-  title,
-  standfirst,
-  children,
-}: {
-  id: string;
-  title: string;
-  standfirst?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section id={id} className="scroll-mt-20 space-y-4">
-      <div className="space-y-1.5">
-        <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
-        {standfirst && <p className="text-sm text-muted-foreground">{standfirst}</p>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/* ─── Overview section ─── */
-
-function OverviewSection({ asset }: { asset: Asset }) {
-  return (
-    <div className="space-y-6">
-      {asset.how_it_works.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {asset.how_it_works.map((row) => (
-            <div key={row.label} className="space-y-1">
-              <h3 className="text-sm font-semibold">{row.label}</h3>
-              <p className="text-sm text-muted-foreground">{row.text}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {asset.in_practice && (
-        <div className="space-y-2 rounded-lg border bg-muted/40 p-4">
-          <h3 className="text-sm font-semibold">In practice</h3>
-          <p className="text-sm font-medium">{asset.in_practice.lead}</p>
-          <p className="text-sm text-muted-foreground">{asset.in_practice.text}</p>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {asset.in_practice.tag && <span>{asset.in_practice.tag}</span>}
-            {asset.in_practice.source_href && (
-              <a
-                href={asset.in_practice.source_href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-2"
-              >
-                {asset.in_practice.source_label ?? "Source"}
-              </a>
-            )}
-          </div>
-        </div>
-      )}
-
-      {asset.team.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Who leads the company</h3>
-          <ul className="divide-y">
-            {asset.team.map((t) => (
-              <li
-                key={t.name}
-                className="flex flex-wrap items-baseline justify-between gap-x-4 py-2.5 first:pt-0 last:pb-0"
-              >
-                <div>
-                  <span className="font-medium">{t.name}</span>
-                  <span className="ml-2 text-sm text-muted-foreground">{t.role}</span>
-                </div>
-                {t.note && <p className="basis-full text-xs text-muted-foreground">{t.note}</p>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Market section ─── */
-
-function MarketSection({ asset }: { asset: Asset }) {
-  return (
-    <div className="space-y-6">
-      {asset.market_context.length > 0 && (
-        <div className="space-y-2 text-sm text-muted-foreground">
-          {asset.market_context.map((p, i) => (
-            <p key={i}>{p}</p>
-          ))}
-        </div>
-      )}
-
-      {asset.competitive_landscape.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Competitive landscape</h3>
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Alternative</th>
-                  <th className="px-3 py-2 text-left font-medium">Examples</th>
-                  <th className="px-3 py-2 text-left font-medium">Why a buyer might choose it</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {asset.competitive_landscape.map((row) => (
-                  <tr key={row.category}>
-                    <th scope="row" className="px-3 py-2.5 text-left font-medium">
-                      {row.category}
-                    </th>
-                    <td className="px-3 py-2.5 text-muted-foreground">{row.examples}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{row.text}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {(asset.thesis || asset.thesis_points.length > 0) && (
-        <div className="space-y-3 rounded-lg border bg-card p-4">
-          <p className="text-xs font-medium tracking-wide text-primary uppercase">
-            Investment thesis
-          </p>
-          {asset.thesis && <p className="text-sm text-muted-foreground">{asset.thesis}</p>}
-          {asset.thesis_points.length > 0 && (
-            <ol className="space-y-3">
-              {asset.thesis_points.map((p, i) => (
-                <li key={p.title} className="flex gap-3">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                    {i + 1}
-                  </span>
-                  <div>
-                    <p className="text-sm font-medium">{p.title}</p>
-                    <p className="text-sm text-muted-foreground">{p.text}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Business section ─── */
-
-function BusinessSection({ asset }: { asset: Asset }) {
-  return (
-    <div className="space-y-6">
-      {asset.business_columns.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          {asset.business_columns.map((c) => (
-            <div key={c.title} className="space-y-1">
-              <h3 className="text-sm font-semibold">{c.title}</h3>
-              <p className="text-sm text-muted-foreground">{c.text}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {asset.product_disclosures.length > 0 && (
-        <div className="space-y-2 rounded-lg border bg-muted/40 p-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-sm font-semibold">Selected product disclosures</h3>
-            {asset.product_disclosures_source && (
-              <span className="text-xs text-muted-foreground">
-                {asset.product_disclosures_source}
-              </span>
-            )}
-          </div>
-          {asset.product_disclosures_note && (
-            <p className="text-xs text-muted-foreground">{asset.product_disclosures_note}</p>
-          )}
-          <dl className="grid gap-3 sm:grid-cols-2">
-            {asset.product_disclosures.map((d) => (
-              <div key={d.label}>
-                <dt className="text-xs text-muted-foreground">
-                  {d.label}
-                  {d.sub && <span className="ml-1">· {d.sub}</span>}
-                </dt>
-                <dd className="text-lg font-semibold">{d.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Financials section ─── */
-
-function RevenueBars({ points }: { points: Fund["revenue_points"] }) {
-  const values = points.map((p) => parseFloat(p.value ?? "0"));
-  const max = Math.max(...values, 0.01);
-  return (
-    <div className="flex items-end gap-2 overflow-x-auto pb-2">
-      {points.map((p, i) => (
-        <div key={p.period} className="flex min-w-14 flex-1 flex-col items-center gap-1">
-          <span className="text-[11px] font-medium">
-            {p.value === null ? "Undisclosed" : `$${p.value}B`}
-          </span>
-          <div className="flex h-32 w-full items-end">
-            <div
-              className={`w-full rounded-t ${i === points.length - 1 ? "bg-primary" : "bg-primary/40"}`}
-              style={{ height: `${Math.max(2, (values[i] / max) * 100)}%` }}
-            />
-          </div>
-          <span className="text-[11px] text-muted-foreground">{p.period}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function RoundsChart({ rounds }: { rounds: Asset["funding_rounds"] }) {
-  const [selected, setSelected] = useState(rounds.length - 1);
-  const magnitudes = rounds.map((r) => moneyMagnitude(r.valuation));
-  const max = Math.max(...magnitudes, 1);
-  const round = rounds[selected];
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-[1fr_260px]">
-      <div className="flex items-end gap-2 overflow-x-auto pb-2">
-        {rounds.map((r, i) => (
-          <button
-            key={`${r.date}-${r.round}`}
-            type="button"
-            aria-pressed={i === selected}
-            onClick={() => setSelected(i)}
-            className={`flex min-w-16 flex-1 flex-col items-center gap-1 rounded-md py-1 transition-colors ${
-              i === selected ? "bg-muted" : "hover:bg-muted/50"
-            }`}
-          >
-            <span className="text-[11px] font-medium">{r.valuation}</span>
-            <div className="flex h-28 w-full items-end px-1">
-              <div
-                className={`w-full rounded-t ${i === selected ? "bg-primary" : "bg-primary/40"}`}
-                style={{ height: `${Math.max(2, (magnitudes[i] / max) * 100)}%` }}
-              />
-            </div>
-            <span
-              className={`text-[11px] ${i === selected ? "font-medium" : "text-muted-foreground"}`}
-            >
-              {r.date}
-            </span>
-          </button>
-        ))}
-      </div>
-      {round && (
-        <div className="space-y-2 rounded-lg border bg-card p-3 text-sm">
-          <div className="flex items-baseline justify-between">
-            <strong>{round.date}</strong>
-            <span className="text-xs text-muted-foreground">{round.round}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <p className="text-xs text-muted-foreground">Valuation</p>
-              <p className="font-medium">{round.valuation}</p>
-            </div>
-            {round.raised && (
-              <div>
-                <p className="text-xs text-muted-foreground">Amount raised</p>
-                <p className="font-medium">{round.raised}</p>
-              </div>
-            )}
-          </div>
-          {round.lead && (
-            <p className="text-xs text-muted-foreground">
-              <strong className="text-foreground">Lead / participants:</strong> {round.lead}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FinancialsSection({ fund }: { fund: Fund }) {
-  const { asset } = fund;
-  return (
-    <div className="space-y-8">
-      {fund.revenue_points.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">Revenue</h3>
-          <RevenueBars points={fund.revenue_points} />
-        </div>
-      )}
-
-      {asset.funding_rounds.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">Financing and valuation history</h3>
-          <p className="text-xs text-muted-foreground">Select a round to see its details.</p>
-          <RoundsChart rounds={asset.funding_rounds} />
+            value={asset.founded_year ? `${asset.founded_year}, ${asset.headquarters…3211 tokens truncated…unds} />
         </div>
       )}
 
@@ -894,7 +551,7 @@ export default function DealOverviewPage({
   });
 
   return (
-    <div ref={topRef} className="deal-reading-page mx-auto w-full max-w-6xl min-w-0 space-y-8">
+    <div ref={topRef} className="deal-reading-page pompom-deal mx-auto w-full max-w-6xl min-w-0 space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link to={backTo}>
           <Button variant="ghost" size="sm" className="p-0">
@@ -949,6 +606,7 @@ export default function DealOverviewPage({
                 )}
               </div>
             </div>
+            <LeadershipSection asset={asset} />
           </SectionShell>
 
           {sections.some((s) => s.id === "market") && (
@@ -981,22 +639,6 @@ export default function DealOverviewPage({
             </SectionShell>
           )}
 
-          <SectionShell
-            id="recording"
-            title="Recorded overview"
-            standfirst="Optional viewing. The written overview stands on its own."
-          >
-            <RecordingSection fund={fund} />
-          </SectionShell>
-
-          <SectionShell
-            id="documents"
-            title="Documents and updates"
-            standfirst="The source material behind this overview and the deal's published materials."
-          >
-            <DocumentsSection fund={fund} viewer={viewer} />
-          </SectionShell>
-
           {sections.some((s) => s.id === "risks") && (
             <SectionShell
               id="risks"
@@ -1006,6 +648,14 @@ export default function DealOverviewPage({
               <RisksSection asset={asset} />
             </SectionShell>
           )}
+
+          <SectionShell id="recording" title="Recorded overview" standfirst="Optional viewing. The written overview stands on its own.">
+            <RecordingSection fund={fund} />
+          </SectionShell>
+
+          <SectionShell id="documents" title="Documents and updates" standfirst="The source material behind this overview and the deal's published materials.">
+            <DocumentsSection fund={fund} viewer={viewer} />
+          </SectionShell>
         </div>
       </div>
 
