@@ -8,7 +8,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import DealOverviewPage from "@/components/deal-overview-page";
 import PublishedDealEditor from "@/features/admin/vehicles/published-deal-editor";
 
-function VehicleOverview({ fund }: { fund: Fund }) {
+function VehicleOverview({ fund, ops = false }: { fund: Fund; ops?: boolean }) {
   const [editorOpen, setEditorOpen] = useState(false);
 
   return (
@@ -22,16 +22,16 @@ function VehicleOverview({ fund }: { fund: Fund }) {
       <DealOverviewPage
         key={fund.id}
         fund={fund}
-        viewer="luca"
-        backTo="/luca/deals"
-        backLabel="Back to vehicles"
+        viewer={ops ? "ops" : "luca"}
+        backTo={ops ? "/workflows" : "/luca/deals"}
+        backLabel={ops ? "Back to Ops publication" : "Back to vehicles"}
         onEditDeal={() => setEditorOpen(true)}
       />
     </>
   );
 }
 
-export default function AdminVehicleOverviewPage() {
+export default function AdminVehicleOverviewPage({ ops = false }: { ops?: boolean }) {
   const { id } = useParams<{ id: string }>();
 
   const { data, isLoading } = useQuery({
@@ -49,7 +49,7 @@ export default function AdminVehicleOverviewPage() {
     return (
       <div className="py-12 text-center">
         <p className="text-muted-foreground">Vehicle not found.</p>
-        <Link to="/luca/deals">
+        <Link to={ops ? "/workflows" : "/luca/deals"}>
           <Button variant="outline" size="sm" className="mt-4">
             <ArrowLeftIcon className="mr-1 size-4" />
             Back to vehicles
@@ -59,5 +59,5 @@ export default function AdminVehicleOverviewPage() {
     );
   }
 
-  return <VehicleOverview key={fund.id} fund={fund} />;
+  return <VehicleOverview key={fund.id} fund={fund} ops={ops} />;
 }
