@@ -169,12 +169,13 @@ export type InvestorDetailResponse = {
   holdings: Holding[];
 };
 
-export type DocumentReviewState = "received" | "reviewing" | "filed";
+export type DocumentReviewState = "received" | "reviewing" | "on_hold" | "filed";
 
 export const REVIEW_STATE_LABELS: Record<DocumentReviewState, string> = {
-  received: "Received",
-  reviewing: "Reviewing",
-  filed: "Filed",
+  received: "New arrival",
+  reviewing: "To review",
+  on_hold: "On hold",
+  filed: "Archived",
 };
 
 export type AdminDocument = {
@@ -197,7 +198,7 @@ export type AdminDocument = {
 export type DocumentsResponse = {
   documents: AdminDocument[];
   meta: PaginationMeta;
-  summary: { total: number; received: number; reviewing: number; filed: number };
+  summary: { total: number; received: number; reviewing: number; on_hold: number; filed: number };
 };
 
 export type CommunicationAudienceType = "fund" | "individual" | "filtered_group";
