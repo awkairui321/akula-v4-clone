@@ -101,8 +101,14 @@ function PartnerDistribution({ partners }: { partners: PartnersResponse["partner
   });
   const subscriptions = data?.subscriptions ?? [];
   const firmBuckets = [
-    { label: "1–5 clients", count: partners.filter((p) => p.client_count >= 1 && p.client_count <= 5).length },
-    { label: "6–10 clients", count: partners.filter((p) => p.client_count >= 6 && p.client_count <= 10).length },
+    {
+      label: "1–5 clients",
+      count: partners.filter((p) => p.client_count >= 1 && p.client_count <= 5).length,
+    },
+    {
+      label: "6–10 clients",
+      count: partners.filter((p) => p.client_count >= 6 && p.client_count <= 10).length,
+    },
     { label: "11+ clients", count: partners.filter((p) => p.client_count >= 11).length },
   ];
   const clientBuckets = [
@@ -112,24 +118,72 @@ function PartnerDistribution({ partners }: { partners: PartnersResponse["partner
     { label: "$10M+", min: 10_000_000, max: Infinity },
   ].map((bucket) => {
     const amounts = new Map<number, number>();
-    for (const sub of subscriptions) if (sub.eam_firm && !CLOSED_SUBSCRIPTION_STATUSES.includes(sub.status)) amounts.set(sub.investor_id, (amounts.get(sub.investor_id) ?? 0) + Number(sub.amount));
-    return { label: bucket.label, count: [...amounts.values()].filter((amount) => amount >= bucket.min && amount < bucket.max).length };
+    for (const sub of subscriptions)
+      if (sub.eam_firm && !CLOSED_SUBSCRIPTION_STATUSES.includes(sub.status))
+        amounts.set(sub.investor_id, (amounts.get(sub.investor_id) ?? 0) + Number(sub.amount));
+    return {
+      label: bucket.label,
+      count: [...amounts.values()].filter((amount) => amount >= bucket.min && amount < bucket.max)
+        .length,
+    };
   });
-  return <div className="grid gap-3 lg:grid-cols-2">
-    <DistributionCard title="Partner firm size" subtitle="Firms grouped by number of advised clients" rows={firmBuckets} />
-    <DistributionCard title="Client open subscriptions" subtitle="Clients grouped by open recorded subscription amount" rows={clientBuckets} />
-  </div>;
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <DistributionCard
+        title="Partner firm size"
+        subtitle="Firms grouped by number of advised clients"
+        rows={firmBuckets}
+      />
+      <DistributionCard
+        title="Client open subscriptions"
+        subtitle="Clients grouped by open recorded subscription amount"
+        rows={clientBuckets}
+      />
+    </div>
+  );
 }
 
-function DistributionCard({ title, subtitle, rows }: { title: string; subtitle: string; rows: { label: string; count: number }[] }) {
+function DistributionCard({
+  title,
+  subtitle,
+  rows,
+}: {
+  title: string;
+  subtitle: string;
+  rows: { label: string; count: number }[];
+}) {
   const max = Math.max(1, ...rows.map((row) => row.count));
-  return <Card><CardContent className="space-y-3 pt-4"><div><h2 className="font-semibold">{title}</h2><p className="text-xs text-muted-foreground">{subtitle}</p></div>{rows.map((row) => <div key={row.label} className="grid grid-cols-[90px_1fr_28px] items-center gap-3 text-sm"><span className="text-muted-foreground">{row.label}</span><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${(row.count / max) * 100}%` }} /></div><span className="text-right tabular-nums">{row.count}</span></div>)}</CardContent></Card>;
+  return (
+    <Card>
+      <CardContent className="space-y-3 pt-4">
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="grid grid-cols-[90px_1fr_28px] items-center gap-3 text-sm"
+          >
+            <span className="text-muted-foreground">{row.label}</span>
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${(row.count / max) * 100}%` }}
+              />
+            </div>
+            <span className="text-right tabular-nums">{row.count}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
 }
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="!py-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="mt-1 text-2xl font-bold">{value}</p>
       </CardContent>
