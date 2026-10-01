@@ -4,14 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import {
-  Circle,
-  TrendingUp,
-  Clock3,
-  FileTextIcon,
-  PanelLeft,
-  UserIcon,
-} from "lucide-react";
+import { Circle, TrendingUp, Clock3, FileTextIcon, PanelLeft, UserIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,9 +60,13 @@ export default function AppLayout() {
     screen.addEventListener("change", collapse);
     return () => screen.removeEventListener("change", collapse);
   }, []);
-  const activeItem = NAV_ITEMS.find(
-    (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
-  ) ?? (location.pathname === "/support" ? NAV_ITEMS.find((item) => item.to === "/account") : undefined);
+  const activeItem =
+    NAV_ITEMS.find(
+      (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+    ) ??
+    (location.pathname === "/support"
+      ? NAV_ITEMS.find((item) => item.to === "/account")
+      : undefined);
 
   const { data, isLoading } = useQuery({
     queryKey: ["investorProfile"],
@@ -85,7 +82,11 @@ export default function AppLayout() {
         <Link to="/funds" className="mt-1 px-3 py-4">
           <div className={`flex flex-row ${collapsed ? "justify-center" : ""}`}>
             <Circle className={collapsed ? "" : "mx-2"} />
-            {!collapsed && <div className="uppercase text-[11px] font-semibold tracking-[0.16em]">PRIVATE MARKETS</div>}
+            {!collapsed && (
+              <div className="text-[11px] font-semibold tracking-[0.16em] uppercase">
+                PRIVATE MARKETS
+              </div>
+            )}
           </div>
         </Link>
         <nav className="flex flex-col gap-1 px-3 py-4">
@@ -98,7 +99,14 @@ export default function AppLayout() {
                 title={collapsed ? item.label : undefined}
               >
                 <item.icon className={collapsed ? "" : "mr-2"} />
-                {!collapsed && <><span className="mr-1 text-[10px] opacity-60">{String(index + 1).padStart(2, "0")}</span>{item.label}</>}
+                {!collapsed && (
+                  <>
+                    <span className="mr-1 text-[10px] opacity-60">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    {item.label}
+                  </>
+                )}
               </Button>
             </Link>
           ))}
@@ -120,7 +128,9 @@ export default function AppLayout() {
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>Compare roles live</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
+              Compare roles live
+            </Button>
             <DemoResetButton compact />
             <DropdownMenu>
               <DropdownMenuTrigger
