@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
 import type { WorkflowView, WorkflowCommand, Version } from "@/lib/workflow-types";
+import type { Fund } from "@/lib/types";
+import DealOverviewPage from "@/components/deal-overview-page";
 import { Button } from "@/components/ui/button";
 import DemoResetButton from "@/components/demo-reset-button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +37,7 @@ const RM_TAB_ICONS: Record<string, typeof Circle> = {
   Support: HeadsetIcon,
   Relationships: UsersIcon,
   "Client reports": ChartNoAxesColumnIncreasing,
+  Reports: ChartNoAxesColumnIncreasing,
 };
 const date = (v: string) =>
   new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -76,11 +79,17 @@ function Action({
     const form = e.currentTarget;
     const fields = Object.fromEntries(new FormData(form));
     const body = { ...command, ...fields } as WorkflowCommand;
-    for (const key of ["id", "target", "amount", "price"] as const) {
+    for (const key of ["id", "target", "amount", "price", "holdingId"] as const) {
       if (key in fields) {
         if (fields[key] === "") delete body[key];
         else body[key] = Number(fields[key]);
       }
+    }
+    if (typeof fields.exposure === "string") {
+      const [kind, rawId] = fields.exposure.split(":");
+      if (kind === "sub") body.id = Number(rawId);
+      if (kind === "holding") body.holdingId = Number(rawId);
+      delete body.exposure;
     }
     mutation.mutate(body, { onSuccess: () => form.reset() });
   }
@@ -203,12 +212,19 @@ function Cases({ data: d }: { data: WorkflowView }) {
   const staff = ["luca", "ops", "rm"].includes(d.actor.role) || d.actor.role === "eam";
   const isRm = d.actor.role === "rm";
   const [clientSearch, setClientSearch] = useState("");
-  const clients = isRm ? d.clients.filter((client) => client.type === "individual") : d.clients;
+  const clients = isRm
+    ? d.clients.filter(
+        (client) => client.type === "individual" && client.name !== "Newly Registered",
+      )
+    : d.clients;
   const selectedClient = clients.find(
     (client) => client.name.toLowerCase() === clientSearch.trim().toLowerCase(),
   );
   const clientInvestments = selectedClient
     ? d.subscriptions.filter((subscription) => subscription.investor_id === selectedClient.id)
+    : [];
+  const clientHoldings = selectedClient
+    ? d.holdings.filter((holding) => holding.investor_id === selectedClient.id)
     : [];
   return (
     <>
@@ -239,16 +255,45 @@ function Cases({ data: d }: { data: WorkflowView }) {
                 </datalist>
                 <input type="hidden" name="target" value={selectedClient?.id ?? ""} />
               </label>
+              {selectedClient && (
+                <div className="wf-exposure">
+                  <strong>Current and past exposure</strong>
+                  <div>
+                    {[
+                      ...new Set([
+                        ...clientInvestments.map((investment) => investment.asset_name),
+                        ...clientHoldings.map((holding) => holding.asset_name),
+                      ]),
+                    ].map((name) => (
+                      <span key={name}>{name}</span>
+                    ))}
+                  </div>
+                  {clientInvestments.length === 0 && clientHoldings.length === 0 && (
+                    <small>No recorded investment exposure.</small>
+                  )}
+                </div>
+              )}
               <Choice
-                label="Investment (optional)"
-                name="id"
+                label="Related exposure (optional)"
+                name="exposure"
                 required={false}
                 items={[
-                  { id: "", name: "Account question" },
+                  { id: "", name: "General client inquiry" },
                   ...clientInvestments.map((investment) => ({
-                    id: investment.id,
-                    name: `#${investment.id} · ${investment.asset_name} · ${investment.status.replaceAll("_", " ")}`,
+                    id: `sub:${investment.id}`,
+                    name: `Investment #${investment.id} · ${investment.asset_name}`,
                   })),
+                  ...clientHoldings
+                    .filter(
+                      (holding) =>
+                        !clientInvestments.some(
+                          (investment) => investment.holdingId === holding.id,
+                        ),
+                    )
+                    .map((holding) => ({
+                      id: `holding:${holding.id}`,
+                      name: `Holding #${holding.id} · ${holding.asset_name}`,
+                    })),
                 ]}
               />
             </>
@@ -273,7 +318,7 @@ function Cases({ data: d }: { data: WorkflowView }) {
               name="id"
               required={false}
               items={[
-                { id: "", name: "Account question" },
+                { id: "", name: "General client inquiry" },
                 ...d.subscriptions.map((s) => ({
                   id: s.id,
                   name: `#${s.id} · ${s.investor_name} · ${s.asset_name}`,
@@ -299,6 +344,7 @@ function Cases({ data: d }: { data: WorkflowView }) {
                   : c.owner.toUpperCase()}{" "}
               · {c.status} · {date(c.at)}
               {c.subscriptionId && ` · Investment #${c.subscriptionId}`}
+              {c.holdingId && ` · Holding #${c.holdingId}`}
             </p>
             {c.messages.map((m, i) => (
               <blockquote key={i}>
@@ -491,27 +537,64 @@ const RM_STATUS_LABELS: Record<string, string> = {
   rejected: "Declined by LUCA",
   cancelled: "Cancelled",
 };
+const RM_ACTION_STATUSES = [
+  "reserved",
+  "documents_pending",
+  "information_requested",
+  "approved",
+  "awaiting_funds",
+  "not_allocated",
+  "rejected",
+];
+const RM_REVIEW_STATUSES = ["institution_review", "under_luca_review"];
 
 function RMOverview({
   data: d,
   onNavigate,
+  onFollowUps,
+  onReview,
+  reviewSignal,
 }: {
   data: WorkflowView;
   onNavigate: (tab: string) => void;
+  onFollowUps: () => void;
+  onReview: () => void;
+  reviewSignal: number;
 }) {
-  const clientCount = d.clients.filter((client) => client.type === "individual").length;
+  const [progressFilter, setProgressFilter] = useState("action");
+  const [progressSearch, setProgressSearch] = useState("");
+  const [page, setPage] = useState(0);
+  useEffect(() => {
+    if (reviewSignal > 0) {
+      setProgressFilter("review");
+      setPage(0);
+    }
+  }, [reviewSignal]);
+  const clientCount = d.clients.filter(
+    (client) => client.type === "individual" && client.name !== "Newly Registered",
+  ).length;
   const clientActions = d.subscriptions.filter((subscription) =>
-    [
-      "reserved",
-      "documents_pending",
-      "information_requested",
-      "approved",
-      "awaiting_funds",
-    ].includes(subscription.status),
+    RM_ACTION_STATUSES.includes(subscription.status),
   ).length;
   const awaitingDecision = d.subscriptions.filter((subscription) =>
-    ["institution_review", "under_luca_review"].includes(subscription.status),
+    RM_REVIEW_STATUSES.includes(subscription.status),
   ).length;
+  const filtered = d.subscriptions.filter((subscription) => {
+    const bucket =
+      progressFilter === "all" ||
+      (progressFilter === "action" && RM_ACTION_STATUSES.includes(subscription.status)) ||
+      (progressFilter === "review" && RM_REVIEW_STATUSES.includes(subscription.status)) ||
+      (progressFilter === "other" &&
+        !RM_ACTION_STATUSES.includes(subscription.status) &&
+        !RM_REVIEW_STATUSES.includes(subscription.status));
+    return (
+      bucket &&
+      `${subscription.investor_name} ${subscription.asset_name} ${subscription.id}`
+        .toLowerCase()
+        .includes(progressSearch.toLowerCase())
+    );
+  });
+  const visible = filtered.slice(page * 8, (page + 1) * 8);
 
   return (
     <>
@@ -521,30 +604,62 @@ function RMOverview({
           transfers belong to the client; LUCA and Akula Ops handle their own review and processing
           steps.
         </p>
-        <div className="wf-stats">
-          <div>
+        <div className="wf-stats wf-clickable-stats">
+          <button onClick={() => onNavigate("Relationships")}>
             <span>Assigned individual clients</span>
             <strong>{clientCount}</strong>
-          </div>
-          <div>
+            <small>Open relationships →</small>
+          </button>
+          <button onClick={onFollowUps}>
             <span>Client follow-ups</span>
             <strong>{clientActions}</strong>
-          </div>
-          <div>
+            <small>Open task list →</small>
+          </button>
+          <button onClick={onReview}>
             <span>With LUCA or institution</span>
             <strong>{awaitingDecision}</strong>
-          </div>
-          <div>
+            <small>View review stages →</small>
+          </button>
+          <button onClick={() => onNavigate("Support")}>
             <span>Open support cases</span>
             <strong>{d.cases.filter((item) => item.status === "open").length}</strong>
-          </div>
+            <small>Open support →</small>
+          </button>
         </div>
       </Panel>
-      <Panel title="Client investment progress">
+      <Panel title="Immediate actions & investment progress">
         <p>
-          Each row explains who owns the next step. “No RM action” means the client’s subscription
-          is being handled by LUCA or Akula Ops.
+          Start with client follow-ups. Filter or search the wider pipeline when you need another
+          record.
         </p>
+        <div className="wf-progress-controls">
+          <label className="wf-field">
+            <span>Show</span>
+            <select
+              value={progressFilter}
+              onChange={(event) => {
+                setProgressFilter(event.target.value);
+                setPage(0);
+              }}
+            >
+              <option value="action">Client follow-ups ({clientActions})</option>
+              <option value="review">With LUCA or institution ({awaitingDecision})</option>
+              <option value="other">Other stages</option>
+              <option value="all">All investment records</option>
+            </select>
+          </label>
+          <label className="wf-field">
+            <span>Find a client or company</span>
+            <Input
+              value={progressSearch}
+              onChange={(event) => {
+                setProgressSearch(event.target.value);
+                setPage(0);
+              }}
+              placeholder="Search name, company or investment #"
+            />
+          </label>
+        </div>
         {!d.subscriptions.length ? (
           <div className="wf-empty">
             <p>No investment applications are currently linked to your client book.</p>
@@ -552,6 +667,8 @@ function RMOverview({
               Browse published opportunities
             </Button>
           </div>
+        ) : filtered.length === 0 ? (
+          <p className="wf-empty">No records match these filters.</p>
         ) : (
           <div className="wf-table-wrap">
             <table className="wf-table">
@@ -560,19 +677,23 @@ function RMOverview({
                   <th>Client</th>
                   <th>Opportunity</th>
                   <th>Stage</th>
-                  <th>Next step</th>
-                  <th>What you can do</th>
+                  <th>Next step / owner</th>
                 </tr>
               </thead>
               <tbody>
-                {d.subscriptions.map((subscription) => {
+                {visible.map((subscription) => {
                   const guidance = RM_STAGE_GUIDANCE[subscription.status] ?? {
                     next: subscription.status.replaceAll("_", " "),
                     rm: "Review with the client if needed.",
                   };
                   return (
                     <tr key={subscription.id}>
-                      <td>{subscription.investor_name}</td>
+                      <td>
+                        {subscription.investor_name}
+                        <small>
+                          {d.clients.find((client) => client.id === subscription.investor_id)?.code}
+                        </small>
+                      </td>
                       <td>
                         {subscription.asset_name}
                         <small>Investment #{subscription.id}</small>
@@ -583,14 +704,39 @@ function RMOverview({
                       </td>
                       <td>
                         {guidance.next}
-                        <small>{money(subscription.amount, subscription.currency)} requested</small>
+                        <small>
+                          {guidance.rm} · {money(subscription.amount, subscription.currency)}{" "}
+                          requested
+                        </small>
                       </td>
-                      <td>{guidance.rm}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {filtered.length > 8 && (
+          <div className="wf-pagination">
+            <span>
+              {page * 8 + 1}–{Math.min((page + 1) * 8, filtered.length)} of {filtered.length}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={(page + 1) * 8 >= filtered.length}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </Button>
           </div>
         )}
       </Panel>
@@ -604,7 +750,7 @@ function RMOverview({
             <strong>Find a client →</strong>
             <span>Search your assigned client book and manage follow-ups.</span>
           </button>
-          <button onClick={() => onNavigate("Client reports")}>
+          <button onClick={() => onNavigate("Reports")}>
             <strong>View client reports →</strong>
             <span>Check reported holding values and their as-of dates.</span>
           </button>
@@ -616,12 +762,41 @@ function RMOverview({
 
 function RMOpportunities({ data: d }: { data: WorkflowView }) {
   const [search, setSearch] = useState("");
+  const [selectedFund, setSelectedFund] = useState<number | null>(null);
+  const { data: deal, isLoading: loadingDeal } = useQuery({
+    queryKey: ["rmDeal", selectedFund],
+    queryFn: () => api<{ fund: Fund }>(`/api/v1/funds/${selectedFund}`),
+    enabled: selectedFund !== null,
+  });
   const openFunds = d.funds.filter((fund) => fund.state === "open");
   const filteredFunds = openFunds.filter((fund) =>
     `${fund.name} ${fund.company} ${fund.descriptor} ${fund.hook}`
       .toLowerCase()
       .includes(search.trim().toLowerCase()),
   );
+
+  if (selectedFund !== null)
+    return (
+      <div className="space-y-3">
+        <Button variant="outline" size="sm" onClick={() => setSelectedFund(null)}>
+          ← Back to opportunities
+        </Button>
+        {loadingDeal ? (
+          <p>Loading the published overview…</p>
+        ) : deal?.fund ? (
+          <DealOverviewPage
+            key={deal.fund.id}
+            fund={deal.fund}
+            viewer="rm"
+            backTo="/workflows"
+            backLabel="Back to opportunities"
+            preview
+          />
+        ) : (
+          <p>Published overview unavailable.</p>
+        )}
+      </div>
+    );
 
   return (
     <>
@@ -647,6 +822,10 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
           <div className="wf-opportunity-grid">
             {filteredFunds.map((fund) => (
               <article className="wf-opportunity" key={fund.id}>
+                <div className="wf-opportunity-art">
+                  <span>{fund.company.slice(0, 1)}</span>
+                  <small>{fund.descriptor}</small>
+                </div>
                 <div className="wf-opportunity-head">
                   <div>
                     <span className="wf-eyebrow">{fund.name}</span>
@@ -656,6 +835,9 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
                 </div>
                 <p className="wf-opportunity-descriptor">{fund.descriptor}</p>
                 <p>{fund.hook}</p>
+                <Button variant="outline" size="sm" onClick={() => setSelectedFund(fund.id)}>
+                  View full deal overview →
+                </Button>
                 <div className="wf-opportunity-meta">
                   <span>Minimum</span>
                   <strong>{money(fund.minimum)}</strong>
@@ -682,7 +864,10 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
                       <Choice
                         label="Individual client"
                         name="id"
-                        items={d.clients.filter((client) => client.type === "individual")}
+                        items={d.clients.filter(
+                          (client) =>
+                            client.type === "individual" && client.name !== "Newly Registered",
+                        )}
                       />
                       <Field label="Note for the client" name="text" />
                     </Action>
@@ -720,6 +905,95 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
   );
 }
 
+function RMReports({ data: d }: { data: WorkflowView }) {
+  const [search, setSearch] = useState("");
+  const groups = [...new Set(d.holdings.map((holding) => holding.asset_name))]
+    .sort((left, right) => left.localeCompare(right))
+    .map((company) => ({
+      company,
+      rows: d.holdings.filter((holding) => holding.asset_name === company),
+    }))
+    .filter((group) =>
+      `${group.company} ${group.rows.map((holding) => d.clients.find((client) => client.id === holding.investor_id)?.name ?? "").join(" ")}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+    );
+  return (
+    <>
+      <label className="wf-field wf-search">
+        <span>Find company or client</span>
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search holdings"
+        />
+      </label>
+      {groups.length === 0 ? (
+        <p className="wf-empty">No issued holdings match this search.</p>
+      ) : (
+        <div className="wf-company-groups">
+          {groups.map(({ company, rows }) => (
+            <details key={company}>
+              <summary>
+                <strong>{company}</strong>
+                <span>
+                  {rows.length} holding{rows.length === 1 ? "" : "s"} ·{" "}
+                  {new Set(rows.map((row) => row.investor_id)).size} client
+                  {new Set(rows.map((row) => row.investor_id)).size === 1 ? "" : "s"}
+                </span>
+              </summary>
+              <div className="wf-table-wrap">
+                <table className="wf-table">
+                  <thead>
+                    <tr>
+                      <th>Holding</th>
+                      <th>Client</th>
+                      <th>Class units</th>
+                      <th>Cost</th>
+                      <th>Reported value</th>
+                      <th>As of / source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((holding) => {
+                      const valuation = d.valuations
+                        .filter((item) => item.holdingId === holding.id)
+                        .at(-1);
+                      const at = valuation?.at || holding.nav_as_of;
+                      const client = d.clients.find((item) => item.id === holding.investor_id);
+                      return (
+                        <tr key={holding.id}>
+                          <td>#{holding.id}</td>
+                          <td>
+                            {client?.name ?? "Investor"}
+                            <small>{client?.code}</small>
+                          </td>
+                          <td>{holding.units}</td>
+                          <td>{money(holding.committed_amount)}</td>
+                          <td>
+                            {money(
+                              valuation?.amount ?? holding.current_nav,
+                              valuation?.currency ?? "USD",
+                            )}
+                          </td>
+                          <td>
+                            {at ? date(at) : "Date unavailable"}
+                            <small>{valuation?.source || "Legacy mock administrator report"}</small>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function WorkflowPage() {
   const q = useWorkspace(),
     { logout } = useAuth();
@@ -730,6 +1004,8 @@ export default function WorkflowPage() {
   const [documentSearch, setDocumentSearch] = useState("");
   const [documentFund, setDocumentFund] = useState("all");
   const [relationshipSearch, setRelationshipSearch] = useState("");
+  const [relationshipView, setRelationshipView] = useState("clients");
+  const [reviewSignal, setReviewSignal] = useState(0);
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
   useEffect(() => {
     const screen = window.matchMedia("(max-width: 767px)");
@@ -769,22 +1045,35 @@ export default function WorkflowPage() {
     })
     .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const visibleClients = d.clients
+    .filter(
+      (client) =>
+        (!rm || (client.type === "individual" && client.name !== "Newly Registered")) &&
+        (relationshipView !== "tasks" ||
+          d.subscriptions.some(
+            (subscription) =>
+              subscription.investor_id === client.id &&
+              RM_ACTION_STATUSES.includes(subscription.status),
+          ) ||
+          d.notes.some((note) => note.investorId === client.id && !note.done)),
+    )
     .filter((client) =>
-      `${client.name} ${client.type}`
+      `${client.name} ${client.code} ${client.type}`
         .toLowerCase()
         .includes(relationshipSearch.trim().toLowerCase()),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
-  const tabs = [
-    "Overview",
-    rm ? "Opportunities" : "Investments",
-    "Documents",
-    "Support",
-    ...(privileged ? ["Publication", "Demand"] : []),
-    ...(rm || manager ? ["Relationships"] : []),
-    rm ? "Client reports" : "Reporting",
-    ...(!staff ? ["Company requests"] : []),
-  ];
+  const tabs = rm
+    ? ["Overview", "Reports", "Opportunities", "Documents", "Relationships", "Support"]
+    : [
+        "Overview",
+        "Investments",
+        "Documents",
+        "Support",
+        ...(privileged ? ["Publication", "Demand"] : []),
+        ...(manager ? ["Relationships"] : []),
+        "Reporting",
+        ...(!staff ? ["Company requests"] : []),
+      ];
   const home = manager ? "/luca" : d.actor.role === "eam" ? "/eam" : "/portfolio";
   return (
     <div className={`wf-shell ${rm ? "rm-shell" : ""}`}>
@@ -910,7 +1199,19 @@ export default function WorkflowPage() {
         )}
         {tab === "Overview" &&
           (rm ? (
-            <RMOverview data={d} onNavigate={setTab} />
+            <RMOverview
+              data={d}
+              onNavigate={(value) => {
+                if (value === "Relationships") setRelationshipView("clients");
+                setTab(value);
+              }}
+              reviewSignal={reviewSignal}
+              onReview={() => setReviewSignal((value) => value + 1)}
+              onFollowUps={() => {
+                setRelationshipView("tasks");
+                setTab("Relationships");
+              }}
+            />
           ) : (
             <>
               <Analytics data={d} />
@@ -1319,12 +1620,58 @@ export default function WorkflowPage() {
         )}
         {tab === "Relationships" && (rm || manager) && (
           <>
-            <Panel title={manager ? "Assign LUCA relationship managers" : "Assigned clients"}>
+            <Panel
+              title={
+                manager
+                  ? "Assign LUCA relationship managers"
+                  : relationshipView === "tasks"
+                    ? "My client task list"
+                    : "Assigned clients"
+              }
+            >
               <p>
                 {manager
                   ? "Find investors in the client book and review their assigned LUCA RM."
-                  : "Search the clients assigned to your RM account. Open a client record to review follow-ups and share a relevant published opportunity."}
+                  : relationshipView === "tasks"
+                    ? "Client actions and private RM notes are collected here. Expand a client only when you need to record a follow-up or share an opportunity."
+                    : "Search assigned investors by name or tag. Expand one client to share an opportunity or record a private follow-up."}
               </p>
+              {rm && (
+                <div className="wf-view-switch">
+                  <Button
+                    variant={relationshipView === "clients" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setRelationshipView("clients")}
+                  >
+                    Client book
+                  </Button>
+                  <Button
+                    variant={relationshipView === "tasks" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setRelationshipView("tasks")}
+                  >
+                    Client follow-ups
+                  </Button>
+                </div>
+              )}
+              {rm && relationshipView === "tasks" && (
+                <div className="wf-task-summary">
+                  {d.subscriptions
+                    .filter((subscription) => RM_ACTION_STATUSES.includes(subscription.status))
+                    .map((subscription) => (
+                      <div key={subscription.id}>
+                        <strong>
+                          {subscription.investor_name} · {subscription.asset_name}
+                        </strong>
+                        <span>
+                          {RM_STATUS_LABELS[subscription.status] ??
+                            subscription.status.replaceAll("_", " ")}{" "}
+                          · {RM_STAGE_GUIDANCE[subscription.status]?.rm}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
               <label className="wf-field wf-search">
                 <span>Search by client name</span>
                 <Input
@@ -1361,8 +1708,10 @@ export default function WorkflowPage() {
               )}
               {!visibleClients.length && <p className="wf-empty">No clients match this search.</p>}
               {visibleClients.map((c) => (
-                <article className="wf-record" key={c.id}>
-                  <h3>{c.name}</h3>
+                <details className="wf-record wf-client-record" key={c.id}>
+                  <summary>
+                    <strong>{c.name}</strong> <small>· {c.code}</small>
+                  </summary>
                   <p>
                     Client #{c.id} · LUCA RM #
                     {d.assignments.find((a) => a.investorId === c.id)?.staffId || "unassigned"}
@@ -1386,11 +1735,16 @@ export default function WorkflowPage() {
                       </Action>
                     </>
                   )}
-                </article>
+                </details>
               ))}
             </Panel>
             {rm && (
               <Panel title="Private follow-ups">
+                {!d.notes.length && (
+                  <p className="wf-empty">
+                    No private follow-up notes yet. Add one from a client in Relationships.
+                  </p>
+                )}
                 {d.notes.map((n) => (
                   <article className="wf-record" key={n.id}>
                     <p>{n.text}</p>
@@ -1483,7 +1837,7 @@ export default function WorkflowPage() {
             </Panel>
           </>
         )}
-        {(tab === "Reporting" || (rm && tab === "Client reports")) && (
+        {(tab === "Reporting" || (rm && tab === "Reports")) && (
           <>
             <Panel title={rm ? "Client holdings & reported values" : "Holdings & sourced reports"}>
               <p>
@@ -1497,40 +1851,46 @@ export default function WorkflowPage() {
                   issuance, its reported value will appear here.
                 </p>
               )}
-              {d.holdings.map((h) => {
-                const v = d.valuations.filter((v) => v.holdingId === h.id).at(-1);
-                const at = v?.at || h.nav_as_of;
-                const stale = !at || Date.now() - Date.parse(at) > 90 * 86400000;
-                return (
-                  <article key={h.id} className="wf-record">
-                    <h3>
-                      {h.asset_name} · Holding #{h.id}
-                    </h3>
-                    <p>
-                      {h.units} class units · Cost {money(h.committed_amount)} · Reported value{" "}
-                      {money(v?.amount ?? h.current_nav, v?.currency || "USD")}
-                    </p>
-                    <p>
-                      {at ? date(at) : "Missing report date"} ·{" "}
-                      {v?.source || "Legacy mock administrator report"} ·{" "}
-                      <strong>
-                        {stale ? "Stale / missing report" : "Current within demo 90-day threshold"}
-                      </strong>
-                    </p>
-                    {manager && (
-                      <Action
-                        label="Append sourced valuation"
-                        command={{ type: "valuation", id: h.id }}
-                      >
-                        <Field name="amount" label="Reported value" type="number" />
-                        <Field name="currency" label="Currency" value="USD" />
-                        <Field name="text" label="Report source" />
-                        <Field name="due" label="As-of date" type="date" />
-                      </Action>
-                    )}
-                  </article>
-                );
-              })}
+              {rm ? (
+                <RMReports data={d} />
+              ) : (
+                d.holdings.map((h) => {
+                  const v = d.valuations.filter((v) => v.holdingId === h.id).at(-1);
+                  const at = v?.at || h.nav_as_of;
+                  const stale = !at || Date.now() - Date.parse(at) > 90 * 86400000;
+                  return (
+                    <article key={h.id} className="wf-record">
+                      <h3>
+                        {h.asset_name} · Holding #{h.id}
+                      </h3>
+                      <p>
+                        {h.units} class units · Cost {money(h.committed_amount)} · Reported value{" "}
+                        {money(v?.amount ?? h.current_nav, v?.currency || "USD")}
+                      </p>
+                      <p>
+                        {at ? date(at) : "Missing report date"} ·{" "}
+                        {v?.source || "Legacy mock administrator report"} ·{" "}
+                        <strong>
+                          {stale
+                            ? "Stale / missing report"
+                            : "Current within demo 90-day threshold"}
+                        </strong>
+                      </p>
+                      {manager && (
+                        <Action
+                          label="Append sourced valuation"
+                          command={{ type: "valuation", id: h.id }}
+                        >
+                          <Field name="amount" label="Reported value" type="number" />
+                          <Field name="currency" label="Currency" value="USD" />
+                          <Field name="text" label="Report source" />
+                          <Field name="due" label="As-of date" type="date" />
+                        </Action>
+                      )}
+                    </article>
+                  );
+                })
+              )}
             </Panel>
             {(manager || ops) && (
               <Panel title="EXPERIMENTAL · Secondary-market pricing indicator">
