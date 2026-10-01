@@ -110,6 +110,9 @@ export default function AdminInvestorDetailPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">{investor.full_name}</h1>
+            <p className="font-mono text-xs text-muted-foreground">
+              Client tag {investor.client_code}
+            </p>
             <Badge>{VERIFICATION_LABELS[investor.verification_status]}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
