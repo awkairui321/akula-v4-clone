@@ -182,11 +182,50 @@ function StageBand({
         <span className="text-xs text-muted-foreground">{subs.length}</span>
         <span className="text-xs text-muted-foreground">{formatPrice(total)}</span>
       </div>
-      <div className={`overflow-x-auto rounded-lg border bg-background ${muted ? "opacity-75" : ""}`}>
+      <div
+        className={`overflow-x-auto rounded-lg border bg-background ${muted ? "opacity-75" : ""}`}
+      >
         {subs.length === 0 ? (
           <p className="p-3 text-center text-xs text-muted-foreground">Nothing here</p>
         ) : (
-          <table className="w-full min-w-[760px] text-sm"><thead className="bg-muted/40 text-left text-xs text-muted-foreground"><tr><th className="px-3 py-2">Investor</th><th className="px-3 py-2">Deal / channel</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2">Current action</th></tr></thead><tbody className="divide-y">{subs.map((s) => <tr key={s.id} onClick={() => onCardClick(s)} className="cursor-pointer hover:bg-muted/30"><td className="px-3 py-2.5"><span className="font-medium">{s.investor_name}</span><span className="block text-xs text-muted-foreground">{s.investor_email}</span></td><td className="px-3 py-2.5">{s.asset_name}<span className="block text-xs text-muted-foreground">{s.eam_firm ?? "Direct"}{s.on_hold ? " · On hold" : ""}{s.payment_claimed ? " · Payment claimed" : ""}</span></td><td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatPrice(s.amount)}</td><td className="px-3 py-2.5 text-muted-foreground">{NEXT_ACTION_LABELS[s.next_action] ?? s.next_action}</td></tr>)}</tbody></table>
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">Investor</th>
+                <th className="px-3 py-2">Deal / channel</th>
+                <th className="px-3 py-2 text-right">Amount</th>
+                <th className="px-3 py-2">Current action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {subs.map((s) => (
+                <tr
+                  key={s.id}
+                  onClick={() => onCardClick(s)}
+                  className="cursor-pointer hover:bg-muted/30"
+                >
+                  <td className="px-3 py-2.5">
+                    <span className="font-medium">{s.investor_name}</span>
+                    <span className="block text-xs text-muted-foreground">{s.investor_email}</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {s.asset_name}
+                    <span className="block text-xs text-muted-foreground">
+                      {s.eam_firm ?? "Direct"}
+                      {s.on_hold ? " · On hold" : ""}
+                      {s.payment_claimed ? " · Payment claimed" : ""}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                    {formatPrice(s.amount)}
+                  </td>
+                  <td className="px-3 py-2.5 text-muted-foreground">
+                    {NEXT_ACTION_LABELS[s.next_action] ?? s.next_action}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
@@ -198,6 +237,12 @@ export default function AdminSubscriptionsPage() {
   const [searchParams] = useSearchParams();
   const statusFromUrl = searchParams.get("status");
   const [search, setSearch] = useState("");
+  const [activeStage, setActiveStage] = useState<string | null>(
+    statusFromUrl
+      ? (BOARD_STAGES.find((stage) => (stage.statuses as string[]).includes(statusFromUrl))?.key ??
+          null)
+      : null,
+  );
   const [detailSubscription, setDetailSubscription] = useState<AdminSubscription | null>(null);
   const [matchingOpen, setMatchingOpen] = useState(false);
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -228,6 +273,7 @@ export default function AdminSubscriptionsPage() {
     if (!statusFromUrl || isLoading) return;
     const stage = BOARD_STAGES.find((c) => (c.statuses as string[]).includes(statusFromUrl));
     if (stage) {
+      setActiveStage(stage.key);
       columnRefs.current[stage.key]?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -267,19 +313,50 @@ export default function AdminSubscriptionsPage() {
       )}
 
       {!isLoading && subscriptions.length > 0 && (
-        <div className="space-y-6">
-          {BOARD_STAGES.map((stage) => (
-            <StageBand
-              key={stage.key}
-              label={stage.label}
-              subs={filtered.filter((s) => (stage.statuses as string[]).includes(s.status))}
-              muted={stage.key === "closed"}
-              onCardClick={setDetailSubscription}
-              bandRef={(el) => {
-                columnRefs.current[stage.key] = el;
-              }}
-            />
-          ))}
+        <div className="space-y-4">
+          <div
+            className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
+            aria-label="Subscription pipeline at a glance"
+          >
+            {BOARD_STAGES.map((stage) => {
+              const rows = filtered.filter((s) => (stage.statuses as string[]).includes(s.status));
+              return (
+                <button
+                  key={stage.key}
+                  type="button"
+                  onClick={() => setActiveStage(activeStage === stage.key ? null : stage.key)}
+                  className={`rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${activeStage === stage.key ? "border-primary bg-primary/5" : "bg-card"}`}
+                  aria-expanded={activeStage === stage.key}
+                >
+                  <span className="text-xs text-muted-foreground">{stage.label}</span>
+                  <span className="mt-1 block text-xl font-semibold tabular-nums">
+                    {rows.length}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatPrice(rows.reduce((sum, s) => sum + Number(s.amount), 0))}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Select a stage to inspect its subscriptions. Search filters every stage.
+          </p>
+          {BOARD_STAGES.map(
+            (stage) =>
+              activeStage === stage.key && (
+                <StageBand
+                  key={stage.key}
+                  label={stage.label}
+                  subs={filtered.filter((s) => (stage.statuses as string[]).includes(s.status))}
+                  muted={stage.key === "closed"}
+                  onCardClick={setDetailSubscription}
+                  bandRef={(el) => {
+                    columnRefs.current[stage.key] = el;
+                  }}
+                />
+              ),
+          )}
         </div>
       )}
 
