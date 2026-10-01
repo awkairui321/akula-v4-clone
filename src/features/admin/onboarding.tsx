@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -236,36 +236,27 @@ export default function OnboardingPage() {
   // one subscription in it, and how much they've committed to that fund
   // specifically — advisor and capital committed, nothing about
   // verification (that lives on the investor's own profile now).
-  const rosterByFund = useMemo(() => {
-    return funds
-      .map((fund) => {
-        const fundSubs = allSubs.filter((s: AdminSubscription) => s.fund_id === fund.id);
-        const byInvestor = new Map<
-          number,
-          { investor: AdminInvestor; eamFirm: string | null; committed: number }
-        >();
-        for (const s of fundSubs) {
-          const investor = approvedById.get(s.investor_id);
-          if (!investor || !matches(investor)) continue;
-          const existing = byInvestor.get(investor.id);
-          const amount = parseFloat(s.amount);
-          if (existing) existing.committed += amount;
-          else byInvestor.set(investor.id, { investor, eamFirm: s.eam_firm, committed: amount });
-        }
-        return { fund, rows: [...byInvestor.values()].sort((a, b) => b.committed - a.committed) };
-      })
-      .filter((group) => group.rows.length > 0);
-  }, [funds, allSubs, approvedById, q]);
+  const rosterByFund = funds
+    .map((fund) => {
+      const fundSubs = allSubs.filter((s: AdminSubscription) => s.fund_id === fund.id);
+      const byInvestor = new Map<
+        number,
+        { investor: AdminInvestor; eamFirm: string | null; committed: number }
+      >();
+      for (const s of fundSubs) {
+        const investor = approvedById.get(s.investor_id);
+        if (!investor || !matches(investor)) continue;
+        const existing = byInvestor.get(investor.id);
+        const amount = parseFloat(s.amount);
+        if (existing) existing.committed += amount;
+        else byInvestor.set(investor.id, { investor, eamFirm: s.eam_firm, committed: amount });
+      }
+      return { fund, rows: [...byInvestor.values()].sort((a, b) => b.committed - a.committed) };
+    })
+    .filter((group) => group.rows.length > 0);
 
-  const codeFor = (id: number) => {
-    let n = Math.imul(id + 0x4b1d, 2654435761) >>> 0;
-    let code = "";
-    for (let i = 0; i < 5; i++) {
-      code += "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[n % 36];
-      n = (Math.imul(n, 1664525) + 1013904223) >>> 0;
-    }
-    return code;
-  };
+  const codeFor = (id: number) =>
+    investors.find((investor) => investor.id === id)?.client_code ?? "";
   const entityGroups = new Map<string, Map<number, { investor: AdminInvestor; amount: number }>>();
   for (const sub of allSubs) {
     if (!sub.eam_firm) continue;
