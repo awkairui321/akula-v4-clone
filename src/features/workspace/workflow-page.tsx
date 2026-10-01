@@ -577,9 +577,11 @@ function RMOverview({
   const clientCount = d.clients.filter(
     (client) => client.type === "individual" && client.name !== "Newly Registered",
   ).length;
-  const clientActions = d.subscriptions.filter((subscription) =>
-    RM_ACTION_STATUSES.includes(subscription.status),
-  ).length;
+  const clientActions = new Set(
+    d.subscriptions
+      .filter((subscription) => RM_ACTION_STATUSES.includes(subscription.status))
+      .map((subscription) => subscription.investor_id),
+  ).size;
   const awaitingDecision = d.subscriptions.filter((subscription) =>
     RM_REVIEW_STATUSES.includes(subscription.status),
   ).length;
@@ -1891,20 +1893,70 @@ export default function WorkflowPage() {
               )}
               {rm && relationshipView === "tasks" && (
                 <div className="wf-task-summary">
-                  {d.subscriptions
-                    .filter((subscription) => RM_ACTION_STATUSES.includes(subscription.status))
-                    .map((subscription) => (
-                      <div key={subscription.id}>
-                        <strong>
-                          {subscription.investor_name} · {subscription.asset_name}
-                        </strong>
-                        <span>
-                          {RM_STATUS_LABELS[subscription.status] ??
-                            subscription.status.replaceAll("_", " ")}{" "}
-                          · {RM_STAGE_GUIDANCE[subscription.status]?.rm}
-                        </span>
-                      </div>
-                    ))}
+                  {visibleClients.map((client) => {
+                    const tasks = d.subscriptions.filter(
+                      (subscription) =>
+                        subscription.investor_id === client.id &&
+                        RM_ACTION_STATUSES.includes(subscription.status),
+                    );
+                    const notes = d.notes.filter(
+                      (note) => note.investorId === client.id && !note.done,
+                    );
+                    if (!tasks.length && !notes.length) return null;
+                    return (
+                      <details key={client.id} className="wf-client-task-group">
+                        <summary>
+                          <strong>
+                            {client.name} <small>· {client.code}</small>
+                          </strong>
+                          <span>
+                            {tasks.length} deal action{tasks.length === 1 ? "" : "s"}
+                            {notes.length
+                              ? ` · ${notes.length} private follow-up${notes.length === 1 ? "" : "s"}`
+                              : ""}
+                          </span>
+                        </summary>
+                        <div className="wf-client-task-content">
+                          <Action
+                            label="Send one client reminder"
+                            command={{ type: "case", target: client.id, status: "rm" }}
+                          >
+                            <Field name="text" label="Reminder or message" />
+                          </Action>
+                          {tasks.map((subscription) => (
+                            <div className="wf-client-task-item" key={subscription.id}>
+                              <strong>
+                                {subscription.asset_name} · #{subscription.id}
+                              </strong>
+                              <span>
+                                {RM_STATUS_LABELS[subscription.status] ??
+                                  subscription.status.replaceAll("_", " ")}{" "}
+                                · {RM_STAGE_GUIDANCE[subscription.status]?.rm}
+                              </span>
+                            </div>
+                          ))}
+                          {notes.map((note) => (
+                            <div className="wf-client-task-item" key={`note-${note.id}`}>
+                              <strong>Private follow-up · {note.due || "No due date"}</strong>
+                              <span>{note.text}</span>
+                              <Action
+                                label="Complete private follow-up"
+                                command={{ type: "complete-note", id: note.id }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    );
+                  })}
+                  {!visibleClients.some(
+                    (client) =>
+                      d.subscriptions.some(
+                        (subscription) =>
+                          subscription.investor_id === client.id &&
+                          RM_ACTION_STATUSES.includes(subscription.status),
+                      ) || d.notes.some((note) => note.investorId === client.id && !note.done),
+                  ) && <p className="wf-empty">No open client actions or private follow-ups.</p>}
                 </div>
               )}
               <label className="wf-field wf-search">
