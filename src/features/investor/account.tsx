@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
+import { clientCode } from "@/lib/client-code";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -394,6 +395,12 @@ export default function AccountPage() {
                         AK-{new Date().getFullYear()}-{String(profile.id).padStart(4, "0")}
                       </dd>
                     </div>
+                    {user && (
+                      <div className="flex items-center justify-between">
+                        <dt className="text-sm text-muted-foreground">Client tag</dt>
+                        <dd className="font-mono text-sm font-medium">{clientCode(user.id)}</dd>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <dt className="text-sm text-muted-foreground">Verification status</dt>
                       <dd className="text-sm font-medium">
