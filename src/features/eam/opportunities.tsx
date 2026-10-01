@@ -20,14 +20,8 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import {
-  SearchIcon,
-  StarIcon,
-  ClockIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  FileTextIcon,
-} from "lucide-react";
+import { SearchIcon, StarIcon, ChevronDownIcon, ChevronUpIcon, FileTextIcon } from "lucide-react";
+import "@/features/investor/opportunities.css";
 
 function formatCountdown(dateString: string | null): string | null {
   if (!dateString) return null;
@@ -165,43 +159,70 @@ function DealRow({
   const pct = total && total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : null;
 
   return (
-    <div className="border-b last:border-0">
-      {/* Row header — always visible */}
+    <Card className="opportunity-card eam-opportunity-card flex h-full flex-col overflow-hidden rounded-sm pt-0 shadow-none">
       <button
-        className="flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-muted/50"
+        className="opportunity-card-art w-full text-left"
         onClick={onToggle}
+        aria-expanded={expanded}
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{fund.codename}</span>
-            <span className="text-xs text-muted-foreground">{fund.asset.name}</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <Badge variant="secondary" className="text-[10px]">
-            {SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}
-          </Badge>
-          <Badge variant="outline" className="text-[10px]">
-            {fund.deal_type === "primary" ? "Primary" : "Secondary"}
-          </Badge>
-          {countdown && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <ClockIcon className="size-3" />
-              {countdown}
-            </span>
-          )}
-          {pct !== null && <span className="text-xs text-muted-foreground">{pct}%</span>}
-          {expanded ? (
-            <ChevronUpIcon className="size-4 text-muted-foreground" />
-          ) : (
-            <ChevronDownIcon className="size-4 text-muted-foreground" />
-          )}
-        </div>
+        <span>{fund.asset.name.slice(0, 1)}</span>
+        <small>{SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}</small>
       </button>
+      <CardContent className="flex flex-1 flex-col gap-3 px-5 pt-4 pb-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">
+              {fund.codename} · {fund.fund_manager.name}
+            </p>
+            <h3 className="mt-1 truncate text-lg font-medium">{fund.asset.name}</h3>
+          </div>
+          <Badge
+            variant={fund.state === "open" ? "default" : "secondary"}
+            className="shrink-0 text-[10px]"
+          >
+            {fund.state === "open" ? "Open" : fund.state}
+          </Badge>
+        </div>
+        <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
+          {fund.hook || fund.descriptor}
+        </p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-y py-3 text-sm">
+          <span className="text-muted-foreground">Minimum</span>
+          <strong className="text-right">{formatPrice(fund.min_subscription)}</strong>
+          <span className="text-muted-foreground">Entry price</span>
+          <strong className="text-right">{formatPricePrecise(fund.price)}</strong>
+          <span className="text-muted-foreground">Closes</span>
+          <strong className="text-right">{countdown ?? "Open-ended"}</strong>
+          <span className="text-muted-foreground">Structure</span>
+          <strong className="text-right capitalize">{fund.deal_type}</strong>
+        </div>
+        {pct !== null && total && (
+          <div className="space-y-1">
+            <Progress value={pct} className="h-1.5" />
+            <div className="flex justify-between text-[11px] text-muted-foreground">
+              <span>{formatPrice(total - allocated)} available</span>
+              <span>{pct}% allocated</span>
+            </div>
+          </div>
+        )}
+        <Link to={`/eam/opportunities/${fund.id}`}>
+          <Button variant="outline" size="sm" className="w-full">
+            View full deal overview →
+          </Button>
+        </Link>
+        <Button variant="ghost" size="sm" onClick={onToggle}>
+          {expanded ? "Hide client actions" : "Highlight for a client"}
+          {expanded ? (
+            <ChevronUpIcon className="ml-2 size-4" />
+          ) : (
+            <ChevronDownIcon className="ml-2 size-4" />
+          )}
+        </Button>
+      </CardContent>
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="space-y-5 border-t bg-muted/30 px-4 py-5">
+        <CardContent className="eam-opportunity-expanded space-y-5 border-t bg-muted/30 px-4 py-5">
           {/* Overview */}
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -319,16 +340,16 @@ function DealRow({
               </div>
             </div>
           </div>
-        </div>
+        </CardContent>
       )}
-    </div>
+    </Card>
   );
 }
 
 export default function OpportunitiesPage() {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [autoExpanded, setAutoExpanded] = useState(false);
+  const [sectorFilter, setSectorFilter] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["eamOpportunities"],
@@ -337,26 +358,21 @@ export default function OpportunitiesPage() {
 
   const funds = data?.funds ?? [];
 
-  // Auto-expand first fund once data loads
-  if (funds.length > 0 && expandedId === null && !autoExpanded) {
-    setExpandedId(funds[0].id);
-    setAutoExpanded(true);
-  }
-
   const filtered = useMemo(() => {
-    if (!search.trim()) return funds;
     const q = search.toLowerCase();
     return funds.filter(
       (f) =>
-        f.codename.toLowerCase().includes(q) ||
-        f.asset.name.toLowerCase().includes(q) ||
-        f.fund_manager.name.toLowerCase().includes(q) ||
-        (SECTOR_LABELS[f.asset.sector] ?? f.asset.sector).toLowerCase().includes(q),
+        (!sectorFilter || f.asset.sector === sectorFilter) &&
+        (!q ||
+          f.codename.toLowerCase().includes(q) ||
+          f.asset.name.toLowerCase().includes(q) ||
+          f.fund_manager.name.toLowerCase().includes(q) ||
+          (SECTOR_LABELS[f.asset.sector] ?? f.asset.sector).toLowerCase().includes(q)),
     );
-  }, [funds, search]);
+  }, [funds, search, sectorFilter]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="opportunities-view flex flex-col gap-6">
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">Opportunities</h1>
@@ -379,6 +395,31 @@ export default function OpportunitiesPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant={sectorFilter === null ? "secondary" : "outline"}
+          size="sm"
+          className="rounded-full"
+          onClick={() => setSectorFilter(null)}
+        >
+          All sectors <span className="ml-1 text-muted-foreground">{funds.length}</span>
+        </Button>
+        {Array.from(new Set(funds.map((fund) => fund.asset.sector))).map((sector) => (
+          <Button
+            key={sector}
+            variant={sectorFilter === sector ? "secondary" : "outline"}
+            size="sm"
+            className="rounded-full"
+            onClick={() => setSectorFilter(sectorFilter === sector ? null : sector)}
+          >
+            {SECTOR_LABELS[sector] ?? sector}
+            <span className="ml-1 text-muted-foreground">
+              {funds.filter((fund) => fund.asset.sector === sector).length}
+            </span>
+          </Button>
+        ))}
+      </div>
+
       {isLoading && (
         <p className="py-12 text-center text-muted-foreground">Loading opportunities...</p>
       )}
@@ -396,7 +437,7 @@ export default function OpportunitiesPage() {
       )}
 
       {filtered.length > 0 && (
-        <div className="rounded-lg border">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((fund) => (
             <DealRow
               key={fund.id}
