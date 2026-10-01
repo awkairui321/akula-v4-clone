@@ -47,6 +47,7 @@ export type ServiceCase = {
   id: number;
   investorId: number;
   subscriptionId?: number;
+  holdingId?: number;
   subject: string;
   owner: StaffRole | "eam";
   status: "open" | "resolved";
@@ -113,6 +114,8 @@ export type WorkflowState = {
 export type WorkflowCommand = {
   type: string;
   id?: number;
+  holdingId?: number;
+  exposure?: string;
   target?: number;
   amount?: number;
   price?: number;
@@ -123,7 +126,13 @@ export type WorkflowCommand = {
 };
 export type WorkflowView = WorkflowState & {
   actor: { id: number; role: string; email: string };
-  clients: { id: number; name: string; type: "individual" | "entity"; eamFirm?: string | null }[];
+  clients: {
+    id: number;
+    code: string;
+    name: string;
+    type: "individual" | "entity";
+    eamFirm?: string | null;
+  }[];
   subscriptions: {
     id: number;
     investor_id: number;
