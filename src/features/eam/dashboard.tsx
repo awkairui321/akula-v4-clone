@@ -96,9 +96,17 @@ export default function EamDashboard() {
   ];
   const reviewStatuses = ["institution_review", "under_luca_review"];
   const progress = dashboard?.investment_progress ?? [];
-  const actionCount = progress.filter((item) => actionStatuses.includes(item.status)).length;
-  const reviewCount = progress.filter((item) => reviewStatuses.includes(item.status)).length;
-  const filteredProgress = progress.filter((item) => {
+  const actionCount = new Set(
+    progress
+      .filter((item) => actionStatuses.includes(item.status))
+      .map((item) => item.adviser_client_id),
+  ).size;
+  const reviewCount = new Set(
+    progress
+      .filter((item) => reviewStatuses.includes(item.status))
+      .map((item) => item.adviser_client_id),
+  ).size;
+  const stageProgress = progress.filter((item) => {
     const matchesStage =
       progressFilter === "all" ||
       (progressFilter === "action" && actionStatuses.includes(item.status)) ||
@@ -106,13 +114,22 @@ export default function EamDashboard() {
       (progressFilter === "other" &&
         !actionStatuses.includes(item.status) &&
         !reviewStatuses.includes(item.status));
-    return (
-      matchesStage &&
-      `${item.client_name} ${item.asset_name} ${item.id}`
-        .toLowerCase()
-        .includes(progressSearch.toLowerCase())
-    );
+    return matchesStage;
   });
+  const groupedProgress = Array.from(
+    stageProgress.reduce((groups, item) => {
+      const group = groups.get(item.adviser_client_id) ?? [];
+      group.push(item);
+      groups.set(item.adviser_client_id, group);
+      return groups;
+    }, new Map<number, typeof stageProgress>()),
+  )
+    .map(([clientId, items]) => ({ clientId, items, clientName: items[0].client_name }))
+    .filter(({ clientName, items }) =>
+      `${clientName} ${items.map((item) => `${item.asset_name} ${item.id}`).join(" ")}`
+        .toLowerCase()
+        .includes(progressSearch.toLowerCase()),
+    );
 
   return (
     <div className="flex flex-col gap-8">
@@ -303,46 +320,58 @@ export default function EamDashboard() {
                 }}
               />
             </div>
-            {filteredProgress.length === 0 ? (
+            {groupedProgress.length === 0 ? (
               <p className="rounded-lg border p-4 text-sm text-muted-foreground">
-                No investment records match these filters.
+                No clients with matching investment tasks.
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full min-w-[620px] text-left text-sm">
-                  <thead className="bg-muted/50 text-xs text-muted-foreground">
-                    <tr>
-                      <th className="p-3">Client</th>
-                      <th className="p-3">Opportunity</th>
-                      <th className="p-3">Requested</th>
-                      <th className="p-3">Current stage</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProgress.slice(page * 8, (page + 1) * 8).map((item) => (
-                      <tr key={item.id} className="border-t">
-                        <td className="p-3">
-                          <Link
-                            className="font-medium text-primary hover:underline"
-                            to={`/eam/clients/${item.adviser_client_id}?tab=activity`}
+              <div className="space-y-2">
+                {groupedProgress
+                  .slice(page * 8, (page + 1) * 8)
+                  .map(({ clientId, clientName, items }) => (
+                    <details key={clientId} className="rounded-lg border bg-card">
+                      <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
+                        <span className="font-medium">
+                          {clientName}
+                          <small className="ml-2 font-mono text-xs text-muted-foreground">
+                            {items.length} deal action{items.length === 1 ? "" : "s"}
+                          </small>
+                        </span>
+                        <Link
+                          className="text-sm text-primary hover:underline"
+                          to={`/eam/clients/${clientId}?tab=conversations`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          Message / remind client →
+                        </Link>
+                      </summary>
+                      <div className="space-y-2 border-t px-4 py-3">
+                        {items.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/30 px-3 py-2 text-sm"
                           >
-                            {item.client_name}
-                          </Link>
-                        </td>
-                        <td className="p-3">{item.asset_name}</td>
-                        <td className="p-3">{formatPrice(Number(item.amount))}</td>
-                        <td className="p-3 capitalize">{item.status.replaceAll("_", " ")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                            <span>
+                              <strong>{item.asset_name}</strong>
+                              <small className="ml-2 text-muted-foreground">
+                                #{item.id} · {formatPrice(Number(item.amount))}
+                              </small>
+                            </span>
+                            <span className="text-muted-foreground">
+                              {item.status.replaceAll("_", " ")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
               </div>
             )}
-            {filteredProgress.length > 8 && (
+            {groupedProgress.length > 8 && (
               <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
                 <span>
-                  {page * 8 + 1}–{Math.min((page + 1) * 8, filteredProgress.length)} of{" "}
-                  {filteredProgress.length}
+                  {page * 8 + 1}–{Math.min((page + 1) * 8, groupedProgress.length)} of{" "}
+                  {groupedProgress.length} clients
                 </span>
                 <Button
                   variant="outline"
@@ -355,7 +384,7 @@ export default function EamDashboard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={(page + 1) * 8 >= filteredProgress.length}
+                  disabled={(page + 1) * 8 >= groupedProgress.length}
                   onClick={() => setPage(page + 1)}
                 >
                   Next
