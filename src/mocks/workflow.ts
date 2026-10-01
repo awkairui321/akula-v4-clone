@@ -291,6 +291,7 @@ export function view(user: db.MockUser): WorkflowView {
         name: f.codename || f.name,
         state: f.state,
         company: f.asset.name,
+        sector: f.asset.sector,
         descriptor: f.descriptor,
         hook: f.hook,
         minimum: f.min_subscription,
