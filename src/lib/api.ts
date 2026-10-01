@@ -40,8 +40,13 @@ export async function api<T>(
 }
 
 /** Make a request as a seeded persona for the explicitly labeled local comparison demo. */
-export async function apiAsDemo<T>(userId: number, path: string, options: RequestOptions = {}): Promise<T> {
-  if (import.meta.env.VITE_API_URL) throw new Error("Persona comparison is available only in the simulated demo.");
+export async function apiAsDemo<T>(
+  userId: number,
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  if (import.meta.env.VITE_API_URL)
+    throw new Error("Persona comparison is available only in the simulated demo.");
   const { method = "GET", body } = options;
   const res = await fetch(`${API_BASE}${path}`, {
     method,
