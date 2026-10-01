@@ -43,7 +43,10 @@ export default function ClientsPage() {
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
-        (c) => c.client_name.toLowerCase().includes(q) || c.client_email.toLowerCase().includes(q),
+        (c) =>
+          c.client_name.toLowerCase().includes(q) ||
+          c.client_email.toLowerCase().includes(q) ||
+          c.client_code.toLowerCase().includes(q),
       );
     }
 
@@ -119,7 +122,12 @@ export default function ClientsPage() {
                     .toUpperCase()
                     .slice(0, 2)}
                 </div>
-                <span className="truncate font-medium">{client.client_name}</span>
+                <span className="truncate font-medium">
+                  {client.client_name}
+                  <small className="block font-mono text-xs text-muted-foreground">
+                    {client.client_code}
+                  </small>
+                </span>
               </span>
               <span>
                 <Badge variant={STAGE_VARIANT[client.stage]} className="text-[10px]">
