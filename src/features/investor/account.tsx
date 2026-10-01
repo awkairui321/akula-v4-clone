@@ -132,7 +132,6 @@ function TwoFactorSection() {
   const { user, refreshUser } = useAuth();
   const [step, setStep] = useState<"idle" | "setup" | "verify">("idle");
   const [secret, setSecret] = useState("");
-  const [provisioningUri, setProvisioningUri] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [disablePassword, setDisablePassword] = useState("");
   const [showDisable, setShowDisable] = useState(false);
@@ -150,7 +149,6 @@ function TwoFactorSection() {
         { method: "POST" },
       );
       setSecret(res.otp_secret);
-      setProvisioningUri(res.provisioning_uri);
       setStep("verify");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Setup failed");
@@ -172,7 +170,6 @@ function TwoFactorSection() {
       setStep("idle");
       setOtpCode("");
       setSecret("");
-      setProvisioningUri("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
@@ -278,17 +275,8 @@ function TwoFactorSection() {
           <form onSubmit={handleVerify} className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Scan this QR code with your authenticator app, or enter the secret key manually.
+                Add this account to your authenticator app using the setup key below. The setup secret stays in this demo and is not sent to a QR-code service.
               </p>
-              <div className="flex justify-center py-4">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(provisioningUri)}`}
-                  alt="2FA QR Code"
-                  className="rounded-lg border"
-                  width={200}
-                  height={200}
-                />
-              </div>
               <div className="rounded-lg bg-muted p-3">
                 <p className="mb-1 text-xs text-muted-foreground">Secret key</p>
                 <p className="font-mono text-sm break-all select-all">{secret}</p>
@@ -347,15 +335,14 @@ export default function AccountPage() {
   const profile = data?.investor_profile;
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
-      <h1 className="mb-6 text-3xl font-bold tracking-tight">Account</h1>
+    <div className="w-full max-w-5xl">
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
 
       {!isLoading && profile && (
-        <div className="space-y-4">
+        <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
           {/* Profile card */}
-          <Card>
+          <Card className="h-fit">
             <CardContent className="flex items-center gap-4 pt-6">
               <div className="flex size-12 items-center justify-center rounded-full bg-muted">
                 <UserIcon className="size-6 text-muted-foreground" />
@@ -381,14 +368,14 @@ export default function AccountPage() {
           </Card>
 
           {/* Application details */}
-          <Card>
+          <Card className="h-fit">
             <CardHeader>
               <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
                 Application
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="space-y-3">
+              <dl className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <dt className="text-sm text-muted-foreground">Reference</dt>
                   <dd className="font-mono text-sm font-medium">
@@ -416,6 +403,7 @@ export default function AccountPage() {
           </Card>
 
           {/* Consent & privacy */}
+          <section className="space-y-3 lg:col-span-2">
           <Separator className="my-2" />
           <h2 className="text-lg font-semibold">Consent & privacy</h2>
           <p className="-mt-2 text-sm text-muted-foreground">
@@ -423,13 +411,18 @@ export default function AccountPage() {
             what we can share with you or your adviser.
           </p>
           <ConsentList mode="management" />
+          </section>
 
           {/* Security section */}
+          <section className="space-y-3 lg:col-span-2">
           <Separator className="my-2" />
           <h2 className="text-lg font-semibold">Security</h2>
 
-          <ChangePasswordSection />
-          <TwoFactorSection />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ChangePasswordSection />
+            <TwoFactorSection />
+          </div>
+          </section>
         </div>
       )}
     </div>
