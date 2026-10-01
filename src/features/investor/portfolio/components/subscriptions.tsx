@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { StepTracker, type StepState } from "@/components/ui/step-tracker";
-import { formatPrice, formatPricePrecise } from "@/lib/currency";
+import { formatPrice, formatPricePrecise, numericValue } from "@/lib/currency";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -141,139 +141,14 @@ function LineChart({ points }: { points: SeriesPoint[] }) {
 function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
   const [range, setRange] = useState<Range>("All");
 
-  const invested = heldPositions.reduce((sum, h) => sum + Number(h.committed_amount), 0);
-  const navTotal = heldPositions.reduce((sum, h) => sum + Number(h.current_nav), 0);
+  const invested = heldPositions.reduce((sum, h) => sum + numericValue(h.committed_amount), 0);
+  const navTotal = heldPositions.reduce((sum, h) => sum + numericValue(h.current_nav), 0);
   const gain = navTotal - invested;
   const gainPct = invested ? (gain / invested) * 100 : 0;
   const shown: SeriesPoint[] = [{ period: "Latest reported", value: navTotal, invested }].slice(
     -RANGE_POINT_COUNT[range],
   );
-  const TrendIcon = gain >= 0 ? TrendingUpIcon : TrendingDownIcon;
-
-  if (heldPositions.length === 0) return null;
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex flex-col gap-8 lg:flex-row">
-          {/* Left: figures */}
-          <div className="flex shrink-0 flex-col gap-6 lg:w-56">
-            <div>
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                Estimated Portfolio Value
-                <InfoIcon className="size-3" />
-              </span>
-              <p className="mt-1 text-3xl font-bold tabular-nums">{formatPrice(navTotal)}</p>
-              <p
-                className={`mt-1 flex items-center gap-1 text-sm font-medium ${gain >= 0 ? "text-green-600" : "text-red-600"}`}
-              >
-                <TrendIcon className="size-4" />
-                {gain >= 0 ? "+" : ""}
-                {formatPrice(gain)} ({gainPct >= 0 ? "+" : ""}
-                {gainPct.toFixed(1)}%)
-              </p>
-            </div>
-            <div className="flex flex-col gap-4 border-t pt-4">
-              <div>
-                <span className="text-xs text-muted-foreground">Total Invested Capital</span>
-                <p className="mt-1 text-lg font-semibold tabular-nums">{formatPrice(invested)}</p>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground">Active Investments</span>
-                <p className="mt-1 text-lg font-semibold tabular-nums">{heldPositions.length}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: chart */}
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium">Reported holdings snapshot</span>
-              <div className="flex gap-1">
-                {RANGES.map((r) => (
-                  <button
-                    key={r}
-                    disabled={r !== "All"}
-                    onClick={() => setRange(r)}
-                    className={`rounded px-2 py-1 text-xs ${
-                      range === r
-                        ? "bg-primary/10 font-medium text-primary"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <LineChart points={shown} />
-            <p className="text-xs text-muted-foreground">
-              Latest available reports, potentially with different as-of dates. Full portfolio
-              history is not available; no historical performance is inferred. Pending
-              subscriptions, returned cash and realized holdings are excluded.
-            </p>
-
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-primary" /> Estimated Portfolio Value
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-px w-3 border-t-2 border-dashed border-muted-foreground/50" />
-                Invested Capital
-              </span>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ─── Holdings breakdown: % of portfolio + by sector ─── */
-
-function HoldingsBreakdown({ holdings }: { holdings: Holding[] }) {
-  const held = holdings.filter((h) => h.state !== "realized");
-  const total = held.reduce((s, h) => s + parseFloat(h.current_nav), 0);
-
-  const byCompany = useMemo(
-    () =>
-      held
-        .map((h) => ({
-          name: h.asset_name,
-          value: parseFloat(h.current_nav),
-          pct: total > 0 ? (parseFloat(h.current_nav) / total) * 100 : 0,
-        }))
-        .sort((a, b) => b.value - a.value),
-    [held, total],
-  );
-
-  const bySector = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const h of held) {
-      map.set(h.sector, (map.get(h.sector) ?? 0) + parseFloat(h.current_nav));
-    }
-    return [...map.entries()]
-      .map(([sector, value]) => ({
-        sector,
-        label: SECTOR_LABELS[sector] ?? sector,
-        value,
-        pct: total > 0 ? (value / total) * 100 : 0,
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [held, total]);
-
-  if (held.length === 0) return null;
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <CardContent className="pt-6">
-          <p className="mb-4 text-sm font-medium">Holdings by % of portfolio</p>
-          <div className="space-y-3">
-            {byCompany.map((c) => (
-              <div key={`${c.name}-${c.value}`} className="flex items-center gap-3">
-                <span className="w-32 shrink-0 truncate text-xs">{c.name}</span>
+  const TrendIcon = gain >= 0 ? TrendingUpIcon : Tren…1262 tokens truncated…t-xs">{c.name}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${c.pct}%` }} />
                 </div>
@@ -412,10 +287,10 @@ function LatestUpdates({ activeSubs }: { activeSubs: Subscription[] }) {
 function HoldingCard({ holding }: { holding: Holding }) {
   const [expanded, setExpanded] = useState(false);
   const realized = holding.state === "realized";
-  const committed = parseFloat(holding.committed_amount);
-  const nav = parseFloat(holding.current_nav);
+  const committed = numericValue(holding.committed_amount);
+  const nav = numericValue(holding.current_nav);
   const gain =
-    (realized && holding.final_proceeds ? parseFloat(holding.final_proceeds) : nav) - committed;
+    (realized && holding.final_proceeds ? numericValue(holding.final_proceeds) : nav) - committed;
   const gainPct = committed > 0 ? (gain / committed) * 100 : 0;
 
   const subscribed = holding.subscribed_at
@@ -506,7 +381,7 @@ function HoldingCard({ holding }: { holding: Holding }) {
               <div>
                 <p className="text-muted-foreground">Entry price / share</p>
                 <p className="font-medium">
-                  ${parseFloat(holding.entry_price_per_share).toFixed(2)}
+                  ${numericValue(holding.entry_price_per_share).toFixed(2)}
                 </p>
               </div>
               <div>
