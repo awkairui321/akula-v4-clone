@@ -299,17 +299,26 @@ function OverviewSection({ asset }: { asset: Asset }) {
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
 function LeadershipSection({ asset }: { asset: Asset }) {
   if (asset.team.length === 0) return null;
-  return <div className="leadership-grid">
-    <h3>Who leads the company</h3>
-    <ul>{asset.team.map((person) => <li key={person.name}><strong>{person.name}</strong><span>{person.role}</span>{person.note && <p>{person.note}</p>}</li>)}</ul>
-  </div>;
+  return (
+    <div className="leadership-grid">
+      <h3>Who leads the company</h3>
+      <ul>
+        {asset.team.map((person) => (
+          <li key={person.name}>
+            <strong>{person.name}</strong>
+            <span>{person.role}</span>
+            {person.note && <p>{person.note}</p>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 /* ─── Market section ─── */
@@ -517,26 +526,37 @@ function RoundsChart({ rounds }: { rounds: Asset["funding_rounds"] }) {
 function FinancialsSection({ fund }: { fund: Fund }) {
   const { asset } = fund;
   return (
-    <div className="space-y-8">
+    <div className="space-y-3">
       {fund.revenue_points.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">Revenue</h3>
-          <RevenueBars points={fund.revenue_points} />
+        <div className="grid gap-4 bg-muted/50 p-4 md:grid-cols-[minmax(0,1fr)_240px]">
+          <div className="min-w-0 space-y-2">
+            <h3 className="text-sm font-semibold">Revenue run-rate</h3>
+            <p className="text-xs text-muted-foreground">Reported company updates · USD billions</p>
+            <RevenueBars points={fund.revenue_points} />
+          </div>
+          <div className="flex flex-col justify-center bg-card p-4 text-sm">
+            <strong>Reported growth</strong>
+            <p className="mt-2 text-muted-foreground">
+              Compare the published operating periods. These are company measures, not fund returns.
+            </p>
+          </div>
         </div>
       )}
 
       {asset.funding_rounds.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">Financing and valuation history</h3>
-          <p className="text-xs text-muted-foreground">Select a round to see its details.</p>
+        <div className="space-y-2 bg-muted/50 p-4">
+          <h3 className="text-sm font-semibold">Financing and valuation</h3>
+          <p className="text-xs text-muted-foreground">
+            Selected financing rounds · select a round to see its details.
+          </p>
           <RoundsChart rounds={asset.funding_rounds} />
         </div>
       )}
 
       {asset.financial_indicators.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           {asset.financial_indicators.map((ind) => (
-            <div key={ind.label} className="rounded-lg border bg-card p-3">
+            <div key={ind.label} className="border bg-card p-3">
               <strong
                 className={ind.word ? "block text-lg font-semibold" : "block text-xl font-bold"}
               >
@@ -885,14 +905,23 @@ export default function DealOverviewPage({
   });
 
   return (
-    <div ref={topRef} className="deal-reading-page pompom-deal mx-auto w-full max-w-6xl min-w-0 space-y-8">
+    <div
+      ref={topRef}
+      className="deal-reading-page pompom-deal mx-auto w-full max-w-6xl min-w-0 space-y-8"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {preview ? <Badge variant="outline">{viewer === "eam" ? "EAM" : "Investor"} preview · read only</Badge> : <Link to={backTo}>
-          <Button variant="ghost" size="sm" className="p-0">
-            <ArrowLeftIcon className="mr-1 size-4" />
-            {backLabel}
-          </Button>
-        </Link>}
+        {preview ? (
+          <Badge variant="outline">
+            {viewer === "eam" ? "EAM" : "Investor"} preview · read only
+          </Badge>
+        ) : (
+          <Link to={backTo}>
+            <Button variant="ghost" size="sm" className="p-0">
+              <ArrowLeftIcon className="mr-1 size-4" />
+              {backLabel}
+            </Button>
+          </Link>
+        )}
         {viewer === "investor" && !preview ? (
           <Button
             variant={isWatchlisted ? "secondary" : "outline"}
@@ -934,7 +963,16 @@ export default function DealOverviewPage({
                 {viewer === "investor" && !preview ? (
                   <SubscribeCalculator fund={fund} />
                 ) : preview ? (
-                  <div className="rounded-lg border bg-muted/30 p-4 text-sm"><p className="font-medium">{viewer === "eam" ? "Adviser-facing opportunity" : "Investor opportunity access"}</p><p className="mt-1 text-xs text-muted-foreground">Read-only preview. No allocation, watchlist or subscription is created.</p></div>
+                  <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                    <p className="font-medium">
+                      {viewer === "eam"
+                        ? "Adviser-facing opportunity"
+                        : "Investor opportunity access"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Read-only preview. No allocation, watchlist or subscription is created.
+                    </p>
+                  </div>
                 ) : (
                   <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
                     Investors see a subscribe calculator here. LUCA sees deal terms only.
@@ -985,11 +1023,19 @@ export default function DealOverviewPage({
             </SectionShell>
           )}
 
-          <SectionShell id="recording" title="Recorded overview" standfirst="Optional viewing. The written overview stands on its own.">
+          <SectionShell
+            id="recording"
+            title="Recorded overview"
+            standfirst="Optional viewing. The written overview stands on its own."
+          >
             <RecordingSection fund={fund} />
           </SectionShell>
 
-          <SectionShell id="documents" title="Documents and updates" standfirst="The source material behind this overview and the deal's published materials.">
+          <SectionShell
+            id="documents"
+            title="Documents and updates"
+            standfirst="The source material behind this overview and the deal's published materials."
+          >
             <DocumentsSection fund={fund} viewer={viewer} />
           </SectionShell>
         </div>
