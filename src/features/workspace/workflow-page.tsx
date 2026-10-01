@@ -117,6 +117,130 @@ function Action({
     </form>
   );
 }
+function DemandAnalytics({
+  d,
+  ops,
+  manager,
+}: {
+  d: WorkflowView;
+  ops: boolean;
+  manager: boolean;
+}) {
+  const companies = Array.from(new Set(d.requests.map((request) => request.key)))
+    .map((key) => {
+      const rows = d.requests.filter((request) => request.key === key);
+      const totals = rows.reduce<Record<string, number>>((result, row) => {
+        if (row.amount !== undefined) result[row.currency] = (result[row.currency] || 0) + row.amount;
+        return result;
+      }, {});
+      return {
+        key,
+        rows,
+        total: rows.length,
+        investors: new Set(rows.map((row) => row.investorId)).size,
+        totals,
+      };
+    })
+    .sort((a, b) => b.total - a.total || a.key.localeCompare(b.key));
+  const uniqueInvestors = new Set(d.requests.map((request) => request.investorId)).size;
+  const usdIndications = d.requests.filter(
+    (request) => request.amount !== undefined && request.currency === "USD",
+  );
+  const usdTotal = usdIndications.reduce((sum, request) => sum + (request.amount || 0), 0);
+  return (
+    <>
+      {ops && (
+        <div className="wf-demand-handoff">
+          <strong>Ops → LUCA supply pipeline</strong>
+          <span>
+            Share a company signal when investor interest may justify sourcing an offering. LUCA
+            then records the sourcing decision here.
+          </span>
+        </div>
+      )}
+      <div className="wf-demand-stats">
+        <div><span>Companies requested</span><strong>{companies.length}</strong></div>
+        <div><span>Total indications</span><strong>{d.requests.length}</strong></div>
+        <div><span>Distinct investors</span><strong>{uniqueInvestors}</strong></div>
+        <div>
+          <span>Indicative USD interest</span>
+          <strong>{money(usdTotal)}</strong>
+          <small>{usdIndications.length} stated amounts</small>
+        </div>
+      </div>
+      <div className="wf-demand-company-list">
+        {companies.map(({ key, rows, total, investors, totals }) => {
+          const request = rows[0];
+          const statuses = Array.from(new Set(rows.map((row) => row.status)));
+          const amountSummary = Object.entries(totals)
+            .map(([currency, amount]) => money(amount, currency))
+            .join(" · ");
+          return (
+            <details className="wf-demand-company" key={key}>
+              <summary>
+                <span className="wf-demand-company-name">
+                  <strong>{request.company}</strong>
+                  <small>{total} indications · {investors} investors</small>
+                </span>
+                <span className="wf-demand-company-total">
+                  <strong>{amountSummary || "Amount not stated"}</strong>
+                  <small>{statuses.join(" · ")}</small>
+                </span>
+              </summary>
+              <div className="wf-demand-company-body">
+                {ops && statuses.length === 1 && statuses[0] !== "Shared with LUCA" && (
+                  <div className="wf-demand-share">
+                    <span>Ready for LUCA to assess sourcing capacity?</span>
+                    <Action
+                      label="Share sourcing brief with LUCA"
+                      command={{ type: "request-status", id: request.id, status: "Shared with LUCA" }}
+                    />
+                  </div>
+                )}
+                {manager && (
+                  <p className="wf-demand-luca-note">
+                    {statuses.includes("Shared with LUCA")
+                      ? "Ops has shared this signal. Record whether LUCA will review, source, or pass."
+                      : "No Ops sourcing brief has been shared for this company yet."}
+                  </p>
+                )}
+                <div className="wf-demand-indications">
+                  {rows.map((row) => {
+                    const client = d.clients.find((item) => item.id === row.investorId);
+                    return (
+                      <div className="wf-demand-indication" key={row.id}>
+                        <span>{client?.name || `Investor #${row.investorId}`} <small>{client?.code}</small></span>
+                        <strong>{row.amount === undefined ? "Amount not stated" : money(row.amount, row.currency)}</strong>
+                        <small>{row.status}</small>
+                      </div>
+                    );
+                  })}
+                </div>
+                {manager && (
+                  <Action
+                    label="Record LUCA sourcing decision"
+                    command={{ type: "request-status", id: request.id }}
+                  >
+                    <Choice
+                      name="status"
+                      label="Decision for all indications"
+                      items={["Under review", "Not currently available", "Opportunity available"].map((name) => ({ id: name, name }))}
+                    />
+                    <Choice
+                      name="target"
+                      label="Published offering (when available)"
+                      items={[{ id: "", name: "Select an offering" }, ...d.funds.filter((fund) => fund.state === "open")]}
+                    />
+                  </Action>
+                )}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    </>
+  );
+}
 function Field({
   label,
   name,
@@ -2078,11 +2202,12 @@ export default function WorkflowPage() {
         {(tab === "Demand" || tab === "Company requests") && (
           <>
             <Panel
-              title={privileged ? "Company demand · unique investors" : "Request another company"}
+              title={privileged ? "Investor demand signals" : "Request another company"}
             >
               <p>
-                Indications are nonbinding and do not reserve allocation. Different currencies
-                remain separate.
+                {privileged
+                  ? "Illustrative, nonbinding investor interest helps LUCA decide which companies to source. It is a demand signal, not an order book or allocation."
+                  : "Indications are nonbinding and do not reserve allocation. Different currencies remain separate."}
               </p>
               {!staff && (
                 <Action label="Submit company request" command={{ type: "request" }}>
@@ -2096,7 +2221,8 @@ export default function WorkflowPage() {
                   <Field name="currency" label="Currency" value="USD" />
                 </Action>
               )}
-              {Array.from(new Set(d.requests.map((r) => r.key))).map((key) => {
+              {privileged && <DemandAnalytics d={d} ops={ops} manager={manager} />}
+              {!privileged && Array.from(new Set(d.requests.map((r) => r.key))).map((key) => {
                 const rows = d.requests.filter((r) => r.key === key),
                   r = rows[0];
                 return (

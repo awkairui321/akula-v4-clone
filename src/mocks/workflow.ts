@@ -116,7 +116,10 @@ export function requestWithdrawal(sub: db.MockSubscription) {
   ensureReturns(sub);
 }
 export function seedWorkflow() {
-  if (workflow.versions.length) return;
+  if (workflow.versions.length) {
+    ensureIllustrativeDemand();
+    return;
+  }
   for (const fund of db.funds)
     workflow.versions.push({
       id: id(),
@@ -204,6 +207,34 @@ export function seedWorkflow() {
       at: now(),
     });
   }
+  ensureIllustrativeDemand();
+}
+function ensureIllustrativeDemand() {
+  // Add sourcing examples to fresh installs and saved browser demos without clearing user data.
+  const clients = db.adminInvestors();
+  const samples = [
+    { company: "Polaris", count: 15, base: 125_000, step: 17_500 },
+    { company: "Aether Materials", count: 9, base: 80_000, step: 12_500 },
+    { company: "Meridian Compute", count: 6, base: 150_000, step: 22_500 },
+  ];
+  for (const [sampleIndex, sample] of samples.entries()) {
+    const key = sample.company.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const existing = workflow.requests.filter((request) => request.key === key);
+    for (let index = existing.length; index < sample.count; index++) {
+      const client = clients[(index + sampleIndex * 3) % clients.length];
+      if (!client) continue;
+      workflow.requests.push({
+        id: id(),
+        investorId: client.id,
+        company: sample.company,
+        key,
+        currency: "USD",
+        amount: sample.base + index * sample.step,
+        status: "Received",
+        at: now(),
+      });
+    }
+  }
 }
 export let storageWarning: string | null = null;
 let restoreFailed = false;
@@ -218,10 +249,17 @@ export function persist() {
   }
 }
 export function restore() {
-  if (typeof localStorage === "undefined") return;
+  if (typeof localStorage === "undefined") {
+    ensureIllustrativeDemand();
+    return;
+  }
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return;
+    if (!raw) {
+      ensureIllustrativeDemand();
+      persist();
+      return;
+    }
     const saved = JSON.parse(raw);
     requireValue(
       saved.schema === 1 && saved.workflow?.schema === 1 && Array.isArray(saved.workflow.versions),
@@ -229,6 +267,8 @@ export function restore() {
     );
     db.restoreDemoState(saved.db);
     Object.assign(workflow, saved.workflow);
+    ensureIllustrativeDemand();
+    persist();
   } catch {
     restoreFailed = true;
     storageWarning =
@@ -726,6 +766,15 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       for (const x of workflow.requests.filter((x) => x.key === r.key)) {
         x.status = c.status!;
         x.fundId = c.status === "Opportunity available" ? c.target : undefined;
+      }
+      if (c.status === "Shared with LUCA" && user.role === "ops") {
+        const indications = workflow.requests.filter((x) => x.key === r.key).length;
+        workflow.events.push({
+          id: id(),
+          actorId: user.id,
+          label: `Sourcing signal shared with LUCA: ${r.company} · ${indications} investor indications`,
+          at: now(),
+        });
       }
       break;
     }
