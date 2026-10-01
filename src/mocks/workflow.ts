@@ -183,6 +183,27 @@ export function seedWorkflow() {
       });
   }
   workflow.assignments = db.adminInvestors().map((i) => ({ investorId: i.id, staffId: 6 }));
+  const sampleDemand = [
+    [2, "Aster Compute", 75000],
+    [11, "Aster Compute", 125000],
+    [14, "Aster Compute", 90000],
+    [18, "Northstar Energy", 150000],
+    [19, "Northstar Energy", 250000],
+    [12, "Cedar Health", 50000],
+    [13, "Cedar Health", 80000],
+  ] as const;
+  for (const [investorId, company, amount] of sampleDemand) {
+    workflow.requests.push({
+      id: id(),
+      investorId,
+      company,
+      key: company.toLowerCase(),
+      currency: "USD",
+      amount,
+      status: "Under review",
+      at: now(),
+    });
+  }
 }
 export let storageWarning: string | null = null;
 let restoreFailed = false;
