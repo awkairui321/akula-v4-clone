@@ -1,5 +1,5 @@
-import { useState, type ReactNode, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, type ReactNode, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
@@ -7,10 +7,35 @@ import type { WorkflowView, WorkflowCommand, Version } from "@/lib/workflow-type
 import { Button } from "@/components/ui/button";
 import DemoResetButton from "@/components/demo-reset-button";
 import { Input } from "@/components/ui/input";
+import {
+  PanelLeft,
+  Circle,
+  LayoutDashboard,
+  TrendingUp,
+  FileTextIcon,
+  HeadsetIcon,
+  UsersIcon,
+  ChartNoAxesColumnIncreasing,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import "./workflow.css";
 
 const money = (v: number | string, currency = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency }).format(Number(v));
+const RM_TAB_ICONS: Record<string, typeof Circle> = {
+  Overview: LayoutDashboard,
+  Opportunities: TrendingUp,
+  Documents: FileTextIcon,
+  Support: HeadsetIcon,
+  Relationships: UsersIcon,
+  "Client reports": ChartNoAxesColumnIncreasing,
+};
 const date = (v: string) =>
   new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 function useWorkspace() {
@@ -698,12 +723,22 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
 export default function WorkflowPage() {
   const q = useWorkspace(),
     { logout } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState("Overview");
   const [sid, setSid] = useState("");
   const [preview, setPreview] = useState<number | null>(null);
   const [documentSearch, setDocumentSearch] = useState("");
   const [documentFund, setDocumentFund] = useState("all");
   const [relationshipSearch, setRelationshipSearch] = useState("");
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const screen = window.matchMedia("(max-width: 767px)");
+    const collapse = () => {
+      if (screen.matches) setCollapsed(true);
+    };
+    screen.addEventListener("change", collapse);
+    return () => screen.removeEventListener("change", collapse);
+  }, []);
   const d = q.data;
   if (!d)
     return (
@@ -752,43 +787,120 @@ export default function WorkflowPage() {
   ];
   const home = manager ? "/luca" : d.actor.role === "eam" ? "/eam" : "/portfolio";
   return (
-    <div className="wf-shell">
-      <aside className="wf-sidebar">
-        <Link to={staff && !manager ? "/workflows" : home} className="wf-brand">
-          akula<span> / LUCA Beta</span>
-        </Link>
-        <p>
-          {manager
-            ? "LUCA fund manager"
-            : ops
-              ? "Akula Operations"
-              : rm
-                ? "LUCA relationship manager"
-                : "Investor & institution services"}
-        </p>
-        <nav aria-label="Workflow navigation">
-          {tabs.map((t) => (
-            <button key={t} onClick={() => setTab(t)} aria-current={tab === t ? "page" : undefined}>
-              {t}
-            </button>
-          ))}
-        </nav>
-        {(!staff || manager) && <Link to={home}>← Existing portal</Link>}
-        <button onClick={logout}>Sign out</button>
+    <div className={`wf-shell ${rm ? "rm-shell" : ""}`}>
+      <aside
+        className={`wf-sidebar ${rm ? `rm-sidebar ${collapsed ? "rm-sidebar-collapsed" : ""}` : ""}`}
+      >
+        {rm ? (
+          <>
+            <Link to="/workflows" className={`rm-brand ${collapsed ? "justify-center" : ""}`}>
+              <Circle className="size-5 shrink-0" />
+              {!collapsed && <span>LUCA · RELATIONSHIP MANAGER</span>}
+            </Link>
+            <nav aria-label="RM workspace navigation">
+              {tabs.map((t) => {
+                const TabIcon = RM_TAB_ICONS[t] ?? Circle;
+                return (
+                  <Button
+                    key={t}
+                    variant={tab === t ? "secondary" : "ghost"}
+                    size="lg"
+                    title={collapsed ? t : undefined}
+                    aria-label={t}
+                    aria-current={tab === t ? "page" : undefined}
+                    className={`rm-nav-item w-full ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
+                    onClick={() => setTab(t)}
+                  >
+                    <TabIcon className="size-4 shrink-0" />
+                    {!collapsed && t}
+                  </Button>
+                );
+              })}
+            </nav>
+            <div className="rm-sidebar-foot">
+              {collapsed ? "RM" : "LUCA Beta · Simulated workspace"}
+            </div>
+          </>
+        ) : (
+          <>
+            <Link to={staff && !manager ? "/workflows" : home} className="wf-brand">
+              akula<span> / LUCA Beta</span>
+            </Link>
+            <p>
+              {manager
+                ? "LUCA fund manager"
+                : ops
+                  ? "Akula Operations"
+                  : "Investor & institution services"}
+            </p>
+            <nav aria-label="Workflow navigation">
+              {tabs.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  aria-current={tab === t ? "page" : undefined}
+                >
+                  {t}
+                </button>
+              ))}
+            </nav>
+            {(!staff || manager) && <Link to={home}>← Existing portal</Link>}
+            <button onClick={logout}>Sign out</button>
+          </>
+        )}
       </aside>
-      <main className="wf-main">
-        <header>
-          <div>
-            <p className="wf-eyebrow">CONNECTED RECORDS</p>
-            <h1>{tab}</h1>
-          </div>
-          <div className="wf-header-tools">
-            <Link to="/live-demo">View roles live →</Link>
-            <DemoResetButton compact />
-            <span>{d.actor.email}</span>
-          </div>
-        </header>
-        <div className="wf-banner">
+      <main className={`wf-main ${rm ? "rm-main" : ""}`}>
+        {rm ? (
+          <header className="rm-header">
+            <div className="rm-header-title">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCollapsed((value) => !value)}
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                <PanelLeft />
+              </Button>
+              <span>{tab}</span>
+            </div>
+            <div className="rm-header-tools">
+              <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
+                Compare roles live
+              </Button>
+              <DemoResetButton compact />
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" className="border-border">
+                      {d.actor.email[0]?.toUpperCase() ?? "R"}
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => setTab("Overview")}>
+                      RM workspace
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </header>
+        ) : (
+          <header>
+            <div>
+              <p className="wf-eyebrow">CONNECTED RECORDS</p>
+              <h1>{tab}</h1>
+            </div>
+            <div className="wf-header-tools">
+              <Link to="/live-demo">View roles live →</Link>
+              <DemoResetButton compact />
+              <span>{d.actor.email}</span>
+            </div>
+          </header>
+        )}
+        <div className={`wf-banner ${rm ? "rm-banner" : ""}`}>
           SIMULATION · Fictional processing · Browser-local records · No real money or signatures
         </div>
         {d.storageWarning && (
@@ -1452,10 +1564,12 @@ export default function WorkflowPage() {
             )}
           </>
         )}
-        <footer>
-          LUCA owns investment decisions. Akula Ops records processing. External institutions and
-          LUCA employees have separate scopes.
-        </footer>
+        {!rm && (
+          <footer>
+            LUCA owns investment decisions. Akula Ops records processing. External institutions and
+            LUCA employees have separate scopes.
+          </footer>
+        )}
       </main>
     </div>
   );
