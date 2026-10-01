@@ -28,7 +28,8 @@ export default function RevenuePage() {
           </p>
           <h1 className="text-3xl font-bold tracking-tight">Revenue share</h1>
           <p className="text-muted-foreground">
-            Read-only transaction attribution and settlement reconciliation for your referred book.
+            Illustrative attribution for your firm’s allocated client investments. Settlement
+            statuses are simulated.
           </p>
         </div>
         <Button variant="outline" disabled>
@@ -46,36 +47,36 @@ export default function RevenuePage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Accrued
+                  Simulated accrued
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatPrice(data.accrued)}</div>
                 <p className="text-xs text-muted-foreground">
-                  Allocated transactions awaiting settlement
+                  Calculated on the client subscription fee
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Paid
+                  Simulated paid
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatPrice(data.paid)}</div>
-                <p className="text-xs text-muted-foreground">Settlement records</p>
+                <p className="text-xs text-muted-foreground">Demo status, not a payment record</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Participation volume
+                  Pending share
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatPrice(data.participation_volume)}</div>
-                <p className="text-xs text-muted-foreground">Holdings plus active subscriptions</p>
+                <div className="text-2xl font-bold">{formatPrice(data.pending)}</div>
+                <p className="text-xs text-muted-foreground">Demo status awaiting confirmation</p>
               </CardContent>
             </Card>
             <Card>
@@ -88,7 +89,9 @@ export default function RevenuePage() {
                 <div className="text-2xl font-bold">
                   {data.revenue_share_pct != null ? `${data.revenue_share_pct}%` : "—"}
                 </div>
-                <p className="text-xs text-muted-foreground">Applied only after allocation</p>
+                <p className="text-xs text-muted-foreground">
+                  Share of the client fee after allocation
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -97,7 +100,7 @@ export default function RevenuePage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">Reconciled share by period</CardTitle>
+                <CardTitle className="text-base">Illustrative share by period</CardTitle>
                 <span className="text-xs text-muted-foreground">USD</span>
               </CardHeader>
               <CardContent>
@@ -136,10 +139,15 @@ export default function RevenuePage() {
                     <span className="text-sm">EAM revenue share</span>
                     <span className="text-sm font-medium">
                       {data.revenue_share_pct != null
-                        ? `${data.revenue_share_pct}% of subscription`
+                        ? `${data.revenue_share_pct}% of client fee`
                         : "—"}
                     </span>
                   </div>
+                  <p className="border-t pt-3 text-xs text-muted-foreground">
+                    Example: allocated capital × client subscription fee × EAM revenue share. On
+                    $100,000 at 4% and 30%, the EAM share is $1,200. Figures and statuses are
+                    simulated.
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -163,49 +171,53 @@ export default function RevenuePage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="rounded-lg border">
-                <div className="grid grid-cols-5 gap-4 border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                  <span>Opportunity</span>
-                  <span>Allocated volume</span>
-                  <span>Your share</span>
-                  <span>Expected settlement</span>
-                  <span className="text-right">Status</span>
-                </div>
-                {data.transactions.map((t) => (
-                  <div
-                    key={t.id}
-                    className="grid grid-cols-5 gap-4 border-b px-4 py-3 text-sm last:border-0"
-                  >
-                    <span>
-                      <p className="font-medium">{t.project_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {t.client_name}
-                        {t.reference ? ` · ${t.reference}` : ""}
-                      </p>
-                    </span>
-                    <span className="font-medium">{formatPrice(t.allocated_volume)}</span>
-                    <span className="font-medium">
-                      {formatPrice(t.share_amount)} · {t.share_pct}%
-                    </span>
-                    <span className="text-muted-foreground">
-                      {t.settlement_date
-                        ? new Date(t.settlement_date).toLocaleDateString("en-GB", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "—"}
-                    </span>
-                    <span className="text-right">
-                      <Badge
-                        variant={STATUS_VARIANT[t.status] ?? "outline"}
-                        className="text-[10px]"
-                      >
-                        {t.status.charAt(0).toUpperCase() + t.status.slice(1)}
-                      </Badge>
-                    </span>
+              <div className="overflow-x-auto rounded-lg border">
+                <div className="min-w-[750px]">
+                  <div className="grid grid-cols-6 gap-4 border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                    <span>Opportunity / client</span>
+                    <span>Allocated volume</span>
+                    <span>Client fee base</span>
+                    <span>EAM share</span>
+                    <span>Allocation date</span>
+                    <span className="text-right">Demo status</span>
                   </div>
-                ))}
+                  {data.transactions.map((t) => (
+                    <div
+                      key={t.id}
+                      className="grid grid-cols-6 gap-4 border-b px-4 py-3 text-sm last:border-0"
+                    >
+                      <span>
+                        <p className="font-medium">{t.project_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.client_name}
+                          {t.reference ? ` · ${t.reference}` : ""}
+                        </p>
+                      </span>
+                      <span className="font-medium">{formatPrice(t.allocated_volume)}</span>
+                      <span>{formatPrice(t.fee_base_amount)}</span>
+                      <span className="font-medium">
+                        {formatPrice(t.share_amount)} · {t.share_pct}%
+                      </span>
+                      <span className="text-muted-foreground">
+                        {t.settlement_date
+                          ? new Date(t.settlement_date).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "—"}
+                      </span>
+                      <span className="text-right">
+                        <Badge
+                          variant={STATUS_VARIANT[t.status] ?? "outline"}
+                          className="text-[10px]"
+                        >
+                          {t.status.charAt(0).toUpperCase() + t.status.slice(1)}
+                        </Badge>
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </section>
