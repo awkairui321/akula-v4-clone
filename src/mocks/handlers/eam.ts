@@ -25,7 +25,7 @@ function unauthorized() {
 
 function stripClient(client: MockAdviserClient) {
   const { eam_user_id: _eam_user_id, investor_id: _investor_id, ...rest } = client;
-  return rest;
+  return { ...rest, investor_user_id: _investor_id };
 }
 
 function myClients(eamUserId: number): MockAdviserClient[] {
@@ -72,7 +72,7 @@ function clientSubscriptions(investorId: number) {
 
 function clientDocuments(investorId: number) {
   return documents
-    .filter((d) => d.owner_id === investorId)
+    .filter((d) => d.owner_id === investorId && d.fund_id !== null)
     .map((d) => ({
       id: d.id,
       fund_id: d.fund_id,
@@ -170,6 +170,27 @@ export const eamHandlers = [
       updated_at: c.updated_at,
     }));
 
+    const investment_progress = subscriptions
+      .filter((subscription) =>
+        clients.some((client) => client.investor_id === subscription.investor_id),
+      )
+      .map((subscription) => {
+        const client = clients.find((item) => item.investor_id === subscription.investor_id)!;
+        return {
+          id: subscription.id,
+          adviser_client_id: client.id,
+          client_name: client.client_name,
+          asset_name: subscription.asset_name,
+          amount: subscription.amount,
+          status: subscription.status,
+        };
+      });
+    const open_discussions = discussions.filter(
+      (discussion) =>
+        discussion.status === "open" &&
+        clients.some((client) => client.id === discussion.adviser_client_id),
+    ).length;
+
     return HttpResponse.json({
       total_clients: clients.length,
       verified_clients,
@@ -180,7 +201,51 @@ export const eamHandlers = [
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 5),
       servicing_queue,
+      investment_progress,
+      open_discussions,
     });
+  }),
+
+  // Aggregated, client-scoped records for the shared EAM document and report views.
+  http.get("*/api/v1/eam/documents", ({ request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    const clients = myClients(user.id);
+    return HttpResponse.json(
+      clients.flatMap((client) =>
+        documents
+          .filter(
+            (document) => document.owner_id === client.investor_id && document.fund_id !== null,
+          )
+          .map((document) => ({
+            id: document.id,
+            adviser_client_id: client.id,
+            client_name: client.client_name,
+            fund_id: document.fund_id,
+            fund_name: document.fund_name,
+            subscription_id: document.subscription_id,
+            name: document.name,
+            kind: document.kind,
+            status: document.status,
+            has_file: document.has_file,
+            created_at: document.created_at,
+          })),
+      ),
+    );
+  }),
+
+  http.get("*/api/v1/eam/reports", ({ request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    return HttpResponse.json(
+      myClients(user.id).flatMap((client) =>
+        clientHoldings(client.investor_id).map((holding) => ({
+          ...holding,
+          adviser_client_id: client.id,
+          client_name: client.client_name,
+        })),
+      ),
+    );
   }),
 
   // GET /api/v1/eam/revenue
@@ -193,6 +258,7 @@ export const eamHandlers = [
     const investorIds = clients.map((c) => c.investor_id);
 
     const sharePct = profile.revenue_share_pct;
+    const clientFeePct = profile.client_subscription_fee_pct;
 
     const heldOrAllocated = [
       ...holdings
@@ -234,8 +300,9 @@ export const eamHandlers = [
         client_name: row.client_name,
         reference: row.reference,
         allocated_volume: row.allocated_volume,
+        fee_base_amount: row.allocated_volume * (clientFeePct / 100),
         share_pct: sharePct,
-        share_amount: row.allocated_volume * (sharePct / 100),
+        share_amount: row.allocated_volume * (clientFeePct / 100) * (sharePct / 100),
         status,
         settlement_date: row.settlement_date,
         period: row.settlement_date ? row.settlement_date.slice(0, 7) : null,
@@ -247,6 +314,9 @@ export const eamHandlers = [
       .reduce((s, t) => s + t.share_amount, 0);
     const accrued = transactions
       .filter((t) => t.status === "accrued")
+      .reduce((s, t) => s + t.share_amount, 0);
+    const pending = transactions
+      .filter((t) => t.status === "pending")
       .reduce((s, t) => s + t.share_amount, 0);
 
     const periodMap = new Map<string, { paid: number; accrued: number }>();
@@ -281,6 +351,7 @@ export const eamHandlers = [
     return HttpResponse.json({
       accrued,
       paid,
+      pending,
       participation_volume,
       revenue_share_pct: profile.revenue_share_pct,
       client_subscription_fee_pct: profile.client_subscription_fee_pct,
