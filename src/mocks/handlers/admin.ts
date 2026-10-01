@@ -269,8 +269,8 @@ export const adminHandlers = [
 
   // GET /api/v1/admin/subscriptions?{needs_action,payment_claimed,status,q}
   http.get("*/api/v1/admin/subscriptions", ({ request }) => {
-    const user = requireAdmin(request);
-    if (!user) return unauthorized();
+    const user = currentUser(request);
+    if (!user || !["luca", "ops"].includes(user.role)) return unauthorized();
     const url = new URL(request.url);
     let list = subscriptions;
 
@@ -746,8 +746,8 @@ export const adminHandlers = [
 
   // PATCH /api/v1/funds/:id
   http.patch("*/api/v1/funds/:id", async ({ request, params }) => {
-    const user = requireAdmin(request);
-    if (!user) return unauthorized();
+    const user = currentUser(request);
+    if (!user || !["luca", "ops"].includes(user.role)) return unauthorized();
     const fund = findFundById(Number(params.id));
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
 
