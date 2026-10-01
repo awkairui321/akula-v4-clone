@@ -2942,7 +2942,10 @@ export function nextWatchlistId(): number {
 // EAM: adviser clients, highlights, discussions
 // ---------------------------------------------------------------------------
 
-export type MockAdviserClient = AdviserClient & { eam_user_id: number; investor_id: number };
+export type MockAdviserClient = Omit<AdviserClient, "investor_user_id"> & {
+  eam_user_id: number;
+  investor_id: number;
+};
 
 export const adviserClients: MockAdviserClient[] = [
   {
