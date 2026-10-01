@@ -182,8 +182,14 @@ function App() {
                       <Route path="/luca" element={<AdminDashboard />} />
                       <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />
                       <Route path="/luca/onboarding" element={<LucaOnboardingPage />} />
-                      <Route path="/luca/fund-search" element={<Navigate to="/luca/onboarding?mode=funds" replace />} />
-                      <Route path="/luca/eam-search" element={<Navigate to="/luca/onboarding?mode=entities" replace />} />
+                      <Route
+                        path="/luca/fund-search"
+                        element={<Navigate to="/luca/onboarding?mode=funds" replace />}
+                      />
+                      <Route
+                        path="/luca/eam-search"
+                        element={<Navigate to="/luca/onboarding?mode=entities" replace />}
+                      />
                       <Route path="/luca/investors/:id" element={<AdminInvestorDetailPage />} />
                       <Route path="/luca/partners" element={<AdminPartnersPage />} />
                       <Route path="/luca/partners/:id" element={<AdminPartnerDetailPage />} />
