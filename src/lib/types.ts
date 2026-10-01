@@ -206,7 +206,7 @@ export const LUCA_PIPELINE_STAGES: {
   { key: "approved", label: "Approved", statuses: ["approved"] },
   {
     key: "funded",
-    label: "Funded",
+    label: "Funding & reconciliation",
     statuses: ["awaiting_funds", "payment_unmatched", "reconciliation", "allocation_pending"],
   },
   { key: "active_holding", label: "Allocated", statuses: ["allocated"] },
