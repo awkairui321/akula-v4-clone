@@ -30,125 +30,113 @@ type RmHighlight = {
   created_at: string;
 };
 
-/* ─── Portfolio value hero ───
- * Placeholder illustrative series — not derived from the investor's real
- * holdings. Stands in until real historical NAV snapshots are tracked, so
- * the card has a believable shape to design against in the meantime. */
-
-const RANGES = ["1M", "3M", "6M", "1Y", "All"] as const;
-type Range = (typeof RANGES)[number];
-const RANGE_POINT_COUNT: Record<Range, number> = { "1M": 2, "3M": 3, "6M": 5, "1Y": 8, All: 10 };
-
-type SeriesPoint = { period: string; value: number; invested: number };
-
-function niceAxisMax(max: number): number {
-  const step = 10 ** Math.floor(Math.log10(max || 1));
-  return Math.ceil(max / step) * step;
-}
-
-function LineChart({ points }: { points: SeriesPoint[] }) {
-  const width = 860;
-  const height = 340;
-  const padLeft = 64;
-  const padRight = 20;
-  const padTop = 16;
-  const padBottom = 32;
-  const plotWidth = width - padLeft - padRight;
-  const plotHeight = height - padTop - padBottom;
-
-  const rawMax = Math.max(...points.map((p) => Math.max(p.value, p.invested)), 1);
-  const axisMax = niceAxisMax(rawMax * 1.05);
-  const axisSteps = 5;
-
-  const x = (i: number) =>
-    points.length > 1 ? padLeft + (i / (points.length - 1)) * plotWidth : padLeft + plotWidth / 2;
-  const y = (v: number) => padTop + plotHeight - (v / axisMax) * plotHeight;
-
-  const valueLine = points.map((p, i) => `${x(i)},${y(p.value)}`).join(" ");
-  const investedLine = points.map((p, i) => `${x(i)},${y(p.invested)}`).join(" ");
-  const areaPath =
-    `M${x(0)},${y(0)} ` +
-    points.map((p, i) => `L${x(i)},${y(p.value)}`).join(" ") +
-    ` L${x(points.length - 1)},${y(0)} Z`;
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="h-80 w-full"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      {/* Y-axis gridlines + labels */}
-      {Array.from({ length: axisSteps + 1 }, (_, i) => {
-        const v = (axisMax / axisSteps) * i;
-        return (
-          <g key={i}>
-            <line
-              x1={padLeft}
-              x2={width - padRight}
-              y1={y(v)}
-              y2={y(v)}
-              className="stroke-border"
-              strokeWidth={1}
-            />
-            <text
-              x={padLeft - 8}
-              y={y(v) + 3}
-              textAnchor="end"
-              className="fill-muted-foreground text-[10px]"
-            >
-              {v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
-            </text>
-          </g>
-        );
-      })}
-      {/* X-axis baseline */}
-      <line
-        x1={padLeft}
-        x2={width - padRight}
-        y1={y(0)}
-        y2={y(0)}
-        className="stroke-border"
-        strokeWidth={1}
-      />
-
-      <path d={areaPath} className="fill-primary/10" />
-      <polyline
-        points={investedLine}
-        fill="none"
-        strokeDasharray="5 4"
-        className="stroke-muted-foreground/50"
-        strokeWidth={2}
-      />
-      <polyline points={valueLine} fill="none" className="stroke-primary" strokeWidth={2.5} />
-      {points.map((p, i) => (
-        <circle key={p.period} cx={x(i)} cy={y(p.value)} r={3} className="fill-primary" />
-      ))}
-      {points.map((p, i) => (
-        <text
-          key={p.period}
-          x={x(i)}
-          y={height - 8}
-          textAnchor="middle"
-          className="fill-muted-foreground text-[10px]"
-        >
-          {p.period}
-        </text>
-      ))}
-    </svg>
-  );
+/* No time-series history is available in this demo, so render a snapshot
+ * comparison instead of a misleading line chart with a single data point. */
+function SnapshotBars({ nav, invested }: { nav: number; invested: number }) {
+  const max = Math.max(nav, invested, 1);
+  return <div className="space-y-5 rounded-lg border bg-muted/10 p-5 sm:p-6">
+    <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Latest reported snapshot</p><p className="mt-1 text-sm text-muted-foreground">As-reported holding NAV compared with invested capital</p></div>
+    {[{ label: "Estimated portfolio value", value: nav, color: "bg-primary" }, { label: "Invested capital", value: invested, color: "bg-muted-foreground/50" }].map((item) => <div key={item.label} className="space-y-2"><div className="flex items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">{item.label}</span><strong className="tabular-nums">{formatPrice(item.value)}</strong></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }} /></div></div>)}
+    <p className="border-t pt-3 text-xs text-muted-foreground">Holding reports may have different as-of dates. Historical performance is not available; unrealized gain is an estimate from the latest reported NAV.</p>
+  </div>;
 }
 
 function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
-  const [range, setRange] = useState<Range>("All");
-
   const invested = heldPositions.reduce((sum, h) => sum + numericValue(h.committed_amount), 0);
   const navTotal = heldPositions.reduce((sum, h) => sum + numericValue(h.current_nav), 0);
   const gain = navTotal - invested;
   const gainPct = invested ? (gain / invested) * 100 : 0;
-  const shown: SeriesPoint[] = [{ period: "Latest reported", value: navTotal, invested }].slice(
-    -RANGE_POINT_COUNT[range],
+  const TrendIcon = gain >= 0 ? TrendingUpIcon : TrendingDownIcon;
+
+  if (heldPositions.length === 0) return null;
+
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex flex-col gap-8 lg:flex-row">
+          {/* Left: figures */}
+          <div className="flex shrink-0 flex-col gap-6 lg:w-56">
+            <div>
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                Estimated Portfolio Value
+                <InfoIcon className="size-3" />
+              </span>
+              <p className="mt-1 text-3xl font-bold tabular-nums">{formatPrice(navTotal)}</p>
+              <p
+                className={`mt-1 flex items-center gap-1 text-sm font-medium ${gain >= 0 ? "text-green-600" : "text-red-600"}`}
+              >
+                <TrendIcon className="size-4" />
+                {gain >= 0 ? "+" : ""}
+                {formatPrice(gain)} ({gainPct >= 0 ? "+" : ""}
+                {gainPct.toFixed(1)}%)
+              </p>
+            </div>
+            <div className="flex flex-col gap-4 border-t pt-4">
+              <div>
+                <span className="text-xs text-muted-foreground">Total Invested Capital</span>
+                <p className="mt-1 text-lg font-semibold tabular-nums">{formatPrice(invested)}</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Active Investments</span>
+                <p className="mt-1 text-lg font-semibold tabular-nums">{heldPositions.length}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: chart */}
+          <div className="min-w-0 flex-1">
+            <SnapshotBars nav={navTotal} invested={invested} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
-  const TrendIcon = gain >= 0 ? TrendingUpIcon : Tren…1262 tokens truncated…t-xs">{c.name}</span>
+}
+
+/* ─── Holdings breakdown: % of portfolio + by sector ─── */
+
+function HoldingsBreakdown({ holdings }: { holdings: Holding[] }) {
+  const held = holdings.filter((h) => h.state !== "realized");
+  const total = held.reduce((s, h) => s + numericValue(h.current_nav), 0);
+
+  const byCompany = useMemo(
+    () =>
+      held
+        .map((h) => ({
+          name: h.asset_name,
+          value: numericValue(h.current_nav),
+          pct: total > 0 ? (numericValue(h.current_nav) / total) * 100 : 0,
+        }))
+        .sort((a, b) => b.value - a.value),
+    [held, total],
+  );
+
+  const bySector = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const h of held) {
+      map.set(h.sector, (map.get(h.sector) ?? 0) + numericValue(h.current_nav));
+    }
+    return [...map.entries()]
+      .map(([sector, value]) => ({
+        sector,
+        label: SECTOR_LABELS[sector] ?? sector,
+        value,
+        pct: total > 0 ? (value / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [held, total]);
+
+  if (held.length === 0) return null;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardContent className="pt-6">
+          <p className="mb-4 text-sm font-medium">Holdings by % of portfolio</p>
+          <div className="space-y-3">
+            {byCompany.map((c) => (
+              <div key={`${c.name}-${c.value}`} className="flex items-center gap-3">
+                <span className="w-32 shrink-0 truncate text-xs">{c.name}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${c.pct}%` }} />
                 </div>
