@@ -346,9 +346,9 @@ export default function AccountPage() {
 
       {!isLoading && profile && (
         <>
-        {section === "profile" && <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
+        {section === "profile" && <div className="grid items-stretch gap-4 lg:grid-cols-2">
           {/* Profile card */}
-          <Card className="h-fit">
+          <Card className="h-full">
             <CardContent className="flex items-center gap-4 pt-6">
               <div className="flex size-12 items-center justify-center rounded-full bg-muted">
                 <UserIcon className="size-6 text-muted-foreground" />
@@ -374,7 +374,7 @@ export default function AccountPage() {
           </Card>
 
           {/* Application details */}
-          <Card className="h-fit">
+          <Card className="h-full">
             <CardHeader>
               <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
                 Application
