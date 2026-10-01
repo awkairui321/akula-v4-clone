@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
@@ -7,6 +8,7 @@ import { STAGE_LABELS } from "./types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   UsersIcon,
   ShieldCheckIcon,
@@ -68,6 +70,9 @@ const VERIFICATION_VARIANT: Record<string, "default" | "secondary" | "outline" |
 
 export default function EamDashboard() {
   const navigate = useNavigate();
+  const [progressFilter, setProgressFilter] = useState("action");
+  const [progressSearch, setProgressSearch] = useState("");
+  const [page, setPage] = useState(0);
 
   const { data: profile } = useQuery({
     queryKey: ["eamProfile"],
@@ -80,6 +85,34 @@ export default function EamDashboard() {
   });
 
   const firstName = profile?.display_name?.split(" ")[0];
+  const actionStatuses = [
+    "reserved",
+    "documents_pending",
+    "information_requested",
+    "approved",
+    "awaiting_funds",
+    "not_allocated",
+    "rejected",
+  ];
+  const reviewStatuses = ["institution_review", "under_luca_review"];
+  const progress = dashboard?.investment_progress ?? [];
+  const actionCount = progress.filter((item) => actionStatuses.includes(item.status)).length;
+  const reviewCount = progress.filter((item) => reviewStatuses.includes(item.status)).length;
+  const filteredProgress = progress.filter((item) => {
+    const matchesStage =
+      progressFilter === "all" ||
+      (progressFilter === "action" && actionStatuses.includes(item.status)) ||
+      (progressFilter === "review" && reviewStatuses.includes(item.status)) ||
+      (progressFilter === "other" &&
+        !actionStatuses.includes(item.status) &&
+        !reviewStatuses.includes(item.status));
+    return (
+      matchesStage &&
+      `${item.client_name} ${item.asset_name} ${item.id}`
+        .toLowerCase()
+        .includes(progressSearch.toLowerCase())
+    );
+  });
 
   return (
     <div className="flex flex-col gap-8">
@@ -102,56 +135,76 @@ export default function EamDashboard() {
 
       {!isLoading && dashboard && (
         <>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Clients</CardTitle>
-                <UsersIcon className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{dashboard.total_clients}</div>
-                <p className="text-xs text-muted-foreground">Your firm’s client book</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Awaiting verification
-                </CardTitle>
-                <ShieldCheckIcon className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {dashboard.total_clients - dashboard.verified_clients}
-                </div>
-                <p className="text-xs text-muted-foreground">Client onboarding action</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Open conversations
-                </CardTitle>
-                <DollarSignIcon className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{dashboard.open_discussions}</div>
-                <p className="text-xs text-muted-foreground">Client questions</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Participation
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatPrice(dashboard.total_participation)}
-                </div>
-                <p className="text-xs text-muted-foreground">Committed and requested</p>
-              </CardContent>
-            </Card>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Link to="/eam/clients">
+              <Card className="h-full hover:bg-muted/40">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Clients
+                  </CardTitle>
+                  <UsersIcon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{dashboard.total_clients}</div>
+                  <p className="text-xs text-muted-foreground">Your firm’s client book</p>
+                </CardContent>
+              </Card>
+            </Link>
+            <button
+              className="text-left"
+              onClick={() => {
+                setProgressFilter("action");
+                setPage(0);
+                document.getElementById("eam-progress")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              <Card className="h-full hover:bg-muted/40">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Client follow-ups
+                  </CardTitle>
+                  <ShieldCheckIcon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{actionCount}</div>
+                  <p className="text-xs text-muted-foreground">View immediate actions →</p>
+                </CardContent>
+              </Card>
+            </button>
+            <button
+              className="text-left"
+              onClick={() => {
+                setProgressFilter("review");
+                setPage(0);
+                document.getElementById("eam-progress")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              <Card className="h-full hover:bg-muted/40">
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    With LUCA or institution
+                  </CardTitle>
+                  <DollarSignIcon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{reviewCount}</div>
+                  <p className="text-xs text-muted-foreground">View review stages →</p>
+                </CardContent>
+              </Card>
+            </button>
+            <Link to="/eam/support">
+              <Card className="h-full hover:bg-muted/40">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Open conversations
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{dashboard.open_discussions}</div>
+                  <p className="text-xs text-muted-foreground">Open support →</p>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
 
           <section className="space-y-3">
@@ -213,9 +266,9 @@ export default function EamDashboard() {
             </div>
           </section>
 
-          <section className="space-y-3">
+          <section id="eam-progress" className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Investment progress</h2>
+              <h2 className="text-lg font-semibold">Immediate actions & investment progress</h2>
               <Link className="text-sm text-primary hover:underline" to="/eam/reports">
                 View client reports →
               </Link>
@@ -224,9 +277,35 @@ export default function EamDashboard() {
               Investment processing is handled by the investor, LUCA and Akula Ops. Your firm can
               follow the stage and help clients with questions.
             </p>
-            {dashboard.investment_progress.length === 0 ? (
+            <div className="flex flex-wrap gap-3">
+              <select
+                aria-label="Filter investment progress"
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+                value={progressFilter}
+                onChange={(event) => {
+                  setProgressFilter(event.target.value);
+                  setPage(0);
+                }}
+              >
+                <option value="action">Client follow-ups ({actionCount})</option>
+                <option value="review">With LUCA or institution ({reviewCount})</option>
+                <option value="other">Other stages</option>
+                <option value="all">All investment records</option>
+              </select>
+              <Input
+                className="max-w-sm"
+                aria-label="Search investment progress"
+                placeholder="Search client, company or investment #"
+                value={progressSearch}
+                onChange={(event) => {
+                  setProgressSearch(event.target.value);
+                  setPage(0);
+                }}
+              />
+            </div>
+            {filteredProgress.length === 0 ? (
               <p className="rounded-lg border p-4 text-sm text-muted-foreground">
-                No active investment requests in this client book.
+                No investment records match these filters.
               </p>
             ) : (
               <div className="overflow-x-auto rounded-lg border">
@@ -240,7 +319,7 @@ export default function EamDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {dashboard.investment_progress.slice(0, 8).map((item) => (
+                    {filteredProgress.slice(page * 8, (page + 1) * 8).map((item) => (
                       <tr key={item.id} className="border-t">
                         <td className="p-3">
                           <Link
@@ -257,6 +336,30 @@ export default function EamDashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {filteredProgress.length > 8 && (
+              <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                <span>
+                  {page * 8 + 1}–{Math.min((page + 1) * 8, filteredProgress.length)} of{" "}
+                  {filteredProgress.length}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage(page - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={(page + 1) * 8 >= filteredProgress.length}
+                  onClick={() => setPage(page + 1)}
+                >
+                  Next
+                </Button>
               </div>
             )}
           </section>
