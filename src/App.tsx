@@ -9,6 +9,7 @@ import ErrorBoundary from "@/components/error-boundary";
 import AppLayout from "@/components/app-layout";
 import LucaLayout from "@/components/luca-layout";
 import WorkflowPage from "@/features/workspace/workflow-page";
+import LiveComparePage from "@/features/workspace/live-compare";
 import LandingPage from "@/features/unauthenticated/landing";
 import LoginPage from "@/features/unauthenticated/login";
 import SignupPage from "@/features/unauthenticated/signup";
@@ -146,9 +147,10 @@ function App() {
           <AuthProvider>
             <ActiveProfileProvider>
               <SentryRoutes>
+                {/* The public front page is the entry point for every demo role. */}
+                <Route path="/" element={<LandingPage />} />
                 {/* Unauthenticated */}
                 <Route element={<GuestOnly />}>
-                  <Route path="/" element={<LandingPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/signup" element={<SignupPage />} />
                 </Route>
@@ -158,6 +160,7 @@ function App() {
                 {/* Authenticated */}
                 <Route element={<AuthRequired />}>
                   <Route path="/workflows" element={<WorkflowPage />} />
+                  <Route path="/live-demo" element={<LiveComparePage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/onboarding/:section" element={<OnboardingPage />} />
                   {/* Onboarded */}
