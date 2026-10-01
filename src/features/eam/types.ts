@@ -15,6 +15,7 @@ export type AdviserClient = {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  investor_user_id: number;
 };
 
 export type ClientStage = "prospect" | "onboarding" | "active" | "inactive";
@@ -44,6 +45,17 @@ export type DashboardData = {
   total_highlights: number;
   recent_highlights: Highlight[];
   servicing_queue: ServicingQueueItem[];
+  investment_progress: EamProgressItem[];
+  open_discussions: number;
+};
+
+export type EamProgressItem = {
+  id: number;
+  adviser_client_id: number;
+  client_name: string;
+  asset_name: string;
+  amount: string;
+  status: string;
 };
 
 export type Highlight = {
@@ -65,6 +77,12 @@ export type ClientDocument = {
   status: string;
   has_file: boolean;
   created_at: string;
+};
+
+export type EamDocumentRow = ClientDocument & {
+  adviser_client_id: number;
+  client_name: string;
+  fund_name: string | null;
 };
 
 export type ClientDetail = {
@@ -90,6 +108,11 @@ export type ClientHolding = {
   state: string;
   subscribed_at: string | null;
   moic: string | null;
+};
+
+export type EamReportRow = ClientHolding & {
+  adviser_client_id: number;
+  client_name: string;
 };
 
 export type ClientSubscription = {
@@ -132,6 +155,7 @@ export type EamRevenueTransaction = {
   client_name: string;
   reference: string | null;
   allocated_volume: number;
+  fee_base_amount: number;
   share_pct: number;
   share_amount: number;
   status: "accrued" | "paid" | "pending";
@@ -149,6 +173,7 @@ export type EamRevenuePeriod = {
 export type EamRevenueData = {
   accrued: number;
   paid: number;
+  pending: number;
   participation_volume: number;
   revenue_share_pct: number | null;
   client_subscription_fee_pct: number | null;
