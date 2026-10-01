@@ -213,24 +213,6 @@ function HoldingsBreakdown({ holdings }: { holdings: Holding[] }) {
 
 /* ─── Latest updates: new postings + RM recommendations + subscription progress ─── */
 
-const PROGRESS_STEP_LABEL: Record<SubscriptionStatus, string> = {
-  reserved: "Documents signed in progress",
-  documents_pending: "Documents signed in progress",
-  institution_review: "Transfer of funds next",
-  under_luca_review: "Transfer of funds next",
-  information_requested: "Awaiting your response",
-  approved: "Transfer of funds next",
-  awaiting_funds: "Transfer of funds in progress",
-  payment_unmatched: "Transfer of funds in progress",
-  reconciliation: "Fund verification in progress",
-  allocation_pending: "Fund verification in progress",
-  allocated: "Allocation confirmed · issuance pending",
-  not_allocated: "Closed",
-  funds_returned: "Closed",
-  rejected: "Closed",
-  cancelled: "Closed",
-};
-
 function LatestUpdates({ activeSubs }: { activeSubs: Subscription[] }) {
   const navigate = useNavigate();
 
@@ -269,29 +251,21 @@ function LatestUpdates({ activeSubs }: { activeSubs: Subscription[] }) {
       sub: h.rationale,
       to: `/funds/${h.fund_id}`,
     })),
-    ...activeSubs.map((s) => ({
-      key: `progress-${s.id}`,
-      icon: <InfoIcon className="size-4" />,
-      title: `${s.asset_name} · ${PROGRESS_STEP_LABEL[s.status]}`,
-      sub: `${formatPricePrecise(s.amount)} · ${STATUS_LABELS[s.status] ?? s.status}`,
-      to: "#subscriptions-outcomes",
-    })),
   ];
 
   if (items.length === 0) return null;
 
   return (
     <div>
-      <p className="mb-3 text-sm font-medium">Latest updates</p>
+      <p className="mb-1 text-sm font-medium">Company & investment updates</p>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Opportunity news and recommendations related to companies on your investment shelf.
+      </p>
       <div className="space-y-2">
         {items.map((item) => (
           <button
             key={item.key}
-            onClick={() =>
-              item.to.startsWith("#")
-                ? document.getElementById(item.to.slice(1))?.scrollIntoView({ behavior: "smooth" })
-                : navigate(item.to)
-            }
+            onClick={() => navigate(item.to)}
             className="flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left text-sm transition-colors hover:bg-accent"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -517,7 +491,7 @@ function SubscriptionCard({ subscription }: { subscription: Subscription }) {
   });
 
   return (
-    <Card>
+    <Card id={`subscription-${subscription.id}`} className="scroll-mt-24">
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
