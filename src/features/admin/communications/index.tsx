@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Communication, CommunicationsResponse, CommunicationStatus } from "../types";
@@ -39,6 +40,8 @@ function statusDate(c: Communication): string {
 
 export default function CommunicationsPage() {
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "communications"],
@@ -46,6 +49,13 @@ export default function CommunicationsPage() {
   });
 
   const communications = data?.communications ?? [];
+  const visibleCommunications = communications.filter(
+    (communication) =>
+      (statusFilter === "all" || communication.status === statusFilter) &&
+      `${communication.subject} ${communication.audience_description}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
   const summary = data?.summary;
 
   return (
@@ -64,12 +74,32 @@ export default function CommunicationsPage() {
       </div>
 
       {summary && (
-        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <div className="mb-4 grid gap-2 sm:grid-cols-3">
           <SummaryTile label="Sent" value={String(summary.sent)} />
           <SummaryTile label="Scheduled" value={String(summary.scheduled)} />
           <SummaryTile label="Drafts" value={String(summary.draft)} />
         </div>
       )}
+      <div className="mb-3 flex flex-wrap gap-2">
+        <input
+          aria-label="Search communications"
+          placeholder="Search subject or audience"
+          className="h-9 min-w-56 flex-1 rounded-md border bg-background px-3 text-sm"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <select
+          aria-label="Filter communication status"
+          className="h-9 rounded-md border bg-background px-2 text-sm"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="all">All statuses</option>
+          <option value="sent">Sent</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="draft">Draft</option>
+        </select>
+      </div>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
 
@@ -91,7 +121,7 @@ export default function CommunicationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {communications.map((c) => (
+              {visibleCommunications.map((c) => (
                 <TableRow
                   key={c.id}
                   className="cursor-pointer"
@@ -126,7 +156,7 @@ export default function CommunicationsPage() {
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="!py-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="mt-1 text-2xl font-bold">{value}</p>
       </CardContent>
