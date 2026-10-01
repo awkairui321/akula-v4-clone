@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
 } from "./ui/dropdown-menu";
 import ProfileSwitcher from "./profile-switcher";
+import DemoResetButton from "./demo-reset-button";
 
 const NAV_ITEMS = [
   { to: "/eam", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -77,12 +78,12 @@ export default function EamLayout() {
   return (
     <div className="flex min-h-screen">
       <aside
-        className={`${collapsed ? "w-16" : "w-40 md:w-56"} flex shrink-0 flex-col border-r transition-all`}
+        className={`akula-sidebar ${collapsed ? "w-16" : "w-40 md:w-56"} flex shrink-0 flex-col border-r transition-all`}
       >
         <Link to="/eam" className="mt-1 px-3 py-4">
           <div className={`flex flex-row ${collapsed ? "justify-center" : ""}`}>
             <Circle className={collapsed ? "" : "mx-2"} />
-            {!collapsed && <div className="uppercase">Akula EAM</div>}
+            {!collapsed && <div className="uppercase text-[11px] font-semibold tracking-[0.16em]">Akula EAM</div>}
           </div>
         </Link>
         <nav className="flex flex-col gap-1 px-3 py-4">
@@ -103,7 +104,7 @@ export default function EamLayout() {
         <ProfileSwitcher collapsed={collapsed} />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-muted">
+      <div className="flex min-w-0 flex-1 flex-col bg-background">
         <header className="flex items-center border-b px-6 py-4">
           <div className="flex items-center">
             <Button
@@ -116,7 +117,9 @@ export default function EamLayout() {
             </Button>
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
-          <div className="ml-auto flex items-center">
+          <div className="ml-auto flex items-center gap-3">
+            <Link to="/live-demo" className="text-xs text-primary underline">Live compare</Link>
+            <DemoResetButton compact />
             <Button variant="ghost" size="icon">
               <Moon />
             </Button>
