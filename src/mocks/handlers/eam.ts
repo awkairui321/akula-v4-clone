@@ -1,4 +1,5 @@
 import { workflow } from "../workflow";
+import { clientCode } from "@/lib/client-code";
 import { http, HttpResponse } from "msw";
 import {
   currentUser,
@@ -25,7 +26,7 @@ function unauthorized() {
 
 function stripClient(client: MockAdviserClient) {
   const { eam_user_id: _eam_user_id, investor_id: _investor_id, ...rest } = client;
-  return { ...rest, investor_user_id: _investor_id };
+  return { ...rest, investor_user_id: _investor_id, client_code: clientCode(_investor_id) };
 }
 
 function myClients(eamUserId: number): MockAdviserClient[] {
@@ -243,6 +244,7 @@ export const eamHandlers = [
           ...holding,
           adviser_client_id: client.id,
           client_name: client.client_name,
+          client_code: clientCode(client.investor_id),
         })),
       ),
     );
