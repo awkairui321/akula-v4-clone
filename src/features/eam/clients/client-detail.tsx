@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
@@ -571,8 +571,14 @@ function DiscussionThread({ discussionId }: { discussionId: number }) {
   );
 }
 
-function DiscussionsTab({ clientId }: { clientId: number }) {
-  const [selectedDiscussion, setSelectedDiscussion] = useState<number | null>(null);
+function DiscussionsTab({
+  clientId,
+  initialDiscussionId,
+}: {
+  clientId: number;
+  initialDiscussionId: number | null;
+}) {
+  const [selectedDiscussion, setSelectedDiscussion] = useState<number | null>(initialDiscussionId);
 
   const { data: discussions } = useQuery({
     queryKey: ["eamDiscussions", String(clientId)],
@@ -643,6 +649,14 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [params, setParams] = useSearchParams();
+  const requestedTab = params.get("tab") ?? "overview";
+  const tab = ["overview", "holdings", "activity", "conversations", "documents"].includes(
+    requestedTab,
+  )
+    ? requestedTab
+    : "overview";
+  const discussionId = Number(params.get("discussion")) || null;
 
   const { data: detail, isLoading } = useQuery({
     queryKey: ["eamClient", id],
@@ -693,7 +707,10 @@ export default function ClientDetailPage() {
         </Badge>
       </div>
 
-      <Tabs defaultValue="overview">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setParams(value === "overview" ? {} : { tab: value })}
+      >
         <TabsList variant="line" className="w-full justify-start border-b">
           <TabsTrigger value="overview" className="flex-none">
             Overview
@@ -721,7 +738,11 @@ export default function ClientDetailPage() {
           <ActivityTab detail={detail} highlights={highlights ?? []} />
         </TabsContent>
         <TabsContent value="conversations">
-          <DiscussionsTab clientId={detail.client.id} />
+          <DiscussionsTab
+            key={discussionId ?? "list"}
+            clientId={detail.client.id}
+            initialDiscussionId={discussionId}
+          />
         </TabsContent>
         <TabsContent value="documents">
           <DocumentsTab detail={detail} />
