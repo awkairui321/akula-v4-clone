@@ -10,9 +10,7 @@ import {
   Clock3,
   FileTextIcon,
   PanelLeft,
-  Moon,
   UserIcon,
-  LifeBuoyIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -28,8 +26,7 @@ const NAV_ITEMS = [
   { to: "/portfolio", label: "Portfolio", icon: Clock3 },
   { to: "/funds", label: "Invest", icon: TrendingUp },
   { to: "/documents", label: "Documents", icon: FileTextIcon },
-  { to: "/account", label: "Account", icon: UserIcon },
-  { to: "/support", label: "Support", icon: LifeBuoyIcon },
+  { to: "/account", label: "Account & Support", icon: UserIcon },
 ];
 
 type InvestorProfile = {
@@ -72,7 +69,7 @@ export default function AppLayout() {
   }, []);
   const activeItem = NAV_ITEMS.find(
     (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
-  );
+  ) ?? (location.pathname === "/support" ? NAV_ITEMS.find((item) => item.to === "/account") : undefined);
 
   const { data, isLoading } = useQuery({
     queryKey: ["investorProfile"],
@@ -123,11 +120,8 @@ export default function AppLayout() {
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Link to="/live-demo" className="hidden text-xs text-primary underline sm:inline">Live compare</Link>
+            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>Compare roles live</Button>
             <DemoResetButton compact />
-            <Button variant="ghost" size="icon">
-              <Moon />
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -147,12 +141,6 @@ export default function AppLayout() {
         </header>
 
         <main className="mx-auto w-full max-w-310 flex-1 px-3 py-6 sm:px-6 sm:py-8">
-          <Link
-            to="/workflows"
-            className="mb-5 inline-block rounded-md border bg-background px-4 py-2 text-sm"
-          >
-            Connected workflows · servicing & records →
-          </Link>
           <Outlet />
         </main>
       </div>
