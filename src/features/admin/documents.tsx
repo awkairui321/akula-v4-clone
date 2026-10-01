@@ -7,6 +7,7 @@ import {
   type AdminDocument,
   type DocumentReviewState,
   type DocumentsResponse,
+  type InvestorsResponse,
 } from "./types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,31 +18,35 @@ import { SearchIcon } from "lucide-react";
 const REVIEW_VARIANT: Record<DocumentReviewState, "default" | "secondary" | "outline"> = {
   received: "outline",
   reviewing: "secondary",
+  on_hold: "outline",
   filed: "default",
 };
 
 /** Where an operator can move a document from each intake state. */
 const NEXT_STATES: Record<DocumentReviewState, DocumentReviewState[]> = {
-  received: ["reviewing", "filed"],
-  reviewing: ["filed", "received"],
-  filed: ["reviewing"],
+  received: ["reviewing", "on_hold"],
+  reviewing: ["filed", "on_hold"],
+  on_hold: ["reviewing", "received"],
+  filed: [],
 };
 
 export default function AdminDocumentsPage() {
   const queryClient = useQueryClient();
-  const [reviewFilter, setReviewFilter] = useState<DocumentReviewState | "all">("all");
+  const [reviewFilter, setReviewFilter] = useState<DocumentReviewState>("received");
   const [search, setSearch] = useState("");
-  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [partnerFilter, setPartnerFilter] = useState("all");
+  const [investorFilter, setInvestorFilter] = useState("all");
   const [fundFilter, setFundFilter] = useState("all");
   const [page, setPage] = useState(0);
-
-  const params = new URLSearchParams();
-  if (reviewFilter !== "all") params.set("review_state", reviewFilter);
-  if (search.trim()) params.set("q", search.trim());
+  const [archiveSearch, setArchiveSearch] = useState("");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "documents", reviewFilter, search],
-    queryFn: () => api<DocumentsResponse>(`/api/v1/admin/documents?${params}`),
+    queryKey: ["admin", "documents", "all"],
+    queryFn: () => api<DocumentsResponse>("/api/v1/admin/documents"),
+  });
+  const { data: investorData } = useQuery({
+    queryKey: ["admin", "investors", "documents"],
+    queryFn: () => api<InvestorsResponse>("/api/v1/admin/investors"),
   });
 
   const advance = useMutation({
@@ -58,7 +63,22 @@ export default function AdminDocumentsPage() {
   });
 
   const documents = data?.documents ?? [];
-  const owners = [...new Set(documents.map((document) => document.owner_name))].sort();
+  const clientRows = investorData?.investors ?? [];
+  const partners = [
+    ...new Set(
+      clientRows.map((row) => row.eam_firm).filter((firm): firm is string => Boolean(firm)),
+    ),
+  ].sort();
+  const clients = clientRows
+    .filter((row) =>
+      partnerFilter === "individual"
+        ? !row.eam_firm
+        : partnerFilter === "all"
+          ? true
+          : row.eam_firm === partnerFilter,
+    )
+    .map((row) => ({ id: row.id, name: row.full_name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const funds = [
     ...new Set(
       documents
@@ -66,10 +86,32 @@ export default function AdminDocumentsPage() {
         .filter((name): name is string => Boolean(name)),
     ),
   ].sort();
-  const visibleDocuments = documents.filter(
+  const visibleDocuments = documents.filter((document) => {
+    const client = clientRows.find((row) => row.id === document.owner_id);
+    const partnerMatches =
+      partnerFilter === "all" ||
+      (partnerFilter === "individual"
+        ? Boolean(client && !client.eam_firm)
+        : client?.eam_firm === partnerFilter);
+    const textMatches =
+      !search.trim() ||
+      `${document.name} ${document.owner_name} ${document.fund_name ?? ""}`
+        .toLowerCase()
+        .includes(search.trim().toLowerCase());
+    return (
+      document.review_state === reviewFilter &&
+      partnerMatches &&
+      (investorFilter === "all" || document.owner_id === Number(investorFilter)) &&
+      (fundFilter === "all" || document.fund_name === fundFilter) &&
+      textMatches
+    );
+  });
+  const archivedDocuments = documents.filter(
     (document) =>
-      (ownerFilter === "all" || document.owner_name === ownerFilter) &&
-      (fundFilter === "all" || document.fund_name === fundFilter),
+      document.review_state === "filed" &&
+      `${document.name} ${document.owner_name} ${document.fund_name ?? ""}`
+        .toLowerCase()
+        .includes(archiveSearch.toLowerCase()),
   );
   const pageCount = Math.max(1, Math.ceil(visibleDocuments.length / 20));
   const pageDocuments = visibleDocuments.slice(
@@ -83,16 +125,16 @@ export default function AdminDocumentsPage() {
       <div className="mb-6 space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Documents</h1>
         <p className="text-muted-foreground">
-          Platform-wide document intake: what has arrived, what has been checked, what is filed.
+          Triage new arrivals, review assigned items, and keep completed records in the archive.
         </p>
       </div>
 
       {summary && (
         <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryTile label="Received" value={String(summary.received)} />
-          <SummaryTile label="Reviewing" value={String(summary.reviewing)} />
-          <SummaryTile label="Filed" value={String(summary.filed)} />
-          <SummaryTile label="Total documents" value={String(summary.total)} />
+          <SummaryTile label="New arrivals" value={String(summary.received)} />
+          <SummaryTile label="To review" value={String(summary.reviewing)} />
+          <SummaryTile label="On hold" value={String(summary.on_hold)} />
+          <SummaryTile label="Archived" value={String(summary.filed)} />
         </div>
       )}
 
@@ -109,19 +151,41 @@ export default function AdminDocumentsPage() {
       </div>
       <div className="mb-3 flex flex-wrap gap-2 text-sm">
         <select
-          aria-label="Filter by owner"
+          aria-label="Filter by partner or investor group"
           className="h-9 rounded-md border bg-background px-2"
-          value={ownerFilter}
+          value={partnerFilter}
           onChange={(event) => {
-            setOwnerFilter(event.target.value);
+            setPartnerFilter(event.target.value);
+            setInvestorFilter("all");
             setPage(0);
           }}
         >
-          <option value="all">All owners</option>
-          {owners.map((owner) => (
-            <option key={owner}>{owner}</option>
+          <option value="all">All client groups</option>
+          <option value="individual">Individual investors</option>
+          {partners.map((partner) => (
+            <option key={partner} value={partner}>
+              {partner}
+            </option>
           ))}
         </select>
+        {partnerFilter !== "all" && (
+          <select
+            aria-label="Filter by investor under selected partner"
+            className="h-9 rounded-md border bg-background px-2"
+            value={investorFilter}
+            onChange={(event) => {
+              setInvestorFilter(event.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="all">All investors in group</option>
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           aria-label="Filter by deal"
           className="h-9 rounded-md border bg-background px-2"
@@ -142,7 +206,7 @@ export default function AdminDocumentsPage() {
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
-        {(["all", "received", "reviewing", "filed"] as const).map((state) => (
+        {(["received", "reviewing", "on_hold"] as const).map((state) => (
           <Button
             key={state}
             variant={reviewFilter === state ? "secondary" : "outline"}
@@ -150,14 +214,14 @@ export default function AdminDocumentsPage() {
             className="rounded-full text-xs"
             onClick={() => setReviewFilter(state)}
           >
-            {state === "all" ? "All" : REVIEW_STATE_LABELS[state]}
+            {REVIEW_STATE_LABELS[state]}
           </Button>
         ))}
       </div>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
 
-      {!isLoading && documents.length === 0 && (
+      {!isLoading && visibleDocuments.length === 0 && (
         <p className="py-12 text-center text-muted-foreground">No documents match these filters.</p>
       )}
 
@@ -195,7 +259,13 @@ export default function AdminDocumentsPage() {
                     disabled={advance.isPending}
                     onClick={() => advance.mutate({ id: document.id, to })}
                   >
-                    {REVIEW_STATE_LABELS[to]}
+                    {to === "filed"
+                      ? "Mark reviewed · archive"
+                      : to === "reviewing"
+                        ? "Move to review"
+                        : to === "on_hold"
+                          ? "Place on hold"
+                          : "Return to new arrivals"}
                   </Button>
                 ))}
               </span>
@@ -226,6 +296,47 @@ export default function AdminDocumentsPage() {
           </Button>
         </div>
       )}
+      <details className="mt-5 rounded-lg border bg-card">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+          Archive · {summary?.filed ?? 0} completed documents
+        </summary>
+        <div className="space-y-3 border-t p-3">
+          <div className="relative">
+            <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Search archived documents by name, investor or deal"
+              value={archiveSearch}
+              onChange={(event) => setArchiveSearch(event.target.value)}
+            />
+          </div>
+          {archivedDocuments.length ? (
+            <div className="divide-y rounded-md border">
+              {archivedDocuments.map((document) => (
+                <div
+                  key={document.id}
+                  className="grid gap-1 px-3 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_180px_180px]"
+                >
+                  <span className="truncate font-medium">
+                    {document.name}
+                    <small className="ml-2 text-xs font-normal text-muted-foreground">
+                      {document.kind}
+                    </small>
+                  </span>
+                  <span className="truncate text-muted-foreground">{document.owner_name}</span>
+                  <span className="truncate text-muted-foreground">
+                    {document.fund_name ?? "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-5 text-center text-sm text-muted-foreground">
+              No archived documents match your search.
+            </p>
+          )}
+        </div>
+      </details>
     </div>
   );
 }
