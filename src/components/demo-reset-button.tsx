@@ -9,8 +9,12 @@ export default function DemoResetButton({ compact = false }: { compact?: boolean
   return confirming ? (
     <span className="inline-flex items-center gap-2">
       <span className="text-xs">Reset this browser’s fictional demo records?</span>
-      <Button size={compact ? "sm" : "default"} variant="destructive" onClick={resetDemo}>Reset all</Button>
-      <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
+      <Button size={compact ? "sm" : "default"} variant="destructive" onClick={resetDemo}>
+        Reset all
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+        Cancel
+      </Button>
     </span>
   ) : (
     <Button size={compact ? "sm" : "default"} variant="ghost" onClick={() => setConfirming(true)}>
