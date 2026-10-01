@@ -11,6 +11,8 @@ import {
   TrendingUp,
   BarChart3Icon,
   UserIcon,
+  FileTextIcon,
+  MessageCircleIcon,
   PanelLeft,
 } from "lucide-react";
 import {
@@ -24,9 +26,12 @@ import ProfileSwitcher from "./profile-switcher";
 import DemoResetButton from "./demo-reset-button";
 
 const NAV_ITEMS = [
-  { to: "/eam", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/eam", label: "Overview", icon: LayoutDashboard, exact: true },
   { to: "/eam/clients", label: "Clients", icon: Users },
   { to: "/eam/opportunities", label: "Opportunities", icon: TrendingUp },
+  { to: "/eam/documents", label: "Documents", icon: FileTextIcon },
+  { to: "/eam/support", label: "Support", icon: MessageCircleIcon },
+  { to: "/eam/reports", label: "Client reports", icon: BarChart3Icon },
   { to: "/eam/revenue", label: "Revenue", icon: BarChart3Icon },
   { to: "/eam/profile", label: "Profile", icon: UserIcon },
 ];
