@@ -237,6 +237,7 @@ export default function AdminSubscriptionsPage() {
   const [searchParams] = useSearchParams();
   const statusFromUrl = searchParams.get("status");
   const [search, setSearch] = useState("");
+  const [selectedDeal, setSelectedDeal] = useState("all");
   const [activeStage, setActiveStage] = useState<string | null>(
     statusFromUrl
       ? (BOARD_STAGES.find((stage) => (stage.statuses as string[]).includes(statusFromUrl))?.key ??
@@ -254,17 +255,23 @@ export default function AdminSubscriptionsPage() {
 
   const subscriptions = data?.subscriptions ?? [];
 
+  const deals = [
+    ...new Map(
+      subscriptions.map((subscription) => [subscription.fund_id, subscription.fund_name]),
+    ).entries(),
+  ];
   const filtered = useMemo(() => {
-    if (!search.trim()) return subscriptions;
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     return subscriptions.filter(
       (s) =>
-        s.investor_name.toLowerCase().includes(q) ||
-        s.investor_email.toLowerCase().includes(q) ||
-        (s.payment_reference ?? "").toLowerCase().includes(q) ||
-        s.asset_name.toLowerCase().includes(q),
+        (selectedDeal === "all" || String(s.fund_id) === selectedDeal) &&
+        (!q ||
+          s.investor_name.toLowerCase().includes(q) ||
+          s.investor_email.toLowerCase().includes(q) ||
+          (s.payment_reference ?? "").toLowerCase().includes(q) ||
+          s.asset_name.toLowerCase().includes(q)),
     );
-  }, [subscriptions, search]);
+  }, [subscriptions, search, selectedDeal]);
 
   // Deep link from the Dashboard's stuck-lists (?status=X) scrolls that
   // column into view instead of filtering the board down to just it — the
@@ -304,6 +311,41 @@ export default function AdminSubscriptionsPage() {
             className="pl-9"
           />
         </div>
+        <div
+          className="mt-3 flex items-center gap-2 overflow-x-auto pb-1"
+          aria-label="Filter subscriptions by deal"
+        >
+          <Button
+            size="sm"
+            variant={selectedDeal === "all" ? "secondary" : "outline"}
+            className="shrink-0 rounded-full"
+            onClick={() => setSelectedDeal("all")}
+          >
+            All deals <span className="ml-1 text-xs opacity-70">{subscriptions.length}</span>
+          </Button>
+          {deals.map(([id, name]) => {
+            const count = subscriptions.filter(
+              (subscription) => subscription.fund_id === id,
+            ).length;
+            return (
+              <Button
+                key={id}
+                size="sm"
+                variant={selectedDeal === String(id) ? "secondary" : "outline"}
+                className="shrink-0 rounded-full"
+                onClick={() => setSelectedDeal(String(id))}
+              >
+                {name}
+                <span className="ml-1 text-xs opacity-70">{count}</span>
+              </Button>
+            );
+          })}
+        </div>
+        {(search || selectedDeal !== "all") && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Showing {filtered.length} of {subscriptions.length} subscriptions
+          </p>
+        )}
       </div>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
