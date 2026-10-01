@@ -89,7 +89,8 @@ export default function EamDashboard() {
             {firstName ? `${getGreeting()}, ${firstName}.` : getGreeting() + "."}
           </h1>
           <p className="text-muted-foreground">
-            Your clients, current opportunities and servicing tasks.
+            Follow your client book from prospect to active investor, with shared records for each
+            step.
           </p>
         </div>
         <Link to="/eam/opportunities">
@@ -101,8 +102,7 @@ export default function EamDashboard() {
 
       {!isLoading && dashboard && (
         <>
-          {/* Metrics row */}
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Clients</CardTitle>
@@ -110,38 +110,65 @@ export default function EamDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{dashboard.total_clients}</div>
-                <p className="text-xs text-muted-foreground">Referred book</p>
+                <p className="text-xs text-muted-foreground">Your firm’s client book</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Verified
+                  Awaiting verification
                 </CardTitle>
                 <ShieldCheckIcon className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{dashboard.verified_clients}</div>
-                <p className="text-xs text-muted-foreground">
-                  of {dashboard.total_clients} clients
-                </p>
+                <div className="text-2xl font-bold">
+                  {dashboard.total_clients - dashboard.verified_clients}
+                </div>
+                <p className="text-xs text-muted-foreground">Client onboarding action</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Participation
+                  Open conversations
                 </CardTitle>
                 <DollarSignIcon className="size-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{dashboard.open_discussions}</div>
+                <p className="text-xs text-muted-foreground">Client questions</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Participation
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
                   {formatPrice(dashboard.total_participation)}
                 </div>
-                <p className="text-xs text-muted-foreground">Total committed</p>
+                <p className="text-xs text-muted-foreground">Committed and requested</p>
               </CardContent>
             </Card>
           </div>
+
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Client stages</h2>
+            <div className="grid gap-2 sm:grid-cols-4">
+              {(["prospect", "onboarding", "active", "inactive"] as const).map((stage) => (
+                <Link
+                  key={stage}
+                  to={`/eam/clients?stage=${stage}`}
+                  className="flex items-center justify-between rounded-lg border px-4 py-3 text-sm hover:bg-muted/50"
+                >
+                  <span>{STAGE_LABELS[stage]}</span>
+                  <strong>{dashboard.clients_by_stage[stage]}</strong>
+                </Link>
+              ))}
+            </div>
+          </section>
 
           {/* Needs your attention */}
           <section>
@@ -186,6 +213,54 @@ export default function EamDashboard() {
             </div>
           </section>
 
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Investment progress</h2>
+              <Link className="text-sm text-primary hover:underline" to="/eam/reports">
+                View client reports →
+              </Link>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Investment processing is handled by the investor, LUCA and Akula Ops. Your firm can
+              follow the stage and help clients with questions.
+            </p>
+            {dashboard.investment_progress.length === 0 ? (
+              <p className="rounded-lg border p-4 text-sm text-muted-foreground">
+                No active investment requests in this client book.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full min-w-[620px] text-left text-sm">
+                  <thead className="bg-muted/50 text-xs text-muted-foreground">
+                    <tr>
+                      <th className="p-3">Client</th>
+                      <th className="p-3">Opportunity</th>
+                      <th className="p-3">Requested</th>
+                      <th className="p-3">Current stage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboard.investment_progress.slice(0, 8).map((item) => (
+                      <tr key={item.id} className="border-t">
+                        <td className="p-3">
+                          <Link
+                            className="font-medium text-primary hover:underline"
+                            to={`/eam/clients/${item.adviser_client_id}?tab=activity`}
+                          >
+                            {item.client_name}
+                          </Link>
+                        </td>
+                        <td className="p-3">{item.asset_name}</td>
+                        <td className="p-3">{formatPrice(Number(item.amount))}</td>
+                        <td className="p-3 capitalize">{item.status.replaceAll("_", " ")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
           {/* Opportunity highlights */}
           <section>
             <div className="mb-3 flex items-center justify-between">
@@ -226,6 +301,21 @@ export default function EamDashboard() {
               ))}
             </div>
           </section>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Link className="rounded-lg border p-4 text-sm hover:bg-muted/50" to="/eam/support">
+              <strong>Client support →</strong>
+              <p className="mt-1 text-muted-foreground">Raise and follow tracked cases.</p>
+            </Link>
+            <Link className="rounded-lg border p-4 text-sm hover:bg-muted/50" to="/eam/documents">
+              <strong>Client documents →</strong>
+              <p className="mt-1 text-muted-foreground">Find deal-linked material.</p>
+            </Link>
+            <Link className="rounded-lg border p-4 text-sm hover:bg-muted/50" to="/eam/revenue">
+              <strong>Revenue share →</strong>
+              <p className="mt-1 text-muted-foreground">Review illustrative attribution.</p>
+            </Link>
+          </div>
 
           {/* Client servicing queue */}
           <section>
