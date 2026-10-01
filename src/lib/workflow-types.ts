@@ -161,6 +161,7 @@ export type WorkflowView = WorkflowState & {
     name: string;
     state: string;
     company: string;
+    sector: string;
     descriptor: string;
     hook: string;
     minimum: string;
