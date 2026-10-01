@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import type { AdviserClient, ClientStage } from "../types";
 import { STAGE_LABELS } from "../types";
@@ -20,15 +20,18 @@ const STAGE_VARIANT: Record<ClientStage, "default" | "secondary" | "outline" | "
 
 export default function ClientsPage() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState<ClientStage | "all">("all");
+  const stageFilter = STAGES.includes(params.get("stage") as ClientStage)
+    ? (params.get("stage") as ClientStage)
+    : "all";
 
   const { data, isLoading } = useQuery({
     queryKey: ["eamClients"],
     queryFn: () => api<AdviserClient[]>("/api/v1/eam/clients"),
   });
 
-  const clients = data ?? [];
+  const clients = useMemo(() => data ?? [], [data]);
 
   const filtered = useMemo(() => {
     let result = clients;
@@ -72,7 +75,7 @@ export default function ClientsPage() {
             key={s}
             variant={stageFilter === s ? "secondary" : "outline"}
             size="sm"
-            onClick={() => setStageFilter(s)}
+            onClick={() => setParams(s === "all" ? {} : { stage: s })}
             className="rounded-full text-xs"
           >
             {s === "all" ? "All" : STAGE_LABELS[s]}
