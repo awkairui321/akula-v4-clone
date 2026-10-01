@@ -93,6 +93,9 @@ export default function ComposeCommunicationPage() {
   const [audienceType, setAudienceType] = useState<CommunicationAudienceType>("fund");
   const [fundId, setFundId] = useState<string | null>(null);
   const [individualId, setIndividualId] = useState<string | null>(null);
+  const [investorSearch, setInvestorSearch] = useState("");
+  const [attachmentFund, setAttachmentFund] = useState("all");
+  const [attachmentSearch, setAttachmentSearch] = useState("");
   const [filters, setFilters] = useState<AudienceFilters>({
     verificationStatus: "all",
     accreditationStatus: "all",
@@ -126,7 +129,12 @@ export default function ComposeCommunicationPage() {
   // Signed subscription agreements are per-investor legal records, not
   // broadcast collateral — exclude them from what a communication can attach.
   const documents = (documentsData?.documents ?? []).filter(
-    (d) => d.has_file && d.kind !== "agreement",
+    (d) => d.has_file && d.fund_id !== null && d.subscription_id === null && d.kind !== "agreement",
+  );
+  const visibleDocuments = documents.filter(
+    (d) =>
+      (attachmentFund === "all" || String(d.fund_id) === attachmentFund) &&
+      `${d.name} ${d.fund_name ?? ""}`.toLowerCase().includes(attachmentSearch.toLowerCase()),
   );
   const fundSubs = fundSubsData?.subscriptions ?? [];
   const eamFirms = useMemo(
@@ -226,13 +234,19 @@ export default function ComposeCommunicationPage() {
                     { value: "fund", label: "By fund" },
                     { value: "individual", label: "Individual investor" },
                     { value: "filtered_group", label: "Filtered group" },
+                    { value: "eam", label: "By EAM" },
                   ] as const
                 ).map((opt) => (
                   <Button
                     key={opt.value}
                     size="sm"
                     variant={audienceType === opt.value ? "secondary" : "outline"}
-                    onClick={() => setAudienceType(opt.value)}
+                    onClick={() => {
+                      if (opt.value === "eam") {
+                        setAudienceType("filtered_group");
+                        setFilters((current) => ({ ...current, eamFirm: eamFirms[0] ?? "all" }));
+                      } else setAudienceType(opt.value);
+                    }}
                   >
                     {opt.label}
                   </Button>
@@ -260,13 +274,29 @@ export default function ComposeCommunicationPage() {
                     <SelectValue placeholder="Select an investor…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {investors.map((i) => (
-                      <SelectItem key={i.id} value={String(i.id)}>
-                        {i.full_name} · {i.email}
-                      </SelectItem>
-                    ))}
+                    {investors
+                      .filter((i) =>
+                        `${i.full_name} ${i.email}`
+                          .toLowerCase()
+                          .includes(investorSearch.toLowerCase()),
+                      )
+                      .map((i) => (
+                        <SelectItem key={i.id} value={String(i.id)}>
+                          {i.full_name} · {i.email}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
+              )}
+
+              {audienceType === "individual" && (
+                <Input
+                  aria-label="Search recipients"
+                  placeholder="Search recipient name or email"
+                  value={investorSearch}
+                  onChange={(event) => setInvestorSearch(event.target.value)}
+                  className="sm:max-w-80"
+                />
               )}
 
               {audienceType === "filtered_group" && (
@@ -341,13 +371,43 @@ export default function ComposeCommunicationPage() {
           </Card>
 
           <Card>
-            <CardContent className="space-y-4 pt-6">
+            <CardContent className="space-y-3 !py-3">
               <p className="text-sm font-medium">Attachments</p>
+              <div className="flex flex-wrap gap-2">
+                <Select
+                  value={attachmentFund}
+                  onValueChange={(value) => {
+                    setAttachmentFund(value ?? "all");
+                    setAttachmentIds(new Set());
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-64">
+                    <SelectValue placeholder="Select deal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All deals</SelectItem>
+                    {funds.map((fund) => (
+                      <SelectItem key={fund.id} value={String(fund.id)}>
+                        {fund.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  aria-label="Search deal documents"
+                  placeholder="Search deal documents"
+                  value={attachmentSearch}
+                  onChange={(event) => setAttachmentSearch(event.target.value)}
+                  className="sm:max-w-64"
+                />
+              </div>
               {documents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No documents on file to attach.</p>
+                <p className="text-sm text-muted-foreground">
+                  No shareable deal documents on file.
+                </p>
               ) : (
-                <div className="max-h-56 space-y-2 overflow-y-auto">
-                  {documents.map((doc) => (
+                <div className="max-h-40 space-y-2 overflow-y-auto">
+                  {visibleDocuments.map((doc) => (
                     <label key={doc.id} className="flex items-center gap-2 text-sm">
                       <Checkbox
                         checked={attachmentIds.has(doc.id)}
@@ -367,7 +427,7 @@ export default function ComposeCommunicationPage() {
           </Card>
 
           <Card>
-            <CardContent className="space-y-4 pt-6">
+            <CardContent className="space-y-3 !py-3">
               <p className="text-sm font-medium">Routing</p>
               <div className="flex flex-wrap gap-2">
                 <Button
