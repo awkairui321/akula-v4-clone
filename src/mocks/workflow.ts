@@ -243,13 +243,15 @@ export function view(user: db.MockUser): WorkflowView {
     ...workflow,
     actor: { id: user.id, role: user.role, email: user.email },
     storageWarning,
-    clients: ids.map((id) => ({
-      id,
-      name:
-        db.adminInvestors().find((i) => i.id === id)?.full_name ||
-        db.findUserById(id)?.email ||
-        `Investor ${id}`,
-    })),
+    clients: ids.map((id) => {
+      const investor = db.adminInvestors().find((i) => i.id === id);
+      return {
+        id,
+        name: investor?.full_name || db.findUserById(id)?.email || `Investor ${id}`,
+        type: investor?.investor_type === "individual" ? "individual" : "entity",
+        eamFirm: investor?.eam_firm ?? null,
+      };
+    }),
     subscriptions: subs.map((s) => ({
       ...db.toSubscription(s),
       investor_id: s.investor_id,
@@ -261,7 +263,17 @@ export function view(user: db.MockUser): WorkflowView {
     holdings,
     funds: db.funds
       .filter((f) => privileged || f.state !== "draft")
-      .map((f) => ({ id: f.id, name: f.codename || f.name, state: f.state })),
+      .map((f) => ({
+        id: f.id,
+        name: f.codename || f.name,
+        state: f.state,
+        company: f.asset.name,
+        descriptor: f.descriptor,
+        hook: f.hook,
+        minimum: f.min_subscription,
+        closesAt: f.closes_at,
+        risks: f.asset.risks.map((risk) => risk.title),
+      })),
     receipts: workflow.receipts.filter((r) => sid.has(r.subscriptionId)),
     allocations: workflow.allocations.filter((r) => sid.has(r.subscriptionId)),
     returns: workflow.returns.filter((r) => sid.has(r.subscriptionId)),
