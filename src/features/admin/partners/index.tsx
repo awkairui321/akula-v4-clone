@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
+import { CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
 import type { PartnersResponse } from "../types";
+import type { SubscriptionsResponse } from "../types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SearchIcon } from "lucide-react";
@@ -24,8 +26,8 @@ export default function AdminPartnersPage() {
   const summary = data?.summary;
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <div className="mb-6 space-y-2">
+    <div className="w-full space-y-5">
+      <div className="space-y-1">
         <h1 className="text-3xl font-bold tracking-tight">Partners</h1>
         <p className="text-muted-foreground">
           EAM firms distributing on the platform, and the book of business behind each.
@@ -33,12 +35,14 @@ export default function AdminPartnersPage() {
       </div>
 
       {summary && (
-        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           <SummaryTile label="Partner firms" value={String(summary.total)} />
           <SummaryTile label="Clients under advice" value={String(summary.total_clients)} />
           <SummaryTile label="Accrued revenue" value={formatPrice(summary.accrued_revenue)} />
         </div>
       )}
+
+      <PartnerDistribution partners={partners} />
 
       <div className="relative mb-4">
         <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -88,6 +92,38 @@ export default function AdminPartnersPage() {
       )}
     </div>
   );
+}
+
+function PartnerDistribution({ partners }: { partners: PartnersResponse["partners"] }) {
+  const { data } = useQuery({
+    queryKey: ["admin", "subscriptions", "partner-distribution"],
+    queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
+  });
+  const subscriptions = data?.subscriptions ?? [];
+  const firmBuckets = [
+    { label: "1–5 clients", count: partners.filter((p) => p.client_count >= 1 && p.client_count <= 5).length },
+    { label: "6–10 clients", count: partners.filter((p) => p.client_count >= 6 && p.client_count <= 10).length },
+    { label: "11+ clients", count: partners.filter((p) => p.client_count >= 11).length },
+  ];
+  const clientBuckets = [
+    { label: "$1–100K", min: 1, max: 100_000 },
+    { label: "$100K–$1M", min: 100_000, max: 1_000_000 },
+    { label: "$1M–$10M", min: 1_000_000, max: 10_000_000 },
+    { label: "$10M+", min: 10_000_000, max: Infinity },
+  ].map((bucket) => {
+    const amounts = new Map<number, number>();
+    for (const sub of subscriptions) if (sub.eam_firm && !CLOSED_SUBSCRIPTION_STATUSES.includes(sub.status)) amounts.set(sub.investor_id, (amounts.get(sub.investor_id) ?? 0) + Number(sub.amount));
+    return { label: bucket.label, count: [...amounts.values()].filter((amount) => amount >= bucket.min && amount < bucket.max).length };
+  });
+  return <div className="grid gap-3 lg:grid-cols-2">
+    <DistributionCard title="Partner firm size" subtitle="Firms grouped by number of advised clients" rows={firmBuckets} />
+    <DistributionCard title="Client open subscriptions" subtitle="Clients grouped by open recorded subscription amount" rows={clientBuckets} />
+  </div>;
+}
+
+function DistributionCard({ title, subtitle, rows }: { title: string; subtitle: string; rows: { label: string; count: number }[] }) {
+  const max = Math.max(1, ...rows.map((row) => row.count));
+  return <Card><CardContent className="space-y-3 pt-4"><div><h2 className="font-semibold">{title}</h2><p className="text-xs text-muted-foreground">{subtitle}</p></div>{rows.map((row) => <div key={row.label} className="grid grid-cols-[90px_1fr_28px] items-center gap-3 text-sm"><span className="text-muted-foreground">{row.label}</span><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${(row.count / max) * 100}%` }} /></div><span className="text-right tabular-nums">{row.count}</span></div>)}</CardContent></Card>;
 }
 
 function SummaryTile({ label, value }: { label: string; value: string }) {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -15,7 +15,6 @@ import type {
 } from "./types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -27,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SearchIcon, CheckIcon } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const IDENTITY_CHOICES: IdentityStatus[] = ["pending", "verified", "failed"];
 const ACCREDITATION_CHOICES: AccreditationStatus[] = ["pending", "accredited", "not_accredited"];
@@ -58,17 +58,6 @@ export function SearchModeSelect({ mode }: { mode: "investor" | "fund" | "eam" }
         <SelectItem value="eam">Search by EAM</SelectItem>
       </SelectContent>
     </Select>
-  );
-}
-
-function SummaryTile({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-bold">{value}</p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -204,7 +193,9 @@ function OnboardingReviewDialog({
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const mode = searchParams.get("mode") ?? "people";
   const [search, setSearch] = useState("");
   const [reviewing, setReviewing] = useState<AdminInvestor | null>(null);
 
@@ -213,7 +204,6 @@ export default function OnboardingPage() {
     queryFn: () => api<InvestorsResponse>("/api/v1/admin/investors"),
   });
   const investors = data?.investors ?? [];
-  const summary = data?.summary;
 
   const { data: fundsData } = useQuery({
     queryKey: ["admin", "funds"],
@@ -267,135 +257,46 @@ export default function OnboardingPage() {
       .filter((group) => group.rows.length > 0);
   }, [funds, allSubs, approvedById, q]);
 
+  const codeFor = (id: number) => {
+    let n = Math.imul(id + 0x4b1d, 2654435761) >>> 0;
+    let code = "";
+    for (let i = 0; i < 5; i++) { code += "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[n % 36]; n = (Math.imul(n, 1664525) + 1013904223) >>> 0; }
+    return code;
+  };
+  const entityGroups = new Map<string, Map<number, { investor: AdminInvestor; amount: number }>>();
+  for (const sub of allSubs) {
+    if (!sub.eam_firm) continue;
+    const investor = investors.find((item) => item.id === sub.investor_id);
+    if (!investor || !matches(investor)) continue;
+    if (!entityGroups.has(sub.eam_firm)) entityGroups.set(sub.eam_firm, new Map());
+    const group = entityGroups.get(sub.eam_firm)!;
+    const row = group.get(investor.id) ?? { investor, amount: 0 };
+    row.amount += Number(sub.amount) || 0;
+    group.set(investor.id, row);
+  }
+
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Onboarding</h1>
-        <p className="text-muted-foreground">
-          Verify new investors, and see who's already accepted into each fund.
-        </p>
+    <div className="w-full space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div><h1 className="text-3xl font-bold tracking-tight">Onboarding &amp; investor records</h1><p className="mt-1 text-muted-foreground">Find people, institutional entities and fund participation from one workspace.</p></div>
+        <div className="flex gap-2"><Badge variant="outline">{pendingIndividual.length} individual reviews</Badge><Badge variant="outline">{pendingEntity.length} entity reviews</Badge></div>
       </div>
-
-      {summary && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryTile label="Awaiting review" value={String(summary.needs_review)} />
-          <SummaryTile label="Approved" value={String(summary.approved)} />
-          <SummaryTile label="Rejected" value={String(summary.rejected)} />
-          <SummaryTile label="Total investors" value={String(summary.total)} />
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <SearchIcon className="absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search investors by name or email"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-11 pl-11 text-base"
-          />
-        </div>
-        <SearchModeSelect mode="investor" />
-      </div>
-
-      {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
-
-      {!isLoading && (
-        <>
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold">Pending onboarding</h2>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card>
-                <CardContent className="space-y-2 pt-6">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Individual · {pendingIndividual.length}
-                  </p>
-                  {pendingIndividual.length === 0 ? (
-                    <p className="py-4 text-center text-sm text-muted-foreground">
-                      Nothing pending.
-                    </p>
-                  ) : (
-                    pendingIndividual.map((investor) => (
-                      <PendingRow
-                        key={investor.id}
-                        investor={investor}
-                        onOpen={() => setReviewing(investor)}
-                      />
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="space-y-2 pt-6">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Entity · {pendingEntity.length}
-                  </p>
-                  {pendingEntity.length === 0 ? (
-                    <p className="py-4 text-center text-sm text-muted-foreground">
-                      Nothing pending.
-                    </p>
-                  ) : (
-                    pendingEntity.map((investor) => (
-                      <PendingRow
-                        key={investor.id}
-                        investor={investor}
-                        onOpen={() => setReviewing(investor)}
-                      />
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold">Accepted investors, by fund</h2>
-            {rosterByFund.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No accepted investors match yet.
-              </p>
-            ) : (
-              rosterByFund.map(({ fund, rows }) => (
-                <Card key={fund.id}>
-                  <CardContent className="space-y-2 pt-6">
-                    <p className="text-sm font-medium">
-                      {fund.codename} · {fund.asset.name}
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {rows.length} investor{rows.length === 1 ? "" : "s"}
-                      </span>
-                    </p>
-                    <div className="divide-y">
-                      {rows.map(({ investor, eamFirm, committed }) => (
-                        <button
-                          key={investor.id}
-                          onClick={() => navigate(`/luca/investors/${investor.id}`)}
-                          className="flex w-full items-center justify-between gap-4 py-2.5 text-left text-sm first:pt-0 last:pb-0 hover:text-primary"
-                        >
-                          <span className="truncate font-medium">{investor.full_name}</span>
-                          <span className="shrink-0 text-muted-foreground">
-                            {eamFirm ?? "Direct"}
-                          </span>
-                          <span className="shrink-0 text-right font-medium">
-                            {formatPrice(committed)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </>
-      )}
-
-      {reviewing && (
-        <OnboardingReviewDialog
-          investor={reviewing}
-          onClose={() => setReviewing(null)}
-          onReviewed={() => queryClient.invalidateQueries({ queryKey: ["admin", "investors"] })}
-        />
-      )}
+      <div className="relative max-w-2xl"><SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Search investors, entities or email" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" /></div>
+      <Tabs value={mode} onValueChange={(value) => setSearchParams(value === "people" ? {} : { mode: value })}>
+        <TabsList><TabsTrigger value="people">Investors</TabsTrigger><TabsTrigger value="entities">Entities &amp; advisers</TabsTrigger><TabsTrigger value="funds">By fund</TabsTrigger></TabsList>
+        {isLoading && <p className="py-12 text-center text-muted-foreground">Loading investor records…</p>}
+        {!isLoading && <>
+          <TabsContent value="people" className="mt-4 space-y-4">
+            <details open className="rounded-lg border"><summary className="cursor-pointer px-4 py-3 font-medium">Awaiting review <span className="ml-2 text-sm text-muted-foreground">{pendingIndividual.length} individuals · {pendingEntity.length} entities</span></summary><div className="grid gap-4 border-t p-4 lg:grid-cols-2">{[["Individual", pendingIndividual], ["Entity", pendingEntity]].map(([label, rows]) => <section key={String(label)} className="space-y-2"><h3 className="text-sm font-semibold">{label as string} · {(rows as AdminInvestor[]).length}</h3>{(rows as AdminInvestor[]).map((investor) => <PendingRow key={investor.id} investor={investor} onOpen={() => setReviewing(investor)} />)}</section>)}</div></details>
+            <details open className="rounded-lg border"><summary className="cursor-pointer px-4 py-3 font-medium">Investor directory <span className="ml-2 text-sm text-muted-foreground">{investors.filter(matches).length} records</span></summary><div className="overflow-x-auto border-t"><table className="w-full min-w-[700px] text-sm"><thead className="bg-muted/40 text-left text-xs text-muted-foreground"><tr><th className="px-4 py-2">Client code</th><th className="px-4 py-2">Investor</th><th className="px-4 py-2">Type</th><th className="px-4 py-2">Status</th><th className="px-4 py-2 text-right">Open commitments</th></tr></thead><tbody className="divide-y">{investors.filter(matches).map((investor) => <tr key={investor.id} className="cursor-pointer hover:bg-muted/30" onClick={() => navigate(`/luca/investors/${investor.id}`)}><td className="px-4 py-3 font-mono text-xs">{codeFor(investor.id)}</td><td className="px-4 py-3"><span className="font-medium">{investor.full_name}</span><span className="block text-xs text-muted-foreground">{investor.email}</span></td><td className="px-4 py-3">{investor.investor_type === "institutional" ? "Entity" : "Individual"}</td><td className="px-4 py-3"><Badge variant="outline">{investor.verification_status.replaceAll("_", " ")}</Badge></td><td className="px-4 py-3 text-right">{formatPrice(Number(investor.committed_amount))}</td></tr>)}</tbody></table></div></details>
+          </TabsContent>
+          <TabsContent value="entities" className="mt-4 space-y-3"><p className="text-sm text-muted-foreground">Institutional accounts and adviser client books are shown as distinct relationships. Adviser links come from recorded subscription records; the demo does not infer legal ownership between accounts.</p>
+            <details open className="rounded-lg border"><summary className="cursor-pointer px-4 py-3 font-medium">Institutional investor accounts <span className="ml-2 text-sm text-muted-foreground">{investors.filter((i) => i.investor_type === "institutional" && matches(i)).length}</span></summary><div className="divide-y border-t px-4">{investors.filter((i) => i.investor_type === "institutional" && matches(i)).map((investor) => <Link key={investor.id} to={`/luca/investors/${investor.id}`} className="flex items-center justify-between gap-4 py-3 text-sm hover:text-primary"><span><span className="font-mono text-xs text-muted-foreground">{codeFor(investor.id)} · </span><span className="font-medium">{investor.full_name}</span><span className="block text-xs text-muted-foreground">{investor.email}</span></span><Badge variant="outline">{investor.verification_status.replaceAll("_", " ")}</Badge></Link>)}</div></details>
+            {[...entityGroups].filter(([name]) => !q || name.toLowerCase().includes(q)).map(([name, clients]) => <details key={name} className="rounded-lg border"><summary className="cursor-pointer px-4 py-3 font-medium">Adviser · {name}<span className="ml-2 text-sm text-muted-foreground">{clients.size} linked clients</span></summary><div className="overflow-x-auto border-t"><table className="w-full min-w-[600px] text-sm"><tbody className="divide-y">{[...clients.values()].map(({ investor, amount }) => <tr key={investor.id}><td className="px-4 py-3 font-mono text-xs">{codeFor(investor.id)}</td><td className="px-4 py-3"><Link to={`/luca/investors/${investor.id}`} className="font-medium hover:underline">{investor.full_name}</Link><span className="block text-xs text-muted-foreground">{investor.email} · {investor.investor_type === "institutional" ? "Entity" : "Individual"}</span></td><td className="px-4 py-3 text-right">{formatPrice(amount)}</td></tr>)}</tbody></table></div></details>)}</TabsContent>
+          <TabsContent value="funds" className="mt-4 space-y-3">{rosterByFund.map(({ fund, rows }) => <details key={fund.id} className="rounded-lg border"><summary className="cursor-pointer px-4 py-3 font-medium">{fund.codename} · {fund.asset.name}<span className="ml-2 text-sm text-muted-foreground">{rows.length} investors</span></summary><div className="divide-y border-t px-4">{rows.map(({ investor, eamFirm, committed }) => <button key={investor.id} onClick={() => navigate(`/luca/investors/${investor.id}`)} className="flex w-full items-center justify-between gap-4 py-3 text-left text-sm hover:text-primary"><span className="min-w-0"><span className="font-mono text-xs text-muted-foreground">{codeFor(investor.id)} · </span><span className="font-medium">{investor.full_name}</span><span className="block text-xs text-muted-foreground">{eamFirm ?? "Direct"} · {investor.investor_type === "institutional" ? "Entity" : "Individual"}</span></span><span className="shrink-0 font-medium">{formatPrice(committed)}</span></button>)}</div></details>)}</TabsContent>
+        </>}
+      </Tabs>
+      {reviewing && <OnboardingReviewDialog investor={reviewing} onClose={() => setReviewing(null)} onReviewed={() => queryClient.invalidateQueries({ queryKey: ["admin", "investors"] })} />}
     </div>
   );
 }

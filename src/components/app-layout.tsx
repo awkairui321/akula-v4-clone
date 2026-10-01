@@ -10,9 +10,7 @@ import {
   Clock3,
   FileTextIcon,
   PanelLeft,
-  Moon,
   UserIcon,
-  LifeBuoyIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -22,13 +20,13 @@ import {
   DropdownMenuItem,
 } from "./ui/dropdown-menu";
 import ProfileSwitcher from "./profile-switcher";
+import DemoResetButton from "./demo-reset-button";
 
 const NAV_ITEMS = [
   { to: "/portfolio", label: "Portfolio", icon: Clock3 },
   { to: "/funds", label: "Invest", icon: TrendingUp },
   { to: "/documents", label: "Documents", icon: FileTextIcon },
-  { to: "/account", label: "Account", icon: UserIcon },
-  { to: "/support", label: "Support", icon: LifeBuoyIcon },
+  { to: "/account", label: "Account & Support", icon: UserIcon },
 ];
 
 type InvestorProfile = {
@@ -71,7 +69,7 @@ export default function AppLayout() {
   }, []);
   const activeItem = NAV_ITEMS.find(
     (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
-  );
+  ) ?? (location.pathname === "/support" ? NAV_ITEMS.find((item) => item.to === "/account") : undefined);
 
   const { data, isLoading } = useQuery({
     queryKey: ["investorProfile"],
@@ -82,16 +80,16 @@ export default function AppLayout() {
   return (
     <div className="flex min-h-screen">
       <aside
-        className={`${collapsed ? "w-16" : "w-40 md:w-56"} flex shrink-0 flex-col border-r transition-all`}
+        className={`akula-sidebar ${collapsed ? "w-16" : "w-40 md:w-56"} flex shrink-0 flex-col border-r transition-all`}
       >
         <Link to="/funds" className="mt-1 px-3 py-4">
           <div className={`flex flex-row ${collapsed ? "justify-center" : ""}`}>
             <Circle className={collapsed ? "" : "mx-2"} />
-            {!collapsed && <div className="uppercase">Akula Labs</div>}
+            {!collapsed && <div className="uppercase text-[11px] font-semibold tracking-[0.16em]">PRIVATE MARKETS</div>}
           </div>
         </Link>
         <nav className="flex flex-col gap-1 px-3 py-4">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.map((item, index) => (
             <Link key={item.to} to={item.to}>
               <Button
                 variant={activeItem?.to === item.to ? "secondary" : "ghost"}
@@ -100,7 +98,7 @@ export default function AppLayout() {
                 title={collapsed ? item.label : undefined}
               >
                 <item.icon className={collapsed ? "" : "mr-2"} />
-                {!collapsed && item.label}
+                {!collapsed && <><span className="mr-1 text-[10px] opacity-60">{String(index + 1).padStart(2, "0")}</span>{item.label}</>}
               </Button>
             </Link>
           ))}
@@ -108,7 +106,7 @@ export default function AppLayout() {
         <ProfileSwitcher collapsed={collapsed} />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-muted">
+      <div className="flex min-w-0 flex-1 flex-col bg-background">
         <header className="flex items-center border-b px-6 py-4">
           <div className="flex items-center">
             <Button
@@ -121,10 +119,9 @@ export default function AppLayout() {
             </Button>
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
-          <div className="ml-auto flex items-center">
-            <Button variant="ghost" size="icon">
-              <Moon />
-            </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>Compare roles live</Button>
+            <DemoResetButton compact />
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -144,12 +141,6 @@ export default function AppLayout() {
         </header>
 
         <main className="mx-auto w-full max-w-310 flex-1 px-3 py-6 sm:px-6 sm:py-8">
-          <Link
-            to="/workflows"
-            className="mb-5 inline-block rounded-md border bg-background px-4 py-2 text-sm"
-          >
-            Connected workflows · servicing & records →
-          </Link>
           <Outlet />
         </main>
       </div>

@@ -59,9 +59,9 @@ function sectionsFor(_fund: Fund): { id: SectionId; nav: string }[] {
     { id: "market", nav: "Market & competitive" },
     { id: "business", nav: "Business model" },
     { id: "financials", nav: "Financials" },
+    { id: "risks", nav: "Risks" },
     { id: "recording", nav: "Recordings" },
     { id: "documents", nav: "Documents" },
-    { id: "risks", nav: "Risks" },
   ];
 }
 
@@ -300,27 +300,16 @@ function OverviewSection({ asset }: { asset: Asset }) {
         </div>
       )}
 
-      {asset.team.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Who leads the company</h3>
-          <ul className="divide-y">
-            {asset.team.map((t) => (
-              <li
-                key={t.name}
-                className="flex flex-wrap items-baseline justify-between gap-x-4 py-2.5 first:pt-0 last:pb-0"
-              >
-                <div>
-                  <span className="font-medium">{t.name}</span>
-                  <span className="ml-2 text-sm text-muted-foreground">{t.role}</span>
-                </div>
-                {t.note && <p className="basis-full text-xs text-muted-foreground">{t.note}</p>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
+}
+
+function LeadershipSection({ asset }: { asset: Asset }) {
+  if (asset.team.length === 0) return null;
+  return <div className="leadership-grid">
+    <h3>Who leads the company</h3>
+    <ul>{asset.team.map((person) => <li key={person.name}><strong>{person.name}</strong><span>{person.role}</span>{person.note && <p>{person.note}</p>}</li>)}</ul>
+  </div>;
 }
 
 /* ─── Market section ─── */
@@ -657,7 +646,7 @@ function RecordingSection({ fund }: { fund: Fund }) {
 
 /* ─── Documents section ─── */
 
-function DocumentsSection({ fund, viewer }: { fund: Fund; viewer: "investor" | "luca" }) {
+function DocumentsSection({ fund, viewer }: { fund: Fund; viewer: "investor" | "luca" | "eam" }) {
   const { data, isLoading } = useQuery({
     queryKey: ["documents", { fund_id: fund.id }],
     queryFn: () => api<{ documents: Document[] }>(`/api/v1/documents?fund_id=${fund.id}`),
@@ -866,12 +855,14 @@ export default function DealOverviewPage({
   backTo,
   backLabel,
   onEditDeal,
+  preview = false,
 }: {
   fund: Fund;
-  viewer: "investor" | "luca";
+  viewer: "investor" | "luca" | "eam";
   backTo: string;
   backLabel: string;
   onEditDeal?: () => void;
+  preview?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { asset } = fund;
@@ -882,7 +873,7 @@ export default function DealOverviewPage({
   const { data: watchlistData } = useQuery({
     queryKey: ["watchlist"],
     queryFn: () => api<{ watchlist: WatchlistItem[] }>("/api/v1/watchlist"),
-    enabled: viewer === "investor",
+    enabled: viewer === "investor" && !preview,
   });
   const isWatchlisted = watchlistData?.watchlist?.some((w) => w.fund_id === fund.id);
   const toggleWatchlist = useMutation({
@@ -894,15 +885,15 @@ export default function DealOverviewPage({
   });
 
   return (
-    <div ref={topRef} className="deal-reading-page mx-auto w-full max-w-6xl min-w-0 space-y-8">
+    <div ref={topRef} className="deal-reading-page pompom-deal mx-auto w-full max-w-6xl min-w-0 space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link to={backTo}>
+        {preview ? <Badge variant="outline">{viewer === "eam" ? "EAM" : "Investor"} preview · read only</Badge> : <Link to={backTo}>
           <Button variant="ghost" size="sm" className="p-0">
             <ArrowLeftIcon className="mr-1 size-4" />
             {backLabel}
           </Button>
-        </Link>
-        {viewer === "investor" ? (
+        </Link>}
+        {viewer === "investor" && !preview ? (
           <Button
             variant={isWatchlisted ? "secondary" : "outline"}
             size="sm"
@@ -912,7 +903,7 @@ export default function DealOverviewPage({
             <BookmarkIcon className={`mr-1 size-4 ${isWatchlisted ? "fill-current" : ""}`} />
             {isWatchlisted ? "Watchlisted" : "Add to watchlist"}
           </Button>
-        ) : (
+        ) : viewer === "luca" ? (
           <div className="flex items-center gap-2">
             <Badge variant="outline">LUCA SGP authoring</Badge>
             {onEditDeal && (
@@ -921,7 +912,7 @@ export default function DealOverviewPage({
               </Button>
             )}
           </div>
-        )}
+        ) : null}
       </div>
 
       <Hero fund={fund} />
@@ -940,8 +931,10 @@ export default function DealOverviewPage({
               <OverviewSection asset={asset} />
               <div className="space-y-4 lg:sticky lg:top-8 lg:self-start">
                 <TermsPanel fund={fund} />
-                {viewer === "investor" ? (
+                {viewer === "investor" && !preview ? (
                   <SubscribeCalculator fund={fund} />
+                ) : preview ? (
+                  <div className="rounded-lg border bg-muted/30 p-4 text-sm"><p className="font-medium">{viewer === "eam" ? "Adviser-facing opportunity" : "Investor opportunity access"}</p><p className="mt-1 text-xs text-muted-foreground">Read-only preview. No allocation, watchlist or subscription is created.</p></div>
                 ) : (
                   <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
                     Investors see a subscribe calculator here. LUCA sees deal terms only.
@@ -949,6 +942,7 @@ export default function DealOverviewPage({
                 )}
               </div>
             </div>
+            <LeadershipSection asset={asset} />
           </SectionShell>
 
           {sections.some((s) => s.id === "market") && (
@@ -981,22 +975,6 @@ export default function DealOverviewPage({
             </SectionShell>
           )}
 
-          <SectionShell
-            id="recording"
-            title="Recorded overview"
-            standfirst="Optional viewing. The written overview stands on its own."
-          >
-            <RecordingSection fund={fund} />
-          </SectionShell>
-
-          <SectionShell
-            id="documents"
-            title="Documents and updates"
-            standfirst="The source material behind this overview and the deal's published materials."
-          >
-            <DocumentsSection fund={fund} viewer={viewer} />
-          </SectionShell>
-
           {sections.some((s) => s.id === "risks") && (
             <SectionShell
               id="risks"
@@ -1006,6 +984,14 @@ export default function DealOverviewPage({
               <RisksSection asset={asset} />
             </SectionShell>
           )}
+
+          <SectionShell id="recording" title="Recorded overview" standfirst="Optional viewing. The written overview stands on its own.">
+            <RecordingSection fund={fund} />
+          </SectionShell>
+
+          <SectionShell id="documents" title="Documents and updates" standfirst="The source material behind this overview and the deal's published materials.">
+            <DocumentsSection fund={fund} viewer={viewer} />
+          </SectionShell>
         </div>
       </div>
 

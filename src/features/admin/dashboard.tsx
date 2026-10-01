@@ -90,18 +90,16 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <div className="mb-8 space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Command Dashboard</h1>
-        <p className="text-muted-foreground">
-          What's moving across every fund, and where LUCA needs to act.
-        </p>
+    <div className="w-full space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-4">
+        <div><p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">LUCA · Fund manager</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Operations overview</h1><p className="mt-1 text-muted-foreground">A clear view of capital, live deals and decisions requiring attention.</p></div>
+        <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm"><span className="text-muted-foreground">Action queue </span><strong>{pendingReview + (investors?.needs_review ?? 0) + (documents?.received ?? 0)}</strong><span className="ml-1 text-muted-foreground">items across reviews &amp; documents</span></div>
       </div>
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total AUM" icon={BanknoteIcon} value={formatPrice(aum)} to="/luca/deals" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard title="Capital in motion" icon={BanknoteIcon} value={formatPrice(aum)} note="Funded and active commitments" to="/luca/deals" />
         <StatCard
-          title="Total funded capital"
+          title="Confirmed funding"
           icon={CreditCard}
           value={formatPrice(funded)}
           to="/luca/subscriptions"
@@ -114,14 +112,14 @@ export default function AdminDashboard() {
           to="/luca/deals"
         />
         <StatCard
-          title="Pending LUCA review"
+          title="Subscription decisions"
           icon={UsersIcon}
           value={String(pendingReview)}
           to="/luca/subscriptions?status=under_luca_review"
         />
       </div>
 
-      <Card className="mb-8">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">Subscription pipeline</CardTitle>
         </CardHeader>
@@ -148,7 +146,7 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
-      <div className="mb-8 grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <StuckList
           title="Waiting on LUCA (>5 days)"
           empty="Nothing is stuck in LUCA review."

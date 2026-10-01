@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { ConsentList } from "@/features/investor/consent-section";
 import { UserIcon, CheckCircleIcon, ShieldIcon, KeyIcon, SmartphoneIcon } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type InvestorProfile = {
   id: number;
@@ -132,7 +133,6 @@ function TwoFactorSection() {
   const { user, refreshUser } = useAuth();
   const [step, setStep] = useState<"idle" | "setup" | "verify">("idle");
   const [secret, setSecret] = useState("");
-  const [provisioningUri, setProvisioningUri] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [disablePassword, setDisablePassword] = useState("");
   const [showDisable, setShowDisable] = useState(false);
@@ -150,7 +150,6 @@ function TwoFactorSection() {
         { method: "POST" },
       );
       setSecret(res.otp_secret);
-      setProvisioningUri(res.provisioning_uri);
       setStep("verify");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Setup failed");
@@ -172,7 +171,6 @@ function TwoFactorSection() {
       setStep("idle");
       setOtpCode("");
       setSecret("");
-      setProvisioningUri("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
@@ -278,17 +276,8 @@ function TwoFactorSection() {
           <form onSubmit={handleVerify} className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Scan this QR code with your authenticator app, or enter the secret key manually.
+                Add this account to your authenticator app using the setup key below. The setup secret stays in this demo and is not sent to a QR-code service.
               </p>
-              <div className="flex justify-center py-4">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(provisioningUri)}`}
-                  alt="2FA QR Code"
-                  className="rounded-lg border"
-                  width={200}
-                  height={200}
-                />
-              </div>
               <div className="rounded-lg bg-muted p-3">
                 <p className="mb-1 text-xs text-muted-foreground">Secret key</p>
                 <p className="font-mono text-sm break-all select-all">{secret}</p>
@@ -338,6 +327,7 @@ function TwoFactorSection() {
 /* ─── Main Page ─── */
 export default function AccountPage() {
   const { user } = useAuth();
+  const [section, setSection] = useState("profile");
 
   const { data, isLoading } = useQuery({
     queryKey: ["investorProfile"],
@@ -347,15 +337,18 @@ export default function AccountPage() {
   const profile = data?.investor_profile;
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
-      <h1 className="mb-6 text-3xl font-bold tracking-tight">Account</h1>
+    <div className="w-full max-w-5xl space-y-4">
+      <Tabs value={section} onValueChange={(value) => value && setSection(value)}>
+        <TabsList><TabsTrigger value="profile">Profile</TabsTrigger><TabsTrigger value="privacy">Consent &amp; privacy</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger></TabsList>
+      </Tabs>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
 
       {!isLoading && profile && (
-        <div className="space-y-4">
+        <>
+        {section === "profile" && <div className="grid items-stretch gap-4 lg:grid-cols-2">
           {/* Profile card */}
-          <Card>
+          <Card className="h-full">
             <CardContent className="flex items-center gap-4 pt-6">
               <div className="flex size-12 items-center justify-center rounded-full bg-muted">
                 <UserIcon className="size-6 text-muted-foreground" />
@@ -381,14 +374,14 @@ export default function AccountPage() {
           </Card>
 
           {/* Application details */}
-          <Card>
+          <Card className="h-full">
             <CardHeader>
               <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
                 Application
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="space-y-3">
+              <dl className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <dt className="text-sm text-muted-foreground">Reference</dt>
                   <dd className="font-mono text-sm font-medium">
@@ -415,22 +408,21 @@ export default function AccountPage() {
             </CardContent>
           </Card>
 
-          {/* Consent & privacy */}
-          <Separator className="my-2" />
-          <h2 className="text-lg font-semibold">Consent & privacy</h2>
-          <p className="-mt-2 text-sm text-muted-foreground">
-            Review what you've granted us permission to do. Withdrawing a required consent may limit
-            what we can share with you or your adviser.
-          </p>
+        </div>}
+
+        {section === "privacy" && <section className="max-w-4xl space-y-3">
+          <div><h2 className="text-lg font-semibold">Consent &amp; privacy</h2><p className="text-sm text-muted-foreground">Review your account permissions and communication preferences.</p></div>
           <ConsentList mode="management" />
+        </section>}
 
-          {/* Security section */}
-          <Separator className="my-2" />
-          <h2 className="text-lg font-semibold">Security</h2>
-
-          <ChangePasswordSection />
-          <TwoFactorSection />
-        </div>
+        {section === "security" && <section className="space-y-3">
+          <div><h2 className="text-lg font-semibold">Security</h2><p className="text-sm text-muted-foreground">Manage your sign-in credentials and second factor.</p></div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ChangePasswordSection />
+            <TwoFactorSection />
+          </div>
+        </section>}
+        </>
       )}
     </div>
   );

@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import DealOverviewPage from "@/components/deal-overview-page";
+import PublishedDealEditor from "@/features/admin/vehicles/published-deal-editor";
 import {
   Select,
   SelectTrigger,
@@ -198,6 +200,8 @@ function VehicleDetail({
   const applied = new Set(tags.map((t) => t.id));
   const [kind, setKind] = useState(DEAL_DOCUMENT_KINDS[0].value);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<"eam" | "investor" | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const upload = useMutation({
     mutationFn: (file: File) =>
@@ -234,45 +238,29 @@ function VehicleDetail({
   const investorVisible = documents.length;
 
   return (
-    <div className="@container mx-auto flex w-19/20 flex-col">
+    <div className="@container flex w-full max-w-[1400px] flex-col gap-5">
+      <PublishedDealEditor key={`${fund.id}-${editorOpen}`} fund={fund} open={editorOpen} onOpenChange={setEditorOpen} />
       {/* Published overview */}
-      <Card className="drop-shadow-lg">
-        <CardContent className="px-6 py-2">
+      <Card>
+        <CardContent className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="tracking-wide text-muted-foreground uppercase">Published overview</p>
               <h3 className="mt-1 text-2xl">{fund.codename}</h3>
-              <p className="text-sm text-muted-foreground">
-                Open the published deal to edit individual sections.
-              </p>
+              <p className="text-sm text-muted-foreground">Review the published investor and adviser views, or edit this deal directly.</p>
             </div>
-            <div className="gap- flex flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                title="Preview API pending"
-                //TODO
-              >
-                Preview as EAM
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                title="Preview API pending"
-                //TODO
-              >
-                Preview as investor
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPreview("eam")}>Preview as EAM</Button>
+              <Button variant="outline" size="sm" onClick={() => setPreview("investor")}>Preview as investor</Button>
+              <Button size="sm" onClick={() => setEditorOpen(true)}>Edit published overview</Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Materials & distribution */}
-      <Card className="drop-shadow-lg">
-        <CardContent className="space-y-4 px-6 py-2">
+      <Card>
+        <CardContent className="space-y-4 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="tracking-wide text-muted-foreground uppercase">
@@ -376,8 +364,8 @@ function VehicleDetail({
       </Card>
 
       {/* Shared tag library */}
-      <Card className="drop-shadow-lg">
-        <CardContent className="space-y-3 px-6 py-2">
+      <Card>
+        <CardContent className="space-y-3 p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="tracking-wide text-muted-foreground uppercase">Shared tag library</p>
@@ -422,22 +410,13 @@ function VehicleDetail({
 
           {tagError && <p className="text-sm text-destructive">{tagError}</p>}
 
-          {/* TODO: Add actual number of clients */}
-          <p className="rounded-lg border bg-muted p-4 text-muted-foreground">
-            2 referred clients currently share at least one tag. Akula surfaces the overlap to EAMs
-            but does not recommend or highlight the vehicle.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* EAM launch packet */}
-      <Card className="bg-muted/50 drop-shadow-lg">
-        <CardContent className="space-y-3 px-6 py-2">
-          <p className="tracking-wide text-muted-foreground uppercase">EAM launch packet</p>
-          <div className="grid grid-cols-2 gap-4 @xl:grid-cols-4">
+          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">Tag overlap is surfaced from shared vehicle and client tags in recorded relationships; it does not rank or recommend this deal.</p>
+          <div className="border-t pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">EAM launch packet · readiness</p>
+          <div className="mt-3 grid grid-cols-2 gap-3 @xl:grid-cols-4">
             <div className="rounded-lg border p-3">
               <p className="text-xs text-muted-foreground">Terms and pricing</p>
-              <p className="text-sm font-medium">TODO</p>
+              <p className="text-sm font-medium">{formatPrice(fund.min_subscription)} minimum · {formatPricePrecise(fund.price)} / unit</p>
             </div>
             <div className="rounded-lg border p-3">
               <p className="text-xs text-muted-foreground">Risks and disclosure</p>
@@ -456,8 +435,15 @@ function VehicleDetail({
               <p className="text-sm font-medium">{investorVisible} investor-visible</p>
             </div>
           </div>
+          </div>
         </CardContent>
       </Card>
+      <Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent className="max-h-[94vh] max-w-[96vw] overflow-y-auto p-4 sm:max-w-6xl">
+          <DialogTitle className="sr-only">{preview === "eam" ? "EAM" : "Investor"} opportunity preview</DialogTitle>
+          {preview && <DealOverviewPage key={`${fund.id}-${preview}`} fund={fund} viewer={preview} backTo="" backLabel="" preview />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
