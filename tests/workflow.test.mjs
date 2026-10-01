@@ -7,6 +7,7 @@ import ts from "typescript";
 const out = path.resolve(".test-runtime");
 for (const file of [
   "src/lib/types.ts",
+  "src/lib/client-code.ts",
   "src/mocks/db.ts",
   "src/mocks/workflow.ts",
   "src/mocks/handlers/workflow.ts",
@@ -376,5 +377,49 @@ test("EAM revenue share is calculated on the subscription fee base", async () =>
     data.transactions
       .filter((row) => row.status === "pending")
       .reduce((sum, row) => sum + row.share_amount, 0),
+  );
+});
+
+test("client tags are stable and unique across the seeded investor book", () => {
+  const investors = db.adminInvestors();
+  assert.equal(new Set(investors.map((investor) => investor.client_code)).size, investors.length);
+  assert.ok(investors.every((investor) => /^[A-Z0-9]{5}$/.test(investor.client_code)));
+  const rmClients = w.view(rm()).clients;
+  assert.ok(
+    rmClients.every(
+      (client) =>
+        client.code === investors.find((investor) => investor.id === client.id)?.client_code,
+    ),
+  );
+});
+
+test("adviser cases may link an owned holding but reject another client's holding", () => {
+  const adviser = db.users.find((user) => user.id === 4);
+  const own = db.holdings.find((holding) =>
+    db.adviserClients.some(
+      (client) => client.eam_user_id === adviser.id && client.investor_id === holding.investor_id,
+    ),
+  );
+  assert.ok(own);
+  w.command(adviser, {
+    type: "case",
+    target: own.investor_id,
+    holdingId: own.id,
+    status: "ops",
+    text: "Please check this holding",
+  });
+  assert.equal(w.workflow.cases.at(-1).holdingId, own.id);
+  const foreign = db.holdings.find((holding) => holding.investor_id !== own.investor_id);
+  assert.ok(foreign);
+  assert.throws(
+    () =>
+      w.command(adviser, {
+        type: "case",
+        target: own.investor_id,
+        holdingId: foreign.id,
+        status: "ops",
+        text: "Wrong record",
+      }),
+    /Holding not found/,
   );
 });
