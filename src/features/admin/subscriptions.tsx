@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
-import { CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
+import { CLOSED_SUBSCRIPTION_STATUSES, LUCA_PIPELINE_STAGES } from "@/lib/types";
 import {
   STATUS_LABELS,
   OWNER_LABELS,
@@ -73,6 +73,49 @@ const CLOSING_TRANSITIONS: SubscriptionStatus[] = [
 /** Matching a payment is the one move that carries a bank reference with it. */
 const NEEDS_REFERENCE: SubscriptionStatus[] = ["payment_unmatched"];
 
+const STAGE_GUIDANCE: Record<SubscriptionStatus, string> = {
+  reserved:
+    "The investor started an application. They need to confirm the required acknowledgements.",
+  documents_pending:
+    "The investor needs to sign the subscription documents before review can begin.",
+  institution_review:
+    "The external institution or EAM reviews the investor before LUCA makes its decision.",
+  under_luca_review:
+    "LUCA reviews eligibility and the investor file. Choose approve, request information, or decline below.",
+  information_requested:
+    "The investor or their adviser must provide the requested information before LUCA can continue.",
+  approved: "LUCA approved the subscription. The investor now follows the funding instructions.",
+  awaiting_funds:
+    "The investor is arranging the transfer. Akula Ops records and matches the incoming funds.",
+  payment_unmatched:
+    "Akula Ops must match the incoming transfer to this subscription before reconciliation.",
+  reconciliation:
+    "Akula Ops checks the escrow receipt. Once reconciled, LUCA can decide the allocation.",
+  allocation_pending:
+    "Funding is reconciled. LUCA records the allocated principal and class unit price.",
+  allocated:
+    "The allocation is recorded. The operations team completes any remaining registry steps.",
+  not_allocated: "This subscription was not allocated. Confirm any return of funds if one is due.",
+  funds_returned: "Funds have been returned and this subscription is complete.",
+  rejected: "LUCA declined this application. No funding action is expected.",
+  cancelled: "This subscription was cancelled and no further action is expected.",
+};
+
+const TRANSITION_LABELS: Partial<Record<SubscriptionStatus, string>> = {
+  institution_review: "Route to institution review",
+  under_luca_review: "Send to LUCA review",
+  information_requested: "Request missing information",
+  approved: "Approve subscription",
+  awaiting_funds: "Confirm approval and notify investor",
+  reconciliation: "Record funds reconciled",
+  allocation_pending: "Start allocation",
+  allocated: "Record allocation",
+  not_allocated: "Do not allocate",
+  funds_returned: "Confirm funds returned",
+  rejected: "Decline application",
+  cancelled: "Cancel subscription",
+};
+
 const REJECTION_REASONS = [
   { value: "accreditation_lapsed", label: "Accreditation lapsed or insufficient" },
   { value: "incomplete_documents", label: "Incomplete or missing documents" },
@@ -87,40 +130,16 @@ function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleDateString() : "—";
 }
 
-/* ─── Board stages — simplified down to the 5 that matter for the funding
- *  pipeline specifically. Onboarding (identity, accreditation, institution
- *  vetting) is a separate concern handled entirely on the Onboarding tab
- *  before an investor ever reaches a subscription; nothing here duplicates
- *  it. "Fund verification" deliberately folds together every kind of
- *  review a subscription can be sitting in (institution/LUCA review, an
- *  information request, reconciling received funds) — the real underlying
- *  statuses are unchanged, this is a display-only regrouping. ─── */
-const BOARD_STAGES: { key: string; label: string; statuses: SubscriptionStatus[] }[] = [
-  { key: "draft", label: "Draft", statuses: ["reserved"] },
-  { key: "awaiting_signature", label: "Awaiting Signature", statuses: ["documents_pending"] },
-  {
-    key: "pending_funds_transfer",
-    label: "Pending Funds Transfer",
-    statuses: ["awaiting_funds", "payment_unmatched"],
-  },
-  {
-    key: "fund_verification",
-    label: "Fund Verification",
-    statuses: [
-      "institution_review",
-      "under_luca_review",
-      "information_requested",
-      "approved",
-      "reconciliation",
-      "allocation_pending",
-    ],
-  },
-  { key: "acceptance", label: "Acceptance Into The Fund", statuses: ["allocated"] },
+/* Use the same lifecycle labels and status groups on the dashboard and the
+ * subscription workspace so every overview link lands on a matching stage. */
+const BOARD_STAGES = [
+  ...LUCA_PIPELINE_STAGES,
   { key: "closed", label: "Closed", statuses: CLOSED_SUBSCRIPTION_STATUSES },
 ];
 /** The dialog's stepper only shows the open stages — "Closed" isn't a step
  *  to progress through, it's a terminal state handled separately. */
 const STEPPER_STAGES = BOARD_STAGES.filter((s) => s.key !== "closed");
+const EMPTY_SUBSCRIPTIONS: AdminSubscription[] = [];
 
 export function KanbanCard({
   subscription,
@@ -194,7 +213,7 @@ function StageBand({
                 <th className="px-3 py-2">Investor</th>
                 <th className="px-3 py-2">Deal / channel</th>
                 <th className="px-3 py-2 text-right">Amount</th>
-                <th className="px-3 py-2">Current action</th>
+                <th className="px-3 py-2">Stage &amp; next owner</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -219,8 +238,12 @@ function StageBand({
                   <td className="px-3 py-2.5 text-right font-medium tabular-nums">
                     {formatPrice(s.amount)}
                   </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {NEXT_ACTION_LABELS[s.next_action] ?? s.next_action}
+                  <td className="px-3 py-2.5">
+                    <span className="block font-medium">{STATUS_LABELS[s.status]}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Next: {NEXT_ACTION_LABELS[s.next_action] ?? s.next_action} ·{" "}
+                      {OWNER_LABELS[s.owner]}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -234,15 +257,18 @@ function StageBand({
 
 export default function AdminSubscriptionsPage() {
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const statusFromUrl = searchParams.get("status");
+  const stageFromUrl = searchParams.get("stage");
   const [search, setSearch] = useState("");
   const [selectedDeal, setSelectedDeal] = useState("all");
   const [activeStage, setActiveStage] = useState<string | null>(
-    statusFromUrl
-      ? (BOARD_STAGES.find((stage) => (stage.statuses as string[]).includes(statusFromUrl))?.key ??
-          null)
-      : null,
+    stageFromUrl ??
+      (statusFromUrl
+        ? (BOARD_STAGES.find((stage) =>
+            stage.statuses.includes(statusFromUrl as SubscriptionStatus),
+          )?.key ?? null)
+        : null),
   );
   const [detailSubscription, setDetailSubscription] = useState<AdminSubscription | null>(null);
   const [matchingOpen, setMatchingOpen] = useState(false);
@@ -253,38 +279,44 @@ export default function AdminSubscriptionsPage() {
     queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
   });
 
-  const subscriptions = data?.subscriptions ?? [];
-
-  const deals = [
-    ...new Map(
-      subscriptions.map((subscription) => [subscription.fund_id, subscription.fund_name]),
-    ).entries(),
-  ];
+  const subscriptions = data?.subscriptions ?? EMPTY_SUBSCRIPTIONS;
+  const deals = useMemo(
+    () => [
+      ...new Map(
+        subscriptions.map((subscription) => [subscription.fund_id, subscription.fund_name]),
+      ).entries(),
+    ],
+    [subscriptions],
+  );
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const routeStage = BOARD_STAGES.find((stage) => stage.key === stageFromUrl);
+    const routeStatuses = statusFromUrl
+      ? [statusFromUrl as SubscriptionStatus]
+      : routeStage?.statuses;
     return subscriptions.filter(
       (s) =>
         (selectedDeal === "all" || String(s.fund_id) === selectedDeal) &&
+        (!routeStatuses || routeStatuses.includes(s.status)) &&
         (!q ||
           s.investor_name.toLowerCase().includes(q) ||
           s.investor_email.toLowerCase().includes(q) ||
           (s.payment_reference ?? "").toLowerCase().includes(q) ||
           s.asset_name.toLowerCase().includes(q)),
     );
-  }, [subscriptions, search, selectedDeal]);
+  }, [subscriptions, search, selectedDeal, stageFromUrl, statusFromUrl]);
 
-  // Deep link from the Dashboard's stuck-lists (?status=X) scrolls that
-  // column into view instead of filtering the board down to just it — the
-  // whole pipeline stays visible, with the relevant column brought to hand.
   useEffect(() => {
-    if (!statusFromUrl || isLoading) return;
-    const stage = BOARD_STAGES.find((c) => (c.statuses as string[]).includes(statusFromUrl));
+    if ((!statusFromUrl && !stageFromUrl) || isLoading) return;
+    const stage = stageFromUrl
+      ? BOARD_STAGES.find((item) => item.key === stageFromUrl)
+      : BOARD_STAGES.find((item) => item.statuses.includes(statusFromUrl as SubscriptionStatus));
     if (stage) {
       setActiveStage(stage.key);
       columnRefs.current[stage.key]?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFromUrl, isLoading]);
+  }, [statusFromUrl, stageFromUrl, isLoading]);
 
   return (
     <div className="w-full space-y-4">
@@ -292,7 +324,8 @@ export default function AdminSubscriptionsPage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Subscriptions</h1>
           <p className="text-muted-foreground">
-            The transaction pipeline — every subscription, grouped by what's next.
+            Follow each subscription from reservation through funding and allocation. Open a stage
+            to see only the records in it.
           </p>
         </div>
         <Button variant="outline" onClick={() => setMatchingOpen(true)}>
@@ -311,6 +344,27 @@ export default function AdminSubscriptionsPage() {
             className="pl-9"
           />
         </div>
+        {activeStage && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
+            <span>
+              Stage view:{" "}
+              <strong>{BOARD_STAGES.find((stage) => stage.key === activeStage)?.label}</strong>
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setActiveStage(null);
+                const next = new URLSearchParams(searchParams);
+                next.delete("stage");
+                next.delete("status");
+                setSearchParams(next);
+              }}
+            >
+              Show all stages
+            </Button>
+          </div>
+        )}
         <div
           className="mt-3 flex items-center gap-2 overflow-x-auto pb-1"
           aria-label="Filter subscriptions by deal"
@@ -621,7 +675,7 @@ export function SubscriptionDialog({
           </Badge>
         </div>
 
-        {/* Progress */}
+        {/* Current lifecycle position */}
         {isClosed ? (
           <p className="text-sm text-muted-foreground">
             {subscription.status === "rejected" && subscription.rejection_reason
@@ -647,16 +701,53 @@ export function SubscriptionDialog({
           />
         )}
 
-        {/* THE ACTION — foregrounded, adapts to what's actually needed */}
+        <details className="rounded-lg border bg-muted/20 px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">
+            View full subscription lifecycle
+          </summary>
+          <ol className="mt-3 space-y-2 border-l pl-4 text-sm">
+            {BOARD_STAGES.map((stage, index) => {
+              const current = stage.statuses.includes(subscription.status);
+              const complete = !isClosed && stageIndex >= 0 && index < stageIndex;
+              return (
+                <li
+                  key={stage.key}
+                  className={`relative ${current ? "font-semibold text-foreground" : complete ? "text-muted-foreground" : "text-muted-foreground/80"}`}
+                >
+                  <span
+                    className={`absolute top-1.5 -left-[21px] size-2 rounded-full ${current ? "bg-primary ring-2 ring-primary/20" : complete ? "bg-primary/45" : "bg-border"}`}
+                  />
+                  {stage.label}
+                  {current && (
+                    <Badge className="ml-2 text-[9px]" variant="secondary">
+                      Current stage
+                    </Badge>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Investor, EAM, LUCA, and Akula Ops take turns at different stages. A stage only advances
+            after its owner completes the listed step.
+          </p>
+        </details>
+
+        {/* The action owner and next step stay explicit at every lifecycle stage. */}
         <div className="space-y-3 rounded-lg border-2 border-primary/15 bg-primary/[0.03] p-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-            <span>
-              <span className="text-muted-foreground">Blocked on </span>
-              <span className="font-medium">{OWNER_LABELS[subscription.owner]}</span>
-            </span>
-            <span className="font-medium">
-              {NEXT_ACTION_LABELS[subscription.next_action] ?? subscription.next_action}
-            </span>
+          <div className="space-y-1 text-sm">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Current stage ·{" "}
+              {BOARD_STAGES.find((stage) => stage.statuses.includes(subscription.status))?.label ??
+                STATUS_LABELS[subscription.status]}
+            </p>
+            <p className="font-semibold">
+              Next step: {NEXT_ACTION_LABELS[subscription.next_action] || "No further action"}
+            </p>
+            <p className="text-muted-foreground">
+              Action owner: {OWNER_LABELS[subscription.owner]}
+            </p>
+            <p className="text-muted-foreground">{STAGE_GUIDANCE[subscription.status]}</p>
           </div>
 
           {subscription.information_request_note && (
@@ -777,7 +868,7 @@ export function SubscriptionDialog({
                       ? "Send information request"
                       : to === "rejected" && pendingRejection
                         ? "Confirm rejection"
-                        : `Move to ${STATUS_LABELS[to].toLowerCase()}`;
+                        : (TRANSITION_LABELS[to] ?? `Continue to ${STATUS_LABELS[to]}`);
                 const disabled =
                   transition.isPending ||
                   (to === "information_requested" &&
