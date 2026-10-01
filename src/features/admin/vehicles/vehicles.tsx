@@ -239,7 +239,12 @@ function VehicleDetail({
 
   return (
     <div className="@container flex w-full max-w-[1400px] flex-col gap-5">
-      <PublishedDealEditor key={`${fund.id}-${editorOpen}`} fund={fund} open={editorOpen} onOpenChange={setEditorOpen} />
+      <PublishedDealEditor
+        key={`${fund.id}-${editorOpen}`}
+        fund={fund}
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+      />
       {/* Published overview */}
       <Card>
         <CardContent className="p-5">
@@ -247,12 +252,20 @@ function VehicleDetail({
             <div>
               <p className="tracking-wide text-muted-foreground uppercase">Published overview</p>
               <h3 className="mt-1 text-2xl">{fund.codename}</h3>
-              <p className="text-sm text-muted-foreground">Review the published investor and adviser views, or edit this deal directly.</p>
+              <p className="text-sm text-muted-foreground">
+                Review the published investor and adviser views, or edit this deal directly.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPreview("eam")}>Preview as EAM</Button>
-              <Button variant="outline" size="sm" onClick={() => setPreview("investor")}>Preview as investor</Button>
-              <Button size="sm" onClick={() => setEditorOpen(true)}>Edit published overview</Button>
+              <Button variant="outline" size="sm" onClick={() => setPreview("eam")}>
+                Preview as EAM
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPreview("investor")}>
+                Preview as investor
+              </Button>
+              <Button size="sm" onClick={() => setEditorOpen(true)}>
+                Edit published overview
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -410,38 +423,57 @@ function VehicleDetail({
 
           {tagError && <p className="text-sm text-destructive">{tagError}</p>}
 
-          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">Tag overlap is surfaced from shared vehicle and client tags in recorded relationships; it does not rank or recommend this deal.</p>
+          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
+            Tag overlap is surfaced from shared vehicle and client tags in recorded relationships;
+            it does not rank or recommend this deal.
+          </p>
           <div className="border-t pt-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">EAM launch packet · readiness</p>
-          <div className="mt-3 grid grid-cols-2 gap-3 @xl:grid-cols-4">
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Terms and pricing</p>
-              <p className="text-sm font-medium">{formatPrice(fund.min_subscription)} minimum · {formatPricePrecise(fund.price)} / unit</p>
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              EAM launch packet · readiness
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3 @xl:grid-cols-4">
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Terms and pricing</p>
+                <p className="text-sm font-medium">
+                  {formatPrice(fund.min_subscription)} minimum · {formatPricePrecise(fund.price)} /
+                  unit
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Risks and disclosure</p>
+                <p className="text-sm font-medium">
+                  {fund.asset.risks.length > 0
+                    ? `${fund.asset.risks.length} disclosed`
+                    : "Not started"}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Vehicle tags</p>
+                <p className="text-sm font-medium">{tags.length} applied</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Client materials</p>
+                <p className="text-sm font-medium">{investorVisible} investor-visible</p>
+              </div>
             </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Risks and disclosure</p>
-              <p className="text-sm font-medium">
-                {fund.asset.risks.length > 0
-                  ? `${fund.asset.risks.length} disclosed`
-                  : "Not started"}
-              </p>
-            </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Vehicle tags</p>
-              <p className="text-sm font-medium">{tags.length} applied</p>
-            </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Client materials</p>
-              <p className="text-sm font-medium">{investorVisible} investor-visible</p>
-            </div>
-          </div>
           </div>
         </CardContent>
       </Card>
       <Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
         <DialogContent className="max-h-[94vh] max-w-[96vw] overflow-y-auto p-4 sm:max-w-6xl">
-          <DialogTitle className="sr-only">{preview === "eam" ? "EAM" : "Investor"} opportunity preview</DialogTitle>
-          {preview && <DealOverviewPage key={`${fund.id}-${preview}`} fund={fund} viewer={preview} backTo="" backLabel="" preview />}
+          <DialogTitle className="sr-only">
+            {preview === "eam" ? "EAM" : "Investor"} opportunity preview
+          </DialogTitle>
+          {preview && (
+            <DealOverviewPage
+              key={`${fund.id}-${preview}`}
+              fund={fund}
+              viewer={preview}
+              backTo=""
+              backLabel=""
+              preview
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
