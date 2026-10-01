@@ -1,0 +1,248 @@
+import { useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { formatPrice } from "@/lib/currency";
+import type { Fund } from "@/lib/types";
+import type { Highlight, AdviserClient } from "./types";
+import { CompanyInfoTabs } from "@/components/company-info-tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { ArrowLeftIcon, StarIcon, Trash2Icon } from "lucide-react";
+
+export default function OpportunityDetailPage() {
+  const { id } = useParams<{ id: string }>();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["eamOpportunity", id],
+    queryFn: () => api<{ fund: Fund; highlights: Highlight[] }>(`/api/v1/eam/opportunities/${id}`),
+    enabled: !!id,
+  });
+
+  const fund = data?.fund;
+  const highlights = data?.highlights ?? [];
+
+  if (isLoading || !fund) {
+    return (
+      <div>
+        <p className="py-12 text-center text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  const allocated = parseFloat(fund.supply_allocated);
+  const total = fund.supply_total ? parseFloat(fund.supply_total) : null;
+  const pct = total && total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : null;
+
+  return (
+    <div className="flex flex-col gap-8">
+      <div>
+        <Link to="/eam/opportunities">
+          <Button variant="ghost" size="sm" className="mb-4">
+            <ArrowLeftIcon className="mr-1 size-4" />
+            Back to opportunities
+          </Button>
+        </Link>
+
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{fund.codename}</h1>
+            <p className="mt-1 text-muted-foreground">
+              {fund.asset.name}
+              {fund.fund_manager?.name ? ` · ${fund.fund_manager.name}` : ""}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant="outline">
+              {fund.deal_type === "primary" ? "Primary" : "Secondary"}
+            </Badge>
+            <Badge variant="default">{fund.state === "open" ? "Open" : fund.state}</Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* Allocation */}
+      {pct !== null && total && (
+        <Card>
+          <CardContent className="space-y-2 pt-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Allocation</span>
+              <span className="font-medium">{pct}% filled</span>
+            </div>
+            <Progress value={pct} className="h-2" />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{formatPrice(allocated)} allocated</span>
+              <span>{formatPrice(total - allocated)} available</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Company info tabs — shared with investor side */}
+      <CompanyInfoTabs fund={fund} />
+
+      <Separator />
+
+      {/* Highlight composer */}
+      <HighlightComposer fund={fund} />
+
+      <Separator />
+
+      {/* Published highlights */}
+      <section>
+        <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Published highlights
+        </h2>
+        {highlights.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-center text-sm text-muted-foreground">
+              No highlights published for this opportunity yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="rounded-lg border">
+            <div className="grid grid-cols-4 gap-4 border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">
+              <span>Client</span>
+              <span>Rationale</span>
+              <span>Date</span>
+              <span className="text-right">Actions</span>
+            </div>
+            {highlights.map((h) => (
+              <HighlightRow key={h.id} highlight={h} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function HighlightRow({ highlight }: { highlight: Highlight }) {
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api(`/api/v1/eam/highlights/${highlight.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["eamOpportunity"] });
+      queryClient.invalidateQueries({ queryKey: ["eamDashboard"] });
+    },
+  });
+
+  return (
+    <div className="grid grid-cols-4 gap-4 border-b px-4 py-3 text-sm last:border-0">
+      <span className="font-medium">{highlight.client_name}</span>
+      <span className="truncate text-muted-foreground">{highlight.rationale || "—"}</span>
+      <span className="text-muted-foreground">
+        {new Date(highlight.created_at).toLocaleDateString()}
+      </span>
+      <span className="text-right">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          disabled={deleteMutation.isPending}
+          onClick={() => deleteMutation.mutate()}
+        >
+          <Trash2Icon className="size-3.5" />
+        </Button>
+      </span>
+    </div>
+  );
+}
+
+function HighlightComposer({ fund }: { fund: Fund }) {
+  const queryClient = useQueryClient();
+  const [selectedClientName, setSelectedClientName] = useState<string | null>(null);
+  const [rationale, setRationale] = useState("");
+
+  const { data: clients } = useQuery({
+    queryKey: ["eamClients"],
+    queryFn: () => api<AdviserClient[]>("/api/v1/eam/clients"),
+  });
+
+  const clientList = clients ?? [];
+  const selectedClient = clientList.find((c) => c.client_name === selectedClientName);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api("/api/v1/eam/highlights", {
+        method: "POST",
+        body: {
+          highlight: {
+            adviser_client_id: selectedClient?.id,
+            fund_id: fund.id,
+            rationale,
+          },
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["eamOpportunity"] });
+      queryClient.invalidateQueries({ queryKey: ["eamDashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["eamHighlights"] });
+      setSelectedClientName(null);
+      setRationale("");
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <StarIcon className="size-4" />
+          Highlight to a client
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Client</Label>
+            <Select
+              value={selectedClientName ?? undefined}
+              onValueChange={(val) => setSelectedClientName(val)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a client" />
+              </SelectTrigger>
+              <SelectContent>
+                {clientList.map((c) => (
+                  <SelectItem key={c.id} value={c.client_name}>
+                    {c.client_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Rationale</Label>
+            <Textarea
+              value={rationale}
+              onChange={(e) => setRationale(e.target.value)}
+              placeholder="Why is this a good fit for this client?"
+              rows={1}
+              className="min-h-9"
+            />
+          </div>
+        </div>
+        <Button
+          size="sm"
+          disabled={!selectedClient || mutation.isPending}
+          onClick={() => mutation.mutate()}
+        >
+          {mutation.isPending ? "Sending..." : "Publish highlight"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
