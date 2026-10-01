@@ -394,20 +394,43 @@
 .wf-task-summary {
   display: grid;
   gap: 6px;
-  max-height: 340px;
-  overflow: auto;
   margin: 12px 0;
 }
-.wf-task-summary > div {
+.wf-client-task-group {
+  border: 1px solid #dde3eb;
+  border-radius: 9px;
+  background: #fff;
+}
+.wf-client-task-group > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.wf-client-task-group > summary small,
+.wf-client-task-group > summary span {
+  color: #617087;
+  font-size: 12px;
+}
+.wf-client-task-content {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px 14px;
+  border-top: 1px solid #e8edf2;
+}
+.wf-client-task-item {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 4px 14px;
+  align-items: center;
+  gap: 5px 12px;
   border-bottom: 1px solid #e8edf2;
-  padding: 9px 2px;
+  padding: 8px 2px;
   font-size: 12px;
 }
-.wf-task-summary span {
+.wf-client-task-item span {
   color: #617087;
 }
 .wf-exposure {
