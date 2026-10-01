@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
 import type { WorkflowView, WorkflowCommand, Version } from "@/lib/workflow-types";
 import type { Fund } from "@/lib/types";
+import { SECTOR_LABELS } from "@/lib/types";
 import DealOverviewPage from "@/components/deal-overview-page";
 import { Button } from "@/components/ui/button";
 import DemoResetButton from "@/components/demo-reset-button";
@@ -768,6 +769,7 @@ function RMOverview({
 
 function RMOpportunities({ data: d }: { data: WorkflowView }) {
   const [search, setSearch] = useState("");
+  const [sector, setSector] = useState("all");
   const [selectedFund, setSelectedFund] = useState<number | null>(null);
   const { data: deal, isLoading: loadingDeal } = useQuery({
     queryKey: ["rmDeal", selectedFund],
@@ -775,10 +777,12 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
     enabled: selectedFund !== null,
   });
   const openFunds = d.funds.filter((fund) => fund.state === "open");
-  const filteredFunds = openFunds.filter((fund) =>
-    `${fund.name} ${fund.company} ${fund.descriptor} ${fund.hook}`
-      .toLowerCase()
-      .includes(search.trim().toLowerCase()),
+  const filteredFunds = openFunds.filter(
+    (fund) =>
+      (sector === "all" || fund.sector === sector) &&
+      `${fund.name} ${fund.company} ${fund.descriptor} ${fund.hook} ${SECTOR_LABELS[fund.sector] || fund.sector}`
+        .toLowerCase()
+        .includes(search.trim().toLowerCase()),
   );
 
   if (selectedFund !== null)
@@ -819,6 +823,26 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
             placeholder="Search by company or strategy"
           />
         </label>
+        <div className="wf-sector-filters">
+          <Button
+            size="sm"
+            variant={sector === "all" ? "secondary" : "outline"}
+            onClick={() => setSector("all")}
+          >
+            All sectors <small>{openFunds.length}</small>
+          </Button>
+          {Array.from(new Set(openFunds.map((fund) => fund.sector))).map((key) => (
+            <Button
+              key={key}
+              size="sm"
+              variant={sector === key ? "secondary" : "outline"}
+              onClick={() => setSector(sector === key ? "all" : key)}
+            >
+              {SECTOR_LABELS[key] || key}
+              <small>{openFunds.filter((fund) => fund.sector === key).length}</small>
+            </Button>
+          ))}
+        </div>
         <p className="wf-result-count">
           Showing {filteredFunds.length} of {openFunds.length} open opportunities
         </p>
