@@ -177,22 +177,39 @@ function Hero({ fund }: { fund: Fund }) {
   return (
     <section className="space-y-5">
       <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-2.5">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {asset.name} · {fund.fund_manager.name}
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">{fund.codename}</h1>
-            <Badge variant={fund.state === "open" ? "default" : "secondary"}>
-              {fund.state === "open" ? "Live" : fund.state}
-            </Badge>
-            {closingSoon && <Badge variant="destructive">Closing soon</Badge>}
+        <div className="flex min-w-0 flex-col gap-2.5">
+          <div className="space-y-2.5">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              {asset.name} · {fund.fund_manager.name}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-bold tracking-tight">{fund.codename}</h1>
+              <Badge variant={fund.state === "open" ? "default" : "secondary"}>
+                {fund.state === "open" ? "Live" : fund.state}
+              </Badge>
+              {closingSoon && <Badge variant="destructive">Closing soon</Badge>}
+            </div>
+            {asset.tagline && <p className="text-lg text-muted-foreground">{asset.tagline}</p>}
+            <p className="text-sm text-muted-foreground">{asset.description}</p>
           </div>
-          {asset.tagline && <p className="text-lg text-muted-foreground">{asset.tagline}</p>}
-          <p className="text-sm text-muted-foreground">{asset.description}</p>
+          {fund.key_metrics.length > 0 && (
+            <div className="mt-auto grid grid-cols-2 gap-3 pt-2">
+              {fund.key_metrics.map((m) => (
+                <div key={m.label} className="min-w-0 rounded-lg border bg-card px-3 py-2">
+                  <strong className="block text-lg leading-tight font-bold">{m.value}</strong>
+                  <span className="block text-xs text-muted-foreground">{m.label}</span>
+                  {m.note && (
+                    <span className="block text-[11px] leading-tight text-muted-foreground">
+                      {m.note}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <dl className="grid h-fit grid-cols-2 gap-2 rounded-lg border bg-card p-4">
+        <dl className="grid grid-cols-2 gap-2 rounded-lg border bg-card p-4">
           <p className="col-span-2 mb-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
             At a glance
           </p>
@@ -205,18 +222,6 @@ function Hero({ fund }: { fund: Fund }) {
           <GlanceRow label="Commercial model" value={asset.commercial_model} />
         </dl>
       </div>
-
-      {fund.key_metrics.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
-          {fund.key_metrics.map((m) => (
-            <div key={m.label} className="rounded-lg border bg-card p-3">
-              <strong className="block text-xl font-bold">{m.value}</strong>
-              <span className="block text-xs text-muted-foreground">{m.label}</span>
-              {m.note && <span className="block text-[11px] text-muted-foreground">{m.note}</span>}
-            </div>
-          ))}
-        </div>
-      )}
 
       {total !== null && (
         <div className="space-y-2 rounded-lg border bg-card p-4">
