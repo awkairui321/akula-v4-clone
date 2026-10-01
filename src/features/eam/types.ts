@@ -16,6 +16,7 @@ export type AdviserClient = {
   created_at: string;
   updated_at: string;
   investor_user_id: number;
+  client_code: string;
 };
 
 export type ClientStage = "prospect" | "onboarding" | "active" | "inactive";
@@ -113,6 +114,7 @@ export type ClientHolding = {
 export type EamReportRow = ClientHolding & {
   adviser_client_id: number;
   client_name: string;
+  client_code: string;
 };
 
 export type ClientSubscription = {
