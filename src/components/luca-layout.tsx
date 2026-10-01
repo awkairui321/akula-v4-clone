@@ -63,7 +63,11 @@ export default function LucaLayout() {
         <Link to="/luca" className="mt-1 px-3 py-4">
           <div className={`flex flex-row ${collapsed ? "justify-center" : ""}`}>
             <Circle className={collapsed ? "" : "mx-2"} />
-            {!collapsed && <div className="uppercase text-[11px] font-semibold tracking-[0.16em]">LUCA · FUND MANAGER</div>}
+            {!collapsed && (
+              <div className="text-[11px] font-semibold tracking-[0.16em] uppercase">
+                LUCA · FUND MANAGER
+              </div>
+            )}
           </div>
         </Link>
         <nav className="flex flex-col gap-1 px-3 py-4">
@@ -106,7 +110,9 @@ export default function LucaLayout() {
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>Compare roles live</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
+              Compare roles live
+            </Button>
             <DemoResetButton compact />
             <DropdownMenu>
               <DropdownMenuTrigger
