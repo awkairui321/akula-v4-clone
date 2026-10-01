@@ -12,7 +12,7 @@ import type { AdviserClient, Discussion } from "./types";
 export default function EamSupportPage() {
   const queryClient = useQueryClient();
   const [clientName, setClientName] = useState("");
-  const [investmentId, setInvestmentId] = useState("");
+  const [exposure, setExposure] = useState("");
   const [owner, setOwner] = useState("ops");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
@@ -33,6 +33,14 @@ export default function EamSupportPage() {
   );
   const investments =
     workflow?.subscriptions.filter((row) => row.investor_id === selected?.investor_user_id) ?? [];
+  const holdings =
+    workflow?.holdings.filter((row) => row.investor_id === selected?.investor_user_id) ?? [];
+  const exposedCompanies = [
+    ...new Set([
+      ...investments.map((item) => item.asset_name),
+      ...holdings.map((item) => item.asset_name),
+    ]),
+  ];
   const cases = (workflow?.cases ?? []).filter((item) => {
     const client = clients.find((row) => row.investor_user_id === item.investorId);
     return (
@@ -58,7 +66,8 @@ export default function EamSupportPage() {
     mutate.mutate({
       type: "case",
       target: selected.investor_user_id,
-      id: investmentId ? Number(investmentId) : undefined,
+      id: exposure.startsWith("sub:") ? Number(exposure.slice(4)) : undefined,
+      holdingId: exposure.startsWith("holding:") ? Number(exposure.slice(8)) : undefined,
       status: owner,
       text: message.trim(),
     });
@@ -81,7 +90,7 @@ export default function EamSupportPage() {
               value={clientName}
               onChange={(event) => {
                 setClientName(event.target.value);
-                setInvestmentId("");
+                setExposure("");
               }}
               placeholder="Type a client name"
               required
@@ -93,19 +102,29 @@ export default function EamSupportPage() {
             </datalist>
           </label>
           <label className="space-y-1 text-sm">
-            <span>Investment (optional)</span>
+            <span>Related exposure (optional)</span>
             <select
               className="h-9 w-full rounded-md border bg-background px-2"
-              value={investmentId}
-              onChange={(event) => setInvestmentId(event.target.value)}
+              value={exposure}
+              onChange={(event) => setExposure(event.target.value)}
               disabled={!selected}
             >
-              <option value="">Account question</option>
+              <option value="">General client inquiry</option>
               {investments.map((investment) => (
-                <option key={investment.id} value={investment.id}>
-                  {investment.asset_name} · {investment.status.replaceAll("_", " ")}
+                <option key={investment.id} value={`sub:${investment.id}`}>
+                  Investment #{investment.id} · {investment.asset_name}
                 </option>
               ))}
+              {holdings
+                .filter(
+                  (holding) =>
+                    !investments.some((investment) => investment.holdingId === holding.id),
+                )
+                .map((holding) => (
+                  <option key={`holding-${holding.id}`} value={`holding:${holding.id}`}>
+                    Holding #{holding.id} · {holding.asset_name}
+                  </option>
+                ))}
             </select>
           </label>
           <label className="space-y-1 text-sm">
@@ -120,6 +139,22 @@ export default function EamSupportPage() {
             </select>
           </label>
         </div>
+        {selected && (
+          <div className="text-xs">
+            <p className="font-medium">Current and past exposure</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {exposedCompanies.length ? (
+                exposedCompanies.map((company) => (
+                  <span key={company} className="rounded-full border bg-muted/30 px-3 py-1">
+                    {company}
+                  </span>
+                ))
+              ) : (
+                <span className="text-muted-foreground">No recorded investment exposure.</span>
+              )}
+            </div>
+          </div>
+        )}
         <Textarea
           aria-label="Question or issue"
           value={message}
@@ -158,6 +193,13 @@ export default function EamSupportPage() {
                   <h3 className="font-medium">
                     #{item.id} · {client?.client_name} · {item.subject}
                   </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {item.subscriptionId
+                      ? `Investment #${item.subscriptionId}`
+                      : item.holdingId
+                        ? `Holding #${item.holdingId}`
+                        : "General inquiry"}
+                  </span>
                   <span className="text-sm text-muted-foreground capitalize">
                     {item.status} · {item.owner === "ops" ? "Akula Ops" : item.owner.toUpperCase()}
                   </span>
