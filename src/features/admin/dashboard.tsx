@@ -20,6 +20,16 @@ const FUNDED_STATUSES = ["reconciliation", "allocation_pending", "allocated"];
 /** AUM: committed capital that's either moving toward funding or already an
  * active holding — the LUCA dashboard's "funded or in active holding" definition. */
 const AUM_STATUSES = [...FUNDED_STATUSES, "awaiting_funds", "payment_unmatched"];
+const STAGE_OWNER: Record<string, string> = {
+  draft: "Investor",
+  awaiting_signature: "Investor",
+  institution_review: "EAM / institution",
+  under_luca_review: "LUCA",
+  information_requested: "Investor / EAM",
+  approved: "Investor",
+  funded: "Investor → Akula Ops → LUCA",
+  active_holding: "Akula Ops",
+};
 
 function daysSince(iso: string | null): number {
   if (!iso) return -1;
@@ -102,11 +112,26 @@ export default function AdminDashboard() {
           </p>
         </div>
         <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm">
-          <span className="text-muted-foreground">Action queue </span>
-          <strong>
-            {pendingReview + (investors?.needs_review ?? 0) + (documents?.received ?? 0)}
-          </strong>
-          <span className="ml-1 text-muted-foreground">items across reviews &amp; documents</span>
+          <div>
+            <span className="text-muted-foreground">Needs attention </span>
+            <strong>
+              {pendingReview + (investors?.needs_review ?? 0) + (documents?.received ?? 0)}
+            </strong>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+            <Link to="/luca/onboarding" className="underline underline-offset-2">
+              Investor reviews · {investors?.needs_review ?? 0}
+            </Link>
+            <Link
+              to="/luca/subscriptions?status=under_luca_review"
+              className="underline underline-offset-2"
+            >
+              LUCA decisions · {pendingReview}
+            </Link>
+            <Link to="/luca/documents" className="underline underline-offset-2">
+              New documents · {documents?.received ?? 0}
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -116,13 +141,14 @@ export default function AdminDashboard() {
           icon={BanknoteIcon}
           value={formatPrice(aum)}
           note="Funded and active commitments"
-          to="/luca/deals"
+          to="/luca/subscriptions?stage=funded"
         />
         <StatCard
-          title="Confirmed funding"
+          title="Funding & reconciliation"
           icon={CreditCard}
           value={formatPrice(funded)}
-          to="/luca/subscriptions"
+          note="Transfers through allocation"
+          to="/luca/subscriptions?stage=funded"
         />
         <StatCard
           title="Active deals"
@@ -132,9 +158,10 @@ export default function AdminDashboard() {
           to="/luca/deals"
         />
         <StatCard
-          title="Subscription decisions"
+          title="Awaiting LUCA review"
           icon={UsersIcon}
           value={String(pendingReview)}
+          note="Open the review queue"
           to="/luca/subscriptions?status=under_luca_review"
         />
       </div>
@@ -142,15 +169,15 @@ export default function AdminDashboard() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Subscription pipeline</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Select a stage to see its subscriptions, next owner, and available actions.
+          </p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
             {LUCA_PIPELINE_STAGES.map((stage) => {
               const count = allSubs.filter((s) => stage.statuses.includes(s.status)).length;
-              const to =
-                stage.statuses.length === 1
-                  ? `/luca/subscriptions?status=${stage.statuses[0]}`
-                  : "/luca/subscriptions";
+              const to = `/luca/subscriptions?stage=${stage.key}`;
               return (
                 <Link
                   key={stage.key}
@@ -159,6 +186,9 @@ export default function AdminDashboard() {
                 >
                   <div className="text-xl font-bold">{count}</div>
                   <div className="mt-1 text-xs text-muted-foreground">{stage.label}</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">
+                    Next: {STAGE_OWNER[stage.key] ?? "Review record"}
+                  </div>
                 </Link>
               );
             })}
