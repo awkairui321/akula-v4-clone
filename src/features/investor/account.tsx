@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { ConsentList } from "@/features/investor/consent-section";
 import { UserIcon, CheckCircleIcon, ShieldIcon, KeyIcon, SmartphoneIcon } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type InvestorProfile = {
   id: number;
@@ -326,6 +327,7 @@ function TwoFactorSection() {
 /* ─── Main Page ─── */
 export default function AccountPage() {
   const { user } = useAuth();
+  const [section, setSection] = useState("profile");
 
   const { data, isLoading } = useQuery({
     queryKey: ["investorProfile"],
@@ -335,12 +337,16 @@ export default function AccountPage() {
   const profile = data?.investor_profile;
 
   return (
-    <div className="w-full max-w-5xl">
+    <div className="w-full max-w-5xl space-y-4">
+      <Tabs value={section} onValueChange={(value) => value && setSection(value)}>
+        <TabsList><TabsTrigger value="profile">Profile</TabsTrigger><TabsTrigger value="privacy">Consent &amp; privacy</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger></TabsList>
+      </Tabs>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
 
       {!isLoading && profile && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
+        <>
+        {section === "profile" && <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
           {/* Profile card */}
           <Card className="h-fit">
             <CardContent className="flex items-center gap-4 pt-6">
@@ -402,28 +408,21 @@ export default function AccountPage() {
             </CardContent>
           </Card>
 
-          {/* Consent & privacy */}
-          <section className="space-y-3 lg:col-span-2">
-          <Separator className="my-2" />
-          <h2 className="text-lg font-semibold">Consent & privacy</h2>
-          <p className="-mt-2 text-sm text-muted-foreground">
-            Review what you've granted us permission to do. Withdrawing a required consent may limit
-            what we can share with you or your adviser.
-          </p>
+        </div>}
+
+        {section === "privacy" && <section className="max-w-4xl space-y-3">
+          <div><h2 className="text-lg font-semibold">Consent &amp; privacy</h2><p className="text-sm text-muted-foreground">Review your account permissions and communication preferences.</p></div>
           <ConsentList mode="management" />
-          </section>
+        </section>}
 
-          {/* Security section */}
-          <section className="space-y-3 lg:col-span-2">
-          <Separator className="my-2" />
-          <h2 className="text-lg font-semibold">Security</h2>
-
+        {section === "security" && <section className="space-y-3">
+          <div><h2 className="text-lg font-semibold">Security</h2><p className="text-sm text-muted-foreground">Manage your sign-in credentials and second factor.</p></div>
           <div className="grid gap-4 lg:grid-cols-2">
             <ChangePasswordSection />
             <TwoFactorSection />
           </div>
-          </section>
-        </div>
+        </section>}
+        </>
       )}
     </div>
   );
