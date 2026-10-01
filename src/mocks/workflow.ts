@@ -1,4 +1,5 @@
 import * as db from "./db";
+import { clientCode } from "../lib/client-code";
 import type {
   WorkflowState,
   WorkflowCommand,
@@ -247,6 +248,7 @@ export function view(user: db.MockUser): WorkflowView {
       const investor = db.adminInvestors().find((i) => i.id === id);
       return {
         id,
+        code: clientCode(id),
         name: investor?.full_name || db.findUserById(id)?.email || `Investor ${id}`,
         type: investor?.investor_type === "individual" ? "individual" : "entity",
         eamFirm: investor?.eam_firm ?? null,
@@ -544,11 +546,17 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
           db.subscriptions.some((s) => s.id === c.id && s.investor_id === iid),
           "Investment not found.",
         );
+      if (c.holdingId)
+        requireValue(
+          db.holdings.some((holding) => holding.id === c.holdingId && holding.investor_id === iid),
+          "Holding not found.",
+        );
       const body = text();
       workflow.cases.push({
         id: id(),
         investorId: iid,
         subscriptionId: c.id,
+        holdingId: c.holdingId,
         subject: body.slice(0, 90),
         owner,
         status: "open",
