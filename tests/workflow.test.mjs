@@ -233,13 +233,15 @@ test("RM private notes and assignments never become investor messages", () => {
   assert.throws(() => w.command(rm(), { type: "note", id: 2, text: "No access" }));
 });
 test("company requests deduplicate and reject linking unrelated companies", () => {
+  const before = w.workflow.requests.length;
   w.command(investor(), { type: "request", text: "Canva", amount: 100, currency: "SGD" });
   w.command(investor(), { type: "request", text: "CANVA" });
-  assert.equal(w.workflow.requests.length, 1);
+  assert.equal(w.workflow.requests.length, before + 1);
+  const canva = w.workflow.requests.find((request) => request.key === "canva");
   assert.throws(() =>
     w.command(ops(), {
       type: "request-status",
-      id: w.workflow.requests[0].id,
+      id: canva.id,
       status: "Opportunity available",
       target: db.funds[0].id,
     }),
