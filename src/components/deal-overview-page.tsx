@@ -157,9 +157,11 @@ function ChipNav({
 function GlanceRow({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
   return (
-    <div className="flex flex-wrap justify-between gap-x-6 gap-y-1 py-1.5 text-sm">
-      <dt className="shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium">{value}</dd>
+    <div
+      className={`min-w-0 rounded-md bg-muted/35 p-3 ${label === "Key customers" || label === "Commercial model" ? "col-span-2" : ""}`}
+    >
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-left text-sm leading-snug font-medium">{value}</dd>
     </div>
   );
 }
@@ -190,8 +192,8 @@ function Hero({ fund }: { fund: Fund }) {
           <p className="text-sm text-muted-foreground">{asset.description}</p>
         </div>
 
-        <dl className="h-fit rounded-lg border bg-card p-4">
-          <p className="mb-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <dl className="grid h-fit grid-cols-2 gap-2 rounded-lg border bg-card p-4">
+          <p className="col-span-2 mb-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
             At a glance
           </p>
           <GlanceRow label="Sector" value={SECTOR_LABELS[asset.sector] ?? asset.sector} />
@@ -205,7 +207,7 @@ function Hero({ fund }: { fund: Fund }) {
       </div>
 
       {fund.key_metrics.length > 0 && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3">
           {fund.key_metrics.map((m) => (
             <div key={m.label} className="rounded-lg border bg-card p-3">
               <strong className="block text-xl font-bold">{m.value}</strong>
