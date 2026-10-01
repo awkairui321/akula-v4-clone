@@ -126,6 +126,11 @@ function LucaRoute() {
   return <Outlet />;
 }
 
+function OpsRoute() {
+  const { user } = useAuth();
+  return user?.role === "ops" ? <Outlet /> : <Navigate to="/workflows" replace />;
+}
+
 function EamRoute() {
   const { user } = useAuth();
 
@@ -160,6 +165,9 @@ function App() {
                 {/* Authenticated */}
                 <Route element={<AuthRequired />}>
                   <Route path="/workflows" element={<WorkflowPage />} />
+                  <Route element={<OpsRoute />}>
+                    <Route path="/ops/publication/:id" element={<AdminVehicleOverviewPage ops />} />
+                  </Route>
                   <Route path="/live-demo" element={<LiveComparePage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/onboarding/:section" element={<OnboardingPage />} />
