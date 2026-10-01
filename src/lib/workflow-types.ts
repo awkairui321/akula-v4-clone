@@ -123,7 +123,7 @@ export type WorkflowCommand = {
 };
 export type WorkflowView = WorkflowState & {
   actor: { id: number; role: string; email: string };
-  clients: { id: number; name: string }[];
+  clients: { id: number; name: string; type: "individual" | "entity"; eamFirm?: string | null }[];
   subscriptions: {
     id: number;
     investor_id: number;
@@ -147,6 +147,16 @@ export type WorkflowView = WorkflowState & {
     nav_as_of: string | null;
     units: string;
   }[];
-  funds: { id: number; name: string; state: string }[];
+  funds: {
+    id: number;
+    name: string;
+    state: string;
+    company: string;
+    descriptor: string;
+    hook: string;
+    minimum: string;
+    closesAt: string | null;
+    risks: string[];
+  }[];
   storageWarning: string | null;
 };
