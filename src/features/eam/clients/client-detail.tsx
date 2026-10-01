@@ -699,7 +699,9 @@ export default function ClientDetailPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{detail.client.client_name}</h1>
-            <p className="text-sm text-muted-foreground">{detail.client.client_email}</p>
+            <p className="text-sm text-muted-foreground">
+              {detail.client.client_email} · Client tag {detail.client.client_code}
+            </p>
           </div>
         </div>
         <Badge variant={STAGE_VARIANT[detail.client.stage]} className="ml-auto">
