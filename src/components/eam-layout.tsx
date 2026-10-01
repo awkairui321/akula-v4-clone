@@ -12,7 +12,6 @@ import {
   BarChart3Icon,
   UserIcon,
   PanelLeft,
-  Moon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -118,11 +117,8 @@ export default function EamLayout() {
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <Link to="/live-demo" className="text-xs text-primary underline">Live compare</Link>
+            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>Compare roles live</Button>
             <DemoResetButton compact />
-            <Button variant="ghost" size="icon">
-              <Moon />
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -144,12 +140,6 @@ export default function EamLayout() {
         </header>
 
         <main className="mx-auto w-full max-w-310 flex-1 px-3 py-6 sm:px-6 sm:py-8">
-          <Link
-            to="/workflows"
-            className="mb-5 inline-block rounded-md border bg-background px-4 py-2 text-sm"
-          >
-            Connected workflows · servicing & records →
-          </Link>
           <Outlet />
         </main>
       </div>
