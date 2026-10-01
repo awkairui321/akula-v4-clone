@@ -230,6 +230,7 @@ function documentsSummary() {
     total: documents.length,
     received: documents.filter((d) => d.review_state === "received").length,
     reviewing: documents.filter((d) => d.review_state === "reviewing").length,
+    on_hold: documents.filter((d) => d.review_state === "on_hold").length,
     filed: documents.filter((d) => d.review_state === "filed").length,
   };
 }
