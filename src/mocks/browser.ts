@@ -1,3 +1,4 @@
+import { seedWorkflow, restore, persist } from "./workflow";
 import { setupWorker } from "msw/browser";
 import { handlers } from "./handlers";
 
@@ -28,7 +29,10 @@ function installFetchFallback() {
           request: request.clone(),
           requestId: crypto.randomUUID(),
         });
-        if (result?.response) return result.response;
+        if (result?.response) {
+          if (result.response.ok) persist();
+          return result.response;
+        }
       }
     }
     return realFetch(input, init);
@@ -36,6 +40,11 @@ function installFetchFallback() {
 }
 
 export async function startMockWorker() {
+  seedWorkflow();
+  restore();
+  worker.events.on("response:mocked", ({ response }) => {
+    if (response.ok) persist();
+  });
   try {
     await worker.start({ onUnhandledRequest: "bypass" });
   } catch (err) {

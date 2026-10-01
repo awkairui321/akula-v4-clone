@@ -25,3 +25,12 @@ dist-ssr
 
 # Local env (copy from .env.example)
 .env
+
+
+.test-runtime/
+integrate.py
+wire.py
+refine.py
+harden.py
+/mobile-fix.py
+/release-notes.py

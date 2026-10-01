@@ -18,7 +18,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const DEMO_ACCOUNTS = [
   { email: "investor@akula.vc", label: "Investor" },
   { email: "luca@akula.vc", label: "LUCA (fund manager)" },
-  { email: "eam@akula.vc", label: "RM / Adviser (EAM)" },
+  { email: "eam@akula.vc", label: "External institution (EAM)" },
+  { email: "ops@akula.vc", label: "Akula Ops" },
+  { email: "rm@akula.vc", label: "LUCA relationship manager" },
 ];
 
 export default function LoginPage() {

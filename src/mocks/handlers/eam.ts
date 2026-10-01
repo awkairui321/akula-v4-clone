@@ -1,3 +1,4 @@
+import { workflow } from "../workflow";
 import { http, HttpResponse } from "msw";
 import {
   currentUser,
@@ -98,8 +99,13 @@ function participationFor(investorId: number): number {
     .filter((h) => h.investor_id === investorId && h.state !== "realized")
     .reduce((sum, h) => sum + parseFloat(h.committed_amount), 0);
   const activeSubs = subscriptions
-    .filter((s) => s.investor_id === investorId && s.status !== "cancelled")
-    .reduce((sum, s) => sum + parseFloat(s.amount), 0);
+    .filter(
+      (s) =>
+        s.investor_id === investorId &&
+        !s._convertedToHoldingId &&
+        !["cancelled", "rejected", "funds_returned", "not_allocated"].includes(s.status),
+    )
+    .reduce((sum, s) => sum + (s.allocated_principal ?? parseFloat(s.amount)), 0);
   return heldCost + activeSubs;
 }
 
@@ -200,7 +206,12 @@ export const eamHandlers = [
           settlement_date: h.subscribed_at,
         })),
       ...subscriptions
-        .filter((s) => investorIds.includes(s.investor_id) && s.status === "allocated")
+        .filter(
+          (s) =>
+            investorIds.includes(s.investor_id) &&
+            s.status === "allocated" &&
+            !s._convertedToHoldingId,
+        )
         .map((s) => {
           const fund = findFundById(s.fund_id);
           return {
@@ -208,7 +219,7 @@ export const eamHandlers = [
             fund_id: s.fund_id,
             client_name: clients.find((c) => c.investor_id === s.investor_id)?.client_name ?? "",
             reference: s.payment_reference as string | null,
-            allocated_volume: parseFloat(s.amount),
+            allocated_volume: s.allocated_principal ?? parseFloat(s.amount),
             settlement_date: s.allocated_at,
           };
         }),
@@ -347,10 +358,14 @@ export const eamHandlers = [
   }),
 
   // GET /api/v1/eam/opportunities/:id
-  http.get("*/api/v1/eam/opportunities/:id", ({ params }) => {
+  http.get("*/api/v1/eam/opportunities/:id", ({ params, request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
     const fund = findFundById(Number(params.id));
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
-    const fundHighlights = highlights.filter((h) => h.fund_id === fund.id);
+    const fundHighlights = highlights.filter(
+      (h) => h.fund_id === fund.id && myClients(user.id).some((c) => c.id === h.adviser_client_id),
+    );
     return HttpResponse.json({ fund, highlights: fundHighlights });
   }),
 
@@ -377,7 +392,7 @@ export const eamHandlers = [
     const fundId = body.highlight?.fund_id;
     const client = clientId ? findAdviserClientById(clientId) : undefined;
     const fund = fundId ? findFundById(fundId) : undefined;
-    if (!client || !fund) {
+    if (!client || client.eam_user_id !== user.id || !fund || fund.state !== "open") {
       return HttpResponse.json({ error: "Client and fund are required" }, { status: 422 });
     }
     const highlight = {
@@ -394,7 +409,12 @@ export const eamHandlers = [
   }),
 
   // DELETE /api/v1/eam/highlights/:id
-  http.delete("*/api/v1/eam/highlights/:id", ({ params }) => {
+  http.delete("*/api/v1/eam/highlights/:id", ({ params, request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    const record = highlights.find((h) => h.id === Number(params.id));
+    if (!record || !myClients(user.id).some((c) => c.id === record.adviser_client_id))
+      return HttpResponse.json({ error: "Highlight not found" }, { status: 404 });
     const index = highlights.findIndex((h) => h.id === Number(params.id));
     if (index !== -1) highlights.splice(index, 1);
     return HttpResponse.json({});
@@ -416,24 +436,37 @@ export const eamHandlers = [
   }),
 
   // GET /api/v1/eam/discussions/:id
-  http.get("*/api/v1/eam/discussions/:id", ({ params }) => {
+  http.get("*/api/v1/eam/discussions/:id", ({ params, request }) => {
     const discussion = discussions.find((d) => d.id === Number(params.id));
-    if (!discussion) return HttpResponse.json({ error: "Discussion not found" }, { status: 404 });
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    if (!discussion || !myClients(user.id).some((c) => c.id === discussion.adviser_client_id))
+      return HttpResponse.json({ error: "Discussion not found" }, { status: 404 });
     return HttpResponse.json(discussion);
   }),
 
   // POST /api/v1/eam/discussions/:id/messages
   http.post("*/api/v1/eam/discussions/:id/messages", async ({ params, request }) => {
     const discussion = discussions.find((d) => d.id === Number(params.id));
-    if (!discussion) return HttpResponse.json({ error: "Discussion not found" }, { status: 404 });
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    if (!discussion || !myClients(user.id).some((c) => c.id === discussion.adviser_client_id))
+      return HttpResponse.json({ error: "Discussion not found" }, { status: 404 });
     const body = (await request.json()) as { message?: { sender_role?: string; body?: string } };
     const message = {
       id: nextDiscussionMessageId(),
-      sender_role: body.message?.sender_role ?? "adviser",
+      sender_role: "adviser",
       body: body.message?.body ?? "",
       created_at: new Date().toISOString(),
     };
+    if (!message.body.trim())
+      return HttpResponse.json({ error: "Write a message" }, { status: 422 });
     discussion.messages.push(message);
+    const linked = workflow.cases.find((c) => c.discussionId === discussion.id);
+    if (linked) {
+      linked.messages.push({ actorId: user.id, text: message.body, at: message.created_at });
+      linked.status = "open";
+    }
     discussion.updated_at = message.created_at;
     return HttpResponse.json({ message });
   }),

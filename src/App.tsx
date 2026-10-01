@@ -8,6 +8,7 @@ import { landingPathForRole } from "@/lib/roles";
 import ErrorBoundary from "@/components/error-boundary";
 import AppLayout from "@/components/app-layout";
 import LucaLayout from "@/components/luca-layout";
+import WorkflowPage from "@/features/workspace/workflow-page";
 import LandingPage from "@/features/unauthenticated/landing";
 import LoginPage from "@/features/unauthenticated/login";
 import SignupPage from "@/features/unauthenticated/signup";
@@ -156,6 +157,7 @@ function App() {
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 {/* Authenticated */}
                 <Route element={<AuthRequired />}>
+                  <Route path="/workflows" element={<WorkflowPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/onboarding/:section" element={<OnboardingPage />} />
                   {/* Onboarded */}

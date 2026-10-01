@@ -70,7 +70,14 @@ export type Tag = {
   category: string;
 };
 
-export type FundStatus = "draft" | "open" | "closing" | "closed" | "holding" | "realized";
+export type FundStatus =
+  | "draft"
+  | "open"
+  | "closing"
+  | "closed"
+  | "holding"
+  | "realized"
+  | "cancelled";
 
 export type Fund = {
   id: number;
@@ -151,7 +158,13 @@ export type SubscriptionStatus =
   | "rejected"
   | "cancelled";
 
-export type SubscriptionOwner = "investor" | "akula_ops" | "administrator" | "complete" | "eam";
+export type SubscriptionOwner =
+  | "luca"
+  | "investor"
+  | "akula_ops"
+  | "administrator"
+  | "complete"
+  | "eam";
 
 export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   reserved: "Reserved",
@@ -196,12 +209,13 @@ export const LUCA_PIPELINE_STAGES: {
     label: "Funded",
     statuses: ["awaiting_funds", "payment_unmatched", "reconciliation", "allocation_pending"],
   },
-  { key: "active_holding", label: "Active Holding", statuses: ["allocated"] },
+  { key: "active_holding", label: "Allocated", statuses: ["allocated"] },
 ];
 
 export const OWNER_LABELS: Record<SubscriptionOwner, string> = {
   investor: "Investor",
-  akula_ops: "LUCA ops",
+  akula_ops: "Akula Ops",
+  luca: "LUCA fund manager",
   administrator: "Administrator",
   complete: "Complete",
   eam: "EAM",

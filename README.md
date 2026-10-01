@@ -1,42 +1,13 @@
-# React + TypeScript + Vite
+# Akula v4 - LUCA simulated beta
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The existing v4 application now connects investors, LUCA fund managers, Akula Ops, relationship managers and external institutions through shared browser-local records.
 
-Currently, two official plugins are available:
+See [integration and demo accounts](docs/INTEGRATION.md) and [verification results](docs/VERIFICATION.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Run locally
 
-## React Compiler
+Use Node 22 or newer. Install with `npm ci`, then `npm run dev`. Alternatively use `pnpm install --frozen-lockfile` with the supplied pnpm lockfile. Leave `VITE_API_URL` empty to use the simulated transport. Login demo buttons select fictional accounts; all demo passwords are `password123`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+`npm test`, `npm run typecheck`, `npm run lint`, `npm run format_check` and `npm run build` validate the app. `npm run preview` serves the built application.
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
-
-## Environment variables
-
-Copy `.env.example` to `.env`; Vite loads it in development and bakes `VITE_*`
-values into the bundle at build time. Every variable is optional locally and
-documented inline in the example file. At deploy, pass the same names as Docker
-build args.
-
-Crash reporting goes to GlitchTip via the Sentry SDK. Set `VITE_SENTRY_DSN` to a
-GlitchTip project DSN to enable it; leave it empty to disable reporting.
+All identity checks, documents, signatures, payments, allocations and reporting are simulated. Persistence is local to one browser. Use fictional data only. This repository release does not provision a backend or publicly deploy a website.

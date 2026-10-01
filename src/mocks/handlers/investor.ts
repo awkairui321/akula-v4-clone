@@ -1,3 +1,10 @@
+import {
+  ownedSubscription,
+  recordSignature,
+  requestWithdrawal,
+  currentVersion,
+  disclosureAccess,
+} from "../workflow";
 import { http, HttpResponse } from "msw";
 import {
   currentUser,
@@ -9,7 +16,6 @@ import {
   fundManagers,
   holdings,
   subscriptions,
-  findSubscriptionById,
   createSubscription,
   toSubscription,
   acknowledgementsResponse,
@@ -60,15 +66,45 @@ export const investorHandlers = [
   http.patch("*/api/v1/investor_profile", async ({ request }) => upsertProfile(request)),
 
   // GET /api/v1/funds
-  http.get("*/api/v1/funds", () => {
-    return HttpResponse.json({ funds });
+  http.get("*/api/v1/funds", ({ request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    if (user.has_investor_profile && !user.has_eam_profile && !disclosureAccess(user))
+      return HttpResponse.json(
+        { error: "Complete eligibility, NDA and required consents to review new opportunities." },
+        { status: 403 },
+      );
+    return HttpResponse.json({
+      funds: funds
+        .filter((f) => user.role === "luca" || user.role === "ops" || f.state !== "draft")
+        .map((f) =>
+          user.role === "luca" || user.role === "ops"
+            ? f
+            : { ...(currentVersion(f.id)?.snapshot ?? f), state: f.state },
+        ),
+    });
   }),
 
   // GET /api/v1/funds/:id
-  http.get("*/api/v1/funds/:id", ({ params }) => {
+  http.get("*/api/v1/funds/:id", ({ params, request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
     const fund = findFundById(Number(params.id));
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
-    return HttpResponse.json({ fund });
+    if (
+      user.has_investor_profile &&
+      !user.has_eam_profile &&
+      !disclosureAccess(user) &&
+      !subscriptions.some((s) => s.investor_id === user.id && s.fund_id === fund.id)
+    )
+      return HttpResponse.json({ error: "Disclosure access required" }, { status: 403 });
+    if (fund.state === "draft" && !["luca", "ops"].includes(user.role))
+      return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
+    return HttpResponse.json({
+      fund: ["luca", "ops"].includes(user.role)
+        ? fund
+        : { ...(currentVersion(fund.id)?.snapshot ?? fund), state: fund.state },
+    });
   }),
 
   // GET /api/v1/discover
@@ -115,18 +151,47 @@ export const investorHandlers = [
     if (!body.fund_id || !body.amount) {
       return HttpResponse.json({ error: "fund_id and amount are required" }, { status: 422 });
     }
-    const fund = findFundById(body.fund_id);
+    const working = findFundById(body.fund_id);
+    const published = currentVersion(body.fund_id);
+    const fund = working && published ? { ...published.snapshot, state: working.state } : undefined;
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
+    if (
+      !user.has_investor_profile ||
+      user.kyc_status !== "approved" ||
+      user.nda_status !== "signed" ||
+      !consentsForUser(user.id)
+        .filter((c) => c.required)
+        .every((c) => c.granted) ||
+      fund.state !== "open"
+    )
+      return HttpResponse.json(
+        {
+          error: "Complete eligibility, signature and explicit consents; choose an open offering.",
+        },
+        { status: 422 },
+      );
     const min = parseFloat(fund.min_subscription);
     const max = fund.max_subscription ? parseFloat(fund.max_subscription) : null;
     const amount = parseFloat(body.amount);
-    if (Number.isNaN(amount) || amount < min || (max !== null && amount > max)) {
+    if (
+      !Number.isFinite(amount) ||
+      Math.abs(
+        (amount - min) / Number(fund.subscription_increment) -
+          Math.round((amount - min) / Number(fund.subscription_increment)),
+      ) > 0.000001 ||
+      amount < min ||
+      (max !== null && amount > max)
+    ) {
       return HttpResponse.json(
         { error: "Amount is outside the allowed subscription range" },
         { status: 422 },
       );
     }
     const sub = createSubscription(user.id, body.fund_id, body.amount);
+    sub.document_version_id = published!.id;
+    sub.subscription_fee = ((amount * Number(fund.subscription_fee_pct)) / 100).toFixed(2);
+    sub.fund_name = fund.name;
+    sub.asset_name = fund.asset.name;
     return HttpResponse.json({
       subscription: toSubscription(sub),
       wizard_step: wizardStepFor(sub),
@@ -135,8 +200,8 @@ export const investorHandlers = [
   }),
 
   // GET /api/v1/subscriptions/:id
-  http.get("*/api/v1/subscriptions/:id", ({ params }) => {
-    const sub = findSubscriptionById(Number(params.id));
+  http.get("*/api/v1/subscriptions/:id", ({ params, request }) => {
+    const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     return HttpResponse.json({
       subscription: toSubscription(sub),
@@ -147,10 +212,15 @@ export const investorHandlers = [
 
   // PATCH /api/v1/subscriptions/:id
   http.patch("*/api/v1/subscriptions/:id", async ({ params, request }) => {
-    const sub = findSubscriptionById(Number(params.id));
+    const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     const body = (await request.json().catch(() => ({}))) as { payment_declared?: boolean };
     if (body.payment_declared) {
+      if (!["awaiting_funds", "payment_unmatched"].includes(sub.status))
+        return HttpResponse.json(
+          { error: "Funding is not available at this stage" },
+          { status: 422 },
+        );
       sub.payment_declared_at = new Date().toISOString();
       sub.payment_claimed = true;
       if (sub.status === "awaiting_funds") {
@@ -167,15 +237,15 @@ export const investorHandlers = [
   }),
 
   // GET /api/v1/subscriptions/:id/acknowledgements
-  http.get("*/api/v1/subscriptions/:id/acknowledgements", ({ params }) => {
-    const sub = findSubscriptionById(Number(params.id));
+  http.get("*/api/v1/subscriptions/:id/acknowledgements", ({ params, request }) => {
+    const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     return HttpResponse.json({ acknowledgements: acknowledgementsResponse(sub) });
   }),
 
   // POST /api/v1/subscriptions/:id/acknowledgements
   http.post("*/api/v1/subscriptions/:id/acknowledgements", async ({ params, request }) => {
-    const sub = findSubscriptionById(Number(params.id));
+    const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     const body = (await request.json()) as {
       acknowledgement?: { acknowledgement_term_id?: number };
@@ -184,18 +254,22 @@ export const investorHandlers = [
     const term = sub.acknowledgements.find((t) => t.id === termId);
     if (!term)
       return HttpResponse.json({ error: "Acknowledgement term not found" }, { status: 404 });
+    if (!["reserved", "documents_pending"].includes(sub.status))
+      return HttpResponse.json({ error: "Signed acknowledgments are immutable" }, { status: 422 });
     term.accepted = true;
     term.accepted_at = new Date().toISOString();
     return HttpResponse.json({ acknowledgements: acknowledgementsResponse(sub) });
   }),
 
   // DELETE /api/v1/subscriptions/:id/acknowledgements/:termId
-  http.delete("*/api/v1/subscriptions/:id/acknowledgements/:termId", ({ params }) => {
-    const sub = findSubscriptionById(Number(params.id));
+  http.delete("*/api/v1/subscriptions/:id/acknowledgements/:termId", ({ params, request }) => {
+    const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     const term = sub.acknowledgements.find((t) => t.id === Number(params.termId));
     if (!term)
       return HttpResponse.json({ error: "Acknowledgement term not found" }, { status: 404 });
+    if (!["reserved", "documents_pending"].includes(sub.status))
+      return HttpResponse.json({ error: "Signed acknowledgments are immutable" }, { status: 422 });
     term.accepted = false;
     term.accepted_at = null;
     return HttpResponse.json({ acknowledgements: acknowledgementsResponse(sub) });
@@ -204,9 +278,12 @@ export const investorHandlers = [
   // POST /api/v1/signwell/sign_subscription
   http.post("*/api/v1/signwell/sign_subscription", async ({ request }) => {
     const body = (await request.json()) as { subscription_id?: number };
-    const sub = findSubscriptionById(Number(body.subscription_id));
+    const sub = ownedSubscription(request, Number(body.subscription_id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
 
+    if (!acknowledgementsResponse(sub).complete)
+      return HttpResponse.json({ error: "Accept required acknowledgments first" }, { status: 422 });
+    sub.document_version_id ||= currentVersion(sub.fund_id)?.id;
     if (sub.status === "reserved") {
       sub.status = "documents_pending";
       sub.owner = "investor";
@@ -230,9 +307,14 @@ export const investorHandlers = [
   // POST /api/v1/signwell/check_subscription
   http.post("*/api/v1/signwell/check_subscription", async ({ request }) => {
     const body = (await request.json()) as { subscription_id?: number };
-    const sub = findSubscriptionById(Number(body.subscription_id));
+    const sub = ownedSubscription(request, Number(body.subscription_id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
 
+    if (sub.status === "reserved" || !acknowledgementsResponse(sub).complete)
+      return HttpResponse.json(
+        { error: "Start signing after completing acknowledgments" },
+        { status: 422 },
+      );
     if (sub.status === "documents_pending") {
       sub._signPollCount += 1;
       if (sub._signPollCount >= 2) {
@@ -245,6 +327,7 @@ export const investorHandlers = [
         sub.owner = ownerFor(sub.status, sub.origin);
         sub.next_action = nextActionFor(sub.status);
         sub.confirmed_at = new Date().toISOString();
+        recordSignature(sub, currentUser(request)!.email);
       }
     }
 
@@ -323,7 +406,10 @@ export const investorHandlers = [
       return HttpResponse.json({ documents: documents.filter((d) => d.owner_id === user.id) });
     }
     const forFund = documents.filter(
-      (d) => d.fund_id === Number(fundId) && (d.subscription_id === null || d.owner_id === user.id),
+      (d) =>
+        d.fund_id === Number(fundId) &&
+        ((d.subscription_id === null && d.review_state === "filed" && disclosureAccess(user)) ||
+          d.owner_id === user.id),
     );
     return HttpResponse.json({ documents: forFund });
   }),
@@ -423,8 +509,8 @@ export const investorHandlers = [
   }),
 
   // POST /api/v1/subscriptions/:id/proceed_to_funding
-  http.post("*/api/v1/subscriptions/:id/proceed_to_funding", ({ params }) => {
-    const sub = findSubscriptionById(Number(params.id));
+  http.post("*/api/v1/subscriptions/:id/proceed_to_funding", ({ params, request }) => {
+    const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     if (sub.status !== "approved") {
       return HttpResponse.json(
@@ -443,8 +529,8 @@ export const investorHandlers = [
   }),
 
   // POST /api/v1/subscriptions/:id/refund_request
-  http.post("*/api/v1/subscriptions/:id/refund_request", ({ params }) => {
-    const sub = findSubscriptionById(Number(params.id));
+  http.post("*/api/v1/subscriptions/:id/refund_request", ({ params, request }) => {
+    const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     if (sub.status !== "awaiting_funds") {
       return HttpResponse.json(
@@ -452,10 +538,7 @@ export const investorHandlers = [
         { status: 422 },
       );
     }
-    sub.status = "funds_returned";
-    sub.owner = ownerFor(sub.status);
-    sub.next_action = nextActionFor(sub.status);
-    sub.allocated_at = new Date().toISOString();
+    requestWithdrawal(sub);
     return HttpResponse.json({
       subscription: toSubscription(sub),
       wizard_step: wizardStepFor(sub),
@@ -465,7 +548,7 @@ export const investorHandlers = [
 
   // POST /api/v1/subscriptions/:id/payment_proof
   http.post("*/api/v1/subscriptions/:id/payment_proof", async ({ params, request }) => {
-    const sub = findSubscriptionById(Number(params.id));
+    const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     const body = (await request.json().catch(() => ({}))) as { filename?: string };
     if (!body.filename) {
@@ -517,10 +600,32 @@ async function upsertProfile(request: Request) {
     investorProfiles.push(profile);
   }
 
-  Object.assign(profile, patch);
+  const previousStep = profile.onboarding_step;
+  const allowed = [
+    "first_name",
+    "preferred_first_name",
+    "middle_name",
+    "last_name",
+    "suffix",
+    "nationality",
+    "date_of_birth",
+    "country",
+    "phone",
+    "interested_industries",
+    "typical_ticket_size",
+    "onboarding_step",
+    "channel",
+    "referral_code",
+    "accreditation_basis",
+    "eligibility_confirmed_at",
+  ];
+  Object.assign(
+    profile,
+    Object.fromEntries(Object.entries(patch).filter(([key]) => allowed.includes(key))),
+  );
   // onboarding_step should only ever move forward.
   if (typeof patch.onboarding_step === "number") {
-    profile.onboarding_step = Math.max(profile.onboarding_step, patch.onboarding_step);
+    profile.onboarding_step = Math.max(previousStep, patch.onboarding_step);
   }
 
   return HttpResponse.json({

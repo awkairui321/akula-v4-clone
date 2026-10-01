@@ -61,7 +61,7 @@ export type MockUser = {
   id: number;
   email: string;
   password: string;
-  role: "luca" | "investor" | "eam";
+  role: "luca" | "ops" | "rm" | "investor" | "eam";
   verified: boolean;
   two_factor_enabled: boolean;
   otp_secret: string | null;
@@ -151,6 +151,14 @@ export const users: MockUser[] = [
     _ndaPollCount: 0,
   },
 ];
+
+users.push(
+  ...[
+    { id: 6, email: "rm@akula.vc", role: "rm" as const },
+    { id: 7, email: "ops@akula.vc", role: "ops" as const },
+    { id: 8, email: "rm2@akula.vc", role: "rm" as const },
+  ].map((u) => ({ ...users[0], ...u })),
+);
 
 export function findUserByEmail(email: string): MockUser | undefined {
   return users.find((u) => u.email.toLowerCase() === email.toLowerCase());
@@ -1809,13 +1817,13 @@ const OWNER_BY_STATUS: Record<SubscriptionStatus, SubscriptionOwner> = {
   reserved: "investor",
   documents_pending: "investor",
   institution_review: "eam",
-  under_luca_review: "akula_ops",
+  under_luca_review: "luca",
   information_requested: "investor",
   approved: "investor",
   awaiting_funds: "investor",
   payment_unmatched: "akula_ops",
   reconciliation: "akula_ops",
-  allocation_pending: "akula_ops",
+  allocation_pending: "luca",
   allocated: "complete",
   not_allocated: "akula_ops",
   funds_returned: "complete",
@@ -1903,6 +1911,10 @@ function acceptedAcknowledgements(): AcknowledgementTerm[] {
 }
 
 export type MockSubscription = {
+  allocated_principal?: number;
+  document_version_id?: number;
+  needs_review_version_id?: number;
+  reviewed_version_ids?: number[];
   id: number;
   fund_id: number;
   fund_name: string;
@@ -2251,7 +2263,20 @@ export function toAdminSubscription(sub: MockSubscription) {
     information_requested_at: sub.information_requested_at,
     rejection_reason: sub.rejection_reason,
     rejection_note: sub.rejection_note,
-    available_transitions: TRANSITIONS[sub.status],
+    available_transitions: TRANSITIONS[sub.status].filter(
+      (t) =>
+        (t === "under_luca_review" && sub.status === "information_requested") ||
+        ![
+          "allocated",
+          "not_allocated",
+          "funds_returned",
+          "payment_unmatched",
+          "reconciliation",
+          "allocation_pending",
+          "institution_review",
+          "under_luca_review",
+        ].includes(t),
+    ),
     payment_claimed: sub.payment_claimed,
     reserved_at: sub.reserved_at,
     confirmed_at: sub.confirmed_at,
@@ -2602,10 +2627,15 @@ export function nextHoldingId(): number {
  *  record unchanged, this only affects the investor-facing view. Used both
  *  for live "allocated" transitions and to backfill subscriptions seeded
  *  directly at "allocated" status below. */
-export function issueHolding(sub: MockSubscription, units?: string, pricePerUnit?: string): void {
+export function issueHolding(
+  sub: MockSubscription,
+  units?: string,
+  pricePerUnit?: string,
+  allocatedPrincipal?: number,
+): void {
   const fund = findFundById(sub.fund_id);
   if (!fund || sub._convertedToHoldingId) return;
-  const amount = parseFloat(sub.amount);
+  const amount = allocatedPrincipal ?? parseFloat(sub.amount);
   const price = pricePerUnit?.trim() ? parseFloat(pricePerUnit) : parseFloat(fund.price);
   const unitCount = units?.trim() ? parseFloat(units) : price > 0 ? amount / price : 0;
   const now = new Date().toISOString();
@@ -3146,9 +3176,12 @@ function committedAmountFor(investorId: number): string {
   // Holding record, and counting both would double it.
   const subTotal = subscriptions
     .filter(
-      (s) => s.investor_id === investorId && s.status !== "cancelled" && !s._convertedToHoldingId,
+      (s) =>
+        s.investor_id === investorId &&
+        !["cancelled", "rejected", "funds_returned", "not_allocated"].includes(s.status) &&
+        !s._convertedToHoldingId,
     )
-    .reduce((sum, s) => sum + parseFloat(s.amount), 0);
+    .reduce((sum, s) => sum + (s.allocated_principal ?? parseFloat(s.amount)), 0);
   const holdingTotal = holdings
     .filter((h) => h.investor_id === investorId)
     .reduce((sum, h) => sum + parseFloat(h.committed_amount), 0);
@@ -3593,7 +3626,7 @@ export function partnerSummary(partner: MockPartner): AdminPartner {
   const verified = investorSeeds.filter((s) => s.verification_status === "approved").length;
   const allocatedVolume = subscriptions
     .filter((s) => partner.clientInvestorIds.includes(s.investor_id) && s.status === "allocated")
-    .reduce((sum, s) => sum + parseFloat(s.amount), 0);
+    .reduce((sum, s) => sum + (s.allocated_principal ?? parseFloat(s.amount)), 0);
   const accrued = allocatedVolume * (parseFloat(partner.eam_revenue_share_pct ?? "0") / 100) * 0.6;
   const paid = allocatedVolume * (parseFloat(partner.eam_revenue_share_pct ?? "0") / 100) * 0.4;
   return {
@@ -3852,7 +3885,11 @@ export type PublicUser = {
 };
 
 export function investorOnboardingComplete(profile: MockInvestorProfile, user: MockUser): boolean {
-  if (profile.skipped) return true;
+  if (
+    profile.skipped ||
+    (profile.completed && user.nda_status === "signed" && user.kyc_status === "approved")
+  )
+    return true;
   return (
     profile.channel !== null &&
     profile.eligibility_confirmed_at !== null &&
@@ -3878,4 +3915,64 @@ export function publicUser(user: MockUser): PublicUser {
     nda_status: user.nda_status,
     kyc_status: user.kyc_status,
   };
+}
+
+const demoArrays = {
+  users,
+  investorProfiles,
+  eamProfiles,
+  funds,
+  subscriptions,
+  platformEvents,
+  bankTransfers,
+  holdings,
+  documents,
+  watchlist,
+  adviserClients,
+  highlights,
+  discussions,
+  adminInvestorSeeds,
+  partners,
+  communications,
+  communicationRecipients,
+};
+export function exportDemoState() {
+  return structuredClone({
+    arrays: demoArrays,
+    consents: [...consentGrants],
+    verification: verificationDocumentsByInvestor,
+  });
+}
+export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
+  if (
+    !saved ||
+    !saved.arrays ||
+    !Object.keys(demoArrays).every((k) => Array.isArray(saved.arrays[k as keyof typeof demoArrays]))
+  )
+    throw new Error("Invalid saved database");
+  for (const key of Object.keys(demoArrays) as (keyof typeof demoArrays)[]) {
+    const target = demoArrays[key] as unknown[];
+    target.splice(0, target.length, ...structuredClone(saved.arrays[key]));
+  }
+  consentGrants.clear();
+  for (const [key, value] of saved.consents) consentGrants.set(key, value);
+  Object.assign(verificationDocumentsByInvestor, saved.verification);
+  const high =
+    Math.max(
+      10000,
+      ...Object.values(demoArrays)
+        .flat()
+        .map((x) => x.id),
+    ) + 1;
+  subscriptionAutoId = high;
+  eventAutoId = high;
+  bankTransferAutoId = high;
+  holdingAutoId = high;
+  documentAutoId = high;
+  watchlistAutoId = high;
+  highlightAutoId = high;
+  discussionAutoId = high;
+  discussionMessageAutoId = high;
+  communicationAutoId = high;
+  communicationRecipientAutoId = high;
 }

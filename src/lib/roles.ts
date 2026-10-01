@@ -13,6 +13,8 @@ type UserLike =
 export function landingPathForRole(user: UserLike, activeProfile?: ActiveProfileType): string {
   if (!user) return "/onboarding";
 
+  if (["ops", "rm"].includes(user.role)) return "/workflows";
+
   if (user.role === "luca") return "/luca";
 
   // Onboarding completion is an investor-profile concept, so it's only checked

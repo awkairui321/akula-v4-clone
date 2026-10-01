@@ -41,21 +41,6 @@ const RANGE_POINT_COUNT: Record<Range, number> = { "1M": 2, "3M": 3, "6M": 5, "1
 
 type SeriesPoint = { period: string; value: number; invested: number };
 
-const PLACEHOLDER_SERIES: SeriesPoint[] = [
-  { period: "Q1 '23", value: 150000, invested: 150000 },
-  { period: "Q2 '23", value: 205000, invested: 190000 },
-  { period: "Q3 '23", value: 255000, invested: 230000 },
-  { period: "Q4 '23", value: 300000, invested: 270000 },
-  { period: "Q1 '24", value: 355000, invested: 320000 },
-  { period: "Q2 '24", value: 420000, invested: 370000 },
-  { period: "Q3 '24", value: 485000, invested: 420000 },
-  { period: "Q4 '24", value: 555000, invested: 465000 },
-  { period: "Q1 '25", value: 655000, invested: 515000 },
-  { period: "Q2 '25", value: 870000, invested: 580000 },
-];
-const PLACEHOLDER_TOTAL_INVESTED = 580000;
-const PLACEHOLDER_ACTIVE_INVESTMENTS = 11;
-
 function niceAxisMax(max: number): number {
   const step = 10 ** Math.floor(Math.log10(max || 1));
   return Math.ceil(max / step) * step;
@@ -156,11 +141,13 @@ function LineChart({ points }: { points: SeriesPoint[] }) {
 function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
   const [range, setRange] = useState<Range>("All");
 
-  const latest = PLACEHOLDER_SERIES[PLACEHOLDER_SERIES.length - 1];
-  const navTotal = latest.value;
-  const gain = navTotal - PLACEHOLDER_TOTAL_INVESTED;
-  const gainPct = (gain / PLACEHOLDER_TOTAL_INVESTED) * 100;
-  const shown = PLACEHOLDER_SERIES.slice(-RANGE_POINT_COUNT[range]);
+  const invested = heldPositions.reduce((sum, h) => sum + Number(h.committed_amount), 0);
+  const navTotal = heldPositions.reduce((sum, h) => sum + Number(h.current_nav), 0);
+  const gain = navTotal - invested;
+  const gainPct = invested ? (gain / invested) * 100 : 0;
+  const shown: SeriesPoint[] = [{ period: "Latest reported", value: navTotal, invested }].slice(
+    -RANGE_POINT_COUNT[range],
+  );
   const TrendIcon = gain >= 0 ? TrendingUpIcon : TrendingDownIcon;
 
   if (heldPositions.length === 0) return null;
@@ -189,15 +176,11 @@ function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
             <div className="flex flex-col gap-4 border-t pt-4">
               <div>
                 <span className="text-xs text-muted-foreground">Total Invested Capital</span>
-                <p className="mt-1 text-lg font-semibold tabular-nums">
-                  {formatPrice(PLACEHOLDER_TOTAL_INVESTED)}
-                </p>
+                <p className="mt-1 text-lg font-semibold tabular-nums">{formatPrice(invested)}</p>
               </div>
               <div>
                 <span className="text-xs text-muted-foreground">Active Investments</span>
-                <p className="mt-1 text-lg font-semibold tabular-nums">
-                  {PLACEHOLDER_ACTIVE_INVESTMENTS}
-                </p>
+                <p className="mt-1 text-lg font-semibold tabular-nums">{heldPositions.length}</p>
               </div>
             </div>
           </div>
@@ -205,11 +188,12 @@ function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
           {/* Right: chart */}
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium">Portfolio Value Over Time</span>
+              <span className="text-sm font-medium">Reported holdings snapshot</span>
               <div className="flex gap-1">
                 {RANGES.map((r) => (
                   <button
                     key={r}
+                    disabled={r !== "All"}
                     onClick={() => setRange(r)}
                     className={`rounded px-2 py-1 text-xs ${
                       range === r
@@ -224,6 +208,11 @@ function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
             </div>
 
             <LineChart points={shown} />
+            <p className="text-xs text-muted-foreground">
+              Latest available reports, potentially with different as-of dates. Full portfolio
+              history is not available; no historical performance is inferred. Pending
+              subscriptions, returned cash and realized holdings are excluded.
+            </p>
 
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
@@ -283,7 +272,7 @@ function HoldingsBreakdown({ holdings }: { holdings: Holding[] }) {
           <p className="mb-4 text-sm font-medium">Holdings by % of portfolio</p>
           <div className="space-y-3">
             {byCompany.map((c) => (
-              <div key={c.name} className="flex items-center gap-3">
+              <div key={`${c.name}-${c.value}`} className="flex items-center gap-3">
                 <span className="w-32 shrink-0 truncate text-xs">{c.name}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${c.pct}%` }} />
@@ -334,7 +323,7 @@ const PROGRESS_STEP_LABEL: Record<SubscriptionStatus, string> = {
   payment_unmatched: "Transfer of funds in progress",
   reconciliation: "Fund verification in progress",
   allocation_pending: "Fund verification in progress",
-  allocated: "Holding issued",
+  allocated: "Allocation confirmed · issuance pending",
   not_allocated: "Closed",
   funds_returned: "Closed",
   rejected: "Closed",
@@ -375,7 +364,7 @@ function LatestUpdates({ activeSubs }: { activeSubs: Subscription[] }) {
     ...highlights.map((h) => ({
       key: `highlight-${h.id}`,
       icon: <SparklesIcon className="size-4" />,
-      title: `Your RM recommends ${h.fund_name}`,
+      title: `Your external institution highlighted ${h.fund_name}`,
       sub: h.rationale,
       to: `/funds/${h.fund_id}`,
     })),

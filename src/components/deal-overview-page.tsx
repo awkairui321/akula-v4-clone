@@ -53,19 +53,16 @@ type SectionId =
   | "recording"
   | "documents";
 
-function sectionsFor(fund: Fund): { id: SectionId; nav: string }[] {
-  const { asset } = fund;
-  const list: { id: SectionId; nav: string }[] = [{ id: "overview", nav: "Overview" }];
-  if (asset.market_context.length > 0 || asset.competitive_landscape.length > 0 || asset.thesis)
-    list.push({ id: "market", nav: "Market" });
-  if (asset.business_columns.length > 0 || asset.product_disclosures.length > 0)
-    list.push({ id: "business", nav: "Business model" });
-  if (fund.revenue_points.length > 0 || asset.funding_rounds.length > 0)
-    list.push({ id: "financials", nav: "Financials" });
-  if (asset.risks.length > 0) list.push({ id: "risks", nav: "Risks" });
-  list.push({ id: "recording", nav: "Recording" });
-  list.push({ id: "documents", nav: "Documents" });
-  return list;
+function sectionsFor(_fund: Fund): { id: SectionId; nav: string }[] {
+  return [
+    { id: "overview", nav: "Overview" },
+    { id: "market", nav: "Market & competitive" },
+    { id: "business", nav: "Business model" },
+    { id: "financials", nav: "Financials" },
+    { id: "recording", nav: "Recordings" },
+    { id: "documents", nav: "Documents" },
+    { id: "risks", nav: "Risks" },
+  ];
 }
 
 /* ─── Scroll-spy ─── */
@@ -104,7 +101,7 @@ function RailNav({
   active: string | null;
 }) {
   return (
-    <nav aria-label="Contents" className="hidden w-44 shrink-0 lg:block">
+    <nav aria-label="Contents" className="sticky top-6 hidden w-44 shrink-0 self-start lg:block">
       <p className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
         Contents
       </p>
@@ -137,8 +134,8 @@ function ChipNav({
   active: string | null;
 }) {
   return (
-    <nav aria-label="Sections" className="-mx-4 overflow-x-auto px-4 pb-1 lg:hidden">
-      <div className="flex w-max gap-2">
+    <nav aria-label="Sections" className="pb-1 lg:hidden">
+      <div className="flex flex-wrap gap-2">
         {sections.map((s) => (
           <a
             key={s.id}
@@ -160,7 +157,7 @@ function ChipNav({
 function GlanceRow({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
   return (
-    <div className="flex justify-between gap-6 py-1.5 text-sm">
+    <div className="flex flex-wrap justify-between gap-x-6 gap-y-1 py-1.5 text-sm">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="text-right font-medium">{value}</dd>
     </div>
@@ -177,13 +174,13 @@ function Hero({ fund }: { fund: Fund }) {
 
   return (
     <section className="space-y-5">
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-2.5">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {fund.codename}
+            {asset.name} · {fund.fund_manager.name}
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">{asset.name}</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{fund.codename}</h1>
             <Badge variant={fund.state === "open" ? "default" : "secondary"}>
               {fund.state === "open" ? "Live" : fund.state}
             </Badge>
@@ -202,7 +199,7 @@ function Hero({ fund }: { fund: Fund }) {
             label="Founded"
             value={asset.founded_year ? `${asset.founded_year}, ${asset.headquarters}` : null}
           />
-          <GlanceRow label="Typical buyer" value={asset.typical_buyer} />
+          <GlanceRow label="Key customers" value={asset.typical_buyer} />
           <GlanceRow label="Commercial model" value={asset.commercial_model} />
         </dl>
       </div>
@@ -449,7 +446,9 @@ function RevenueBars({ points }: { points: Fund["revenue_points"] }) {
     <div className="flex items-end gap-2 overflow-x-auto pb-2">
       {points.map((p, i) => (
         <div key={p.period} className="flex min-w-14 flex-1 flex-col items-center gap-1">
-          <span className="text-[11px] font-medium">${p.value}B</span>
+          <span className="text-[11px] font-medium">
+            {p.value === null ? "Undisclosed" : `$${p.value}B`}
+          </span>
           <div className="flex h-32 w-full items-end">
             <div
               className={`w-full rounded-t ${i === points.length - 1 ? "bg-primary" : "bg-primary/40"}`}
@@ -895,8 +894,8 @@ export default function DealOverviewPage({
   });
 
   return (
-    <div ref={topRef} className="mx-auto w-full max-w-6xl space-y-8">
-      <div className="flex items-center justify-between">
+    <div ref={topRef} className="deal-reading-page mx-auto w-full max-w-6xl min-w-0 space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link to={backTo}>
           <Button variant="ghost" size="sm" className="p-0">
             <ArrowLeftIcon className="mr-1 size-4" />
@@ -937,7 +936,7 @@ export default function DealOverviewPage({
             title="How the company creates value"
             standfirst={`What problem ${asset.name} solves, what it provides and who uses it.`}
           >
-            <div className="grid gap-6 lg:grid-cols-[1fr_260px]">
+            <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
               <OverviewSection asset={asset} />
               <div className="space-y-4 lg:sticky lg:top-8 lg:self-start">
                 <TermsPanel fund={fund} />
@@ -982,16 +981,6 @@ export default function DealOverviewPage({
             </SectionShell>
           )}
 
-          {sections.some((s) => s.id === "risks") && (
-            <SectionShell
-              id="risks"
-              title="Risks and considerations"
-              standfirst="Business-specific questions to prioritise in diligence, plus the general risks that apply to all private-market investments."
-            >
-              <RisksSection asset={asset} />
-            </SectionShell>
-          )}
-
           <SectionShell
             id="recording"
             title="Recorded overview"
@@ -1007,6 +996,16 @@ export default function DealOverviewPage({
           >
             <DocumentsSection fund={fund} viewer={viewer} />
           </SectionShell>
+
+          {sections.some((s) => s.id === "risks") && (
+            <SectionShell
+              id="risks"
+              title="Risks and considerations"
+              standfirst="Business-specific questions to prioritise in diligence, plus the general risks that apply to all private-market investments."
+            >
+              <RisksSection asset={asset} />
+            </SectionShell>
+          )}
         </div>
       </div>
 

@@ -85,6 +85,7 @@ function useSignWellScript() {
 
   useEffect(() => {
     if (loaded) return;
+    if (isMocking) return;
     const existing = document.querySelector(`script[src="${SIGNWELL_EMBED_SRC}"]`);
     if (existing) {
       existing.addEventListener("load", () => setLoaded(true));

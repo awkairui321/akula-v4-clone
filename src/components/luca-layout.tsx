@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Circle,
   LayoutDashboard,
@@ -36,7 +36,15 @@ export default function LucaLayout() {
   const { logout, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const screen = window.matchMedia("(max-width: 767px)");
+    const collapse = () => {
+      if (screen.matches) setCollapsed(true);
+    };
+    screen.addEventListener("change", collapse);
+    return () => screen.removeEventListener("change", collapse);
+  }, []);
 
   const activeItem =
     NAV_ITEMS.find(
@@ -50,7 +58,7 @@ export default function LucaLayout() {
   return (
     <div className="flex min-h-screen">
       <aside
-        className={`${collapsed ? "w-16" : "w-56"} flex shrink-0 flex-col border-r transition-all`}
+        className={`${collapsed ? "w-16" : "w-40 md:w-56"} flex shrink-0 flex-col border-r transition-all`}
       >
         <Link to="/luca" className="mt-1 px-3 py-4">
           <div className={`flex flex-row ${collapsed ? "justify-center" : ""}`}>
@@ -84,7 +92,7 @@ export default function LucaLayout() {
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col bg-muted">
+      <div className="flex min-w-0 flex-1 flex-col bg-muted">
         <header className="flex items-center border-b px-6 py-4">
           <div className="flex items-center">
             <Button
@@ -121,7 +129,13 @@ export default function LucaLayout() {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-310 flex-1 px-6 py-8">
+        <main className="mx-auto w-full max-w-310 flex-1 px-3 py-6 sm:px-6 sm:py-8">
+          <Link
+            to="/workflows"
+            className="mb-5 inline-block rounded-md border bg-background px-4 py-2 text-sm"
+          >
+            Connected workflows · servicing & records →
+          </Link>
           <Outlet />
         </main>
       </div>

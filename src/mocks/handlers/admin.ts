@@ -1,6 +1,8 @@
+import { workflow, command } from "../workflow";
 import { http, HttpResponse } from "msw";
 import {
   currentUser,
+  findUserById,
   subscriptions,
   findSubscriptionById,
   toAdminSubscription,
@@ -11,7 +13,6 @@ import {
   findAdminInvestorSeed,
   verificationDocumentsByInvestor,
   holdings,
-  issueHolding,
   documents,
   nextDocumentId,
   partners,
@@ -79,6 +80,11 @@ function applyTransition(
   if (!to || !TRANSITIONS[sub.status].includes(to)) {
     return { error: `Cannot move a subscription from ${sub.status} to ${to ?? "(none)"}` };
   }
+  if (
+    to === "institution_review" ||
+    (to === "under_luca_review" && sub.status !== "information_requested")
+  )
+    return { error: "Complete investor signing and institution review in their own workflows." };
   if (to === "information_requested" && !extras.informationRequestNote?.trim()) {
     return { error: "Describe what information is needed" };
   }
@@ -86,6 +92,31 @@ function applyTransition(
     return { error: "Select a rejection reason" };
   }
 
+  if (
+    [
+      "allocated",
+      "not_allocated",
+      "funds_returned",
+      "payment_unmatched",
+      "reconciliation",
+      "allocation_pending",
+    ].includes(to)
+  )
+    return {
+      error: "Use the connected workflow workspace for cash, allocation, issuance and returns.",
+    };
+  if (findFundById(sub.fund_id)?.state === "cancelled" && to !== "cancelled")
+    return { error: "Cancelled offering cannot advance." };
+  if (to === "cancelled") {
+    try {
+      command({ role: "luca", id: 1 } as ReturnType<typeof requireAdmin> & {}, {
+        type: "cancel",
+        id: sub.id,
+      });
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
+  }
   const now = new Date().toISOString();
   sub.status = to;
   sub.owner = ownerFor(to, sub.origin);
@@ -94,7 +125,7 @@ function applyTransition(
   if (extras.paymentReference?.trim()) {
     sub.payment_reference = extras.paymentReference.trim();
   }
-  if (to === "institution_review" || to === "under_luca_review") {
+  if (to === "under_luca_review") {
     sub.institution_reviewed_at = sub.institution_reviewed_at ?? now;
   }
   if (to === "information_requested") {
@@ -124,9 +155,7 @@ function applyTransition(
   if (to === "allocated" || to === "not_allocated" || to === "funds_returned") {
     sub.allocated_at = now;
   }
-  if (to === "allocated") {
-    issueHolding(sub, extras.units, extras.pricePerUnit);
-  }
+
   if (to === "cancelled") {
     sub.cancelled_at = now;
   }
@@ -160,11 +189,13 @@ function subscriptionsSummary() {
     by_status,
     payment_claimed: claimedUnconfirmed.length,
     payment_claimed_value: claimedUnconfirmed
-      .reduce((sum, s) => sum + parseFloat(s.amount), 0)
+      .reduce((sum, s) => sum + (s.allocated_principal ?? parseFloat(s.amount)), 0)
       .toFixed(2),
-    unmatched_value: unmatched.reduce((sum, s) => sum + parseFloat(s.amount), 0).toFixed(2),
+    unmatched_value: unmatched
+      .reduce((sum, s) => sum + (s.allocated_principal ?? parseFloat(s.amount)), 0)
+      .toFixed(2),
     awaiting_allocation_value: awaitingAllocation
-      .reduce((sum, s) => sum + parseFloat(s.amount), 0)
+      .reduce((sum, s) => sum + (s.allocated_principal ?? parseFloat(s.amount)), 0)
       .toFixed(2),
   };
 }
@@ -211,10 +242,6 @@ function partnersSummary() {
     accrued_revenue: list.reduce((sum, p) => sum + parseFloat(p.accrued_revenue), 0).toFixed(2),
   };
 }
-
-let fundAutoId = Math.max(...funds.map((f) => f.id)) + 1;
-let assetAutoId = Math.max(...funds.map((f) => f.asset.id)) + 1;
-let shareClassAutoId = Math.max(...funds.map((f) => f.share_class.id)) + 1;
 
 export const adminHandlers = [
   // GET /api/v1/admin/activity?{investor_id,fund_id} — most recent platform
@@ -357,16 +384,10 @@ export const adminHandlers = [
     const sub = body.subscription_id ? findSubscriptionById(body.subscription_id) : undefined;
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
 
-    transfer.matched_subscription_id = sub.id;
-    const result = applyTransition(sub.id, "reconciliation", {
-      paymentReference: transfer.raw_reference,
-    });
-    if ("error" in result) return HttpResponse.json({ error: result.error }, { status: 422 });
-
-    return HttpResponse.json({
-      bank_transfer: transfer,
-      subscription: toAdminSubscription(result.sub),
-    });
+    return HttpResponse.json(
+      { error: "Record and match the receipt in the Akula Ops workflow workspace." },
+      { status: 422 },
+    );
   }),
 
   // GET /api/v1/admin/investors?{needs_review,expiring_within,q}
@@ -453,6 +474,14 @@ export const adminHandlers = [
       seed.verification_status = "pending";
     }
     seed.reviewed_at = new Date().toISOString();
+    const identity = findUserById(seed.id);
+    if (identity)
+      identity.kyc_status =
+        seed.verification_status === "approved"
+          ? "approved"
+          : seed.verification_status === "rejected"
+            ? "failed"
+            : "pending";
 
     const investor = adminInvestors().find((i) => i.id === seed.id);
     return HttpResponse.json({ investor });
@@ -588,7 +617,11 @@ export const adminHandlers = [
     const periodMap = new Map<string, number>();
     for (const s of allocated) {
       const period = (s.allocated_at ?? s.created_at).slice(0, 7);
-      periodMap.set(period, (periodMap.get(period) ?? 0) + parseFloat(s.amount) * (sharePct / 100));
+      periodMap.set(
+        period,
+        (periodMap.get(period) ?? 0) +
+          (s.allocated_principal ?? parseFloat(s.amount)) * (sharePct / 100),
+      );
     }
     const revenue_periods = [...periodMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -622,14 +655,14 @@ export const adminHandlers = [
       );
     }
 
-    const assetId = assetAutoId++;
+    const assetId = Math.max(...funds.map((f) => f.asset.id), 0) + 1;
     const fund: Fund = {
-      id: fundAutoId++,
+      id: Math.max(...funds.map((f) => f.id), 0) + 1,
       name: `${company_name.trim()} SPV`,
       codename: codename.trim(),
       descriptor: "",
       hook: "",
-      state: "open",
+      state: "draft",
       vehicle_type: "fund",
       holding_period_note: null,
       deal_type: "primary",
@@ -695,7 +728,7 @@ export const adminHandlers = [
         financial_indicators: [],
       },
       share_class: {
-        id: shareClassAutoId++,
+        id: Math.max(...funds.map((f) => f.share_class.id), 0) + 1,
         name: "Class A Participating",
         class_type: "preference",
       },
@@ -719,6 +752,20 @@ export const adminHandlers = [
 
     const body = (await request.json()) as { fund?: Record<string, unknown> };
     const patch = body.fund ?? {};
+    if (patch.state === "open" && fund.state !== "open")
+      return HttpResponse.json(
+        { error: "Use exact-version approval and Ops publication in Workflows." },
+        { status: 422 },
+      );
+    if (
+      workflow.versions.some(
+        (v) => v.fundId === fund.id && ["review", "approved"].includes(v.status),
+      )
+    )
+      return HttpResponse.json(
+        { error: "Finish the reviewed version before editing again." },
+        { status: 422 },
+      );
 
     if (Array.isArray(patch.tag_ids)) {
       fund.tags = tagsFor(patch.tag_ids as number[]);

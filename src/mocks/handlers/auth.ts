@@ -18,21 +18,11 @@ function unauthorized() {
   return HttpResponse.json({ error: "Not authenticated" }, { status: 401 });
 }
 
-let userAutoId = Math.max(...users.map((u) => u.id)) + 1;
-
 export const authHandlers = [
   // GET /api/v1/me
   http.get("*/api/v1/me", ({ request }) => {
     const user = currentUser(request);
     if (!user) return unauthorized();
-
-    // Simulate an async Persona (KYC) review converging after a couple of polls.
-    if (user.kyc_status === "pending") {
-      user._kycPollCount += 1;
-      if (user._kycPollCount >= 2) {
-        user.kyc_status = "approved";
-      }
-    }
 
     return HttpResponse.json({ user: publicUser(user) });
   }),
@@ -85,7 +75,7 @@ export const authHandlers = [
     }
 
     const newUser: MockUser = {
-      id: userAutoId++,
+      id: Math.max(...users.map((u) => u.id), 0) + 1,
       email,
       password,
       role: "investor",

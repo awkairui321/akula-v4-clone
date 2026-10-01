@@ -132,3 +132,11 @@
     cursor: pointer;
   }
 }
+
+/* Allow company materials to reflow while wide tables scroll locally. */
+.deal-reading-page .grid > * {
+  min-width: 0;
+}
+.deal-reading-page {
+  overflow-wrap: anywhere;
+}

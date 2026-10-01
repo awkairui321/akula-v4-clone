@@ -932,6 +932,7 @@ function useSignWellScript() {
 
   useEffect(() => {
     if (loaded) return;
+    if (isMocking) return;
     const existing = document.querySelector(`script[src="${SIGNWELL_EMBED_SRC}"]`);
     if (existing) {
       existing.addEventListener("load", () => setLoaded(true));
@@ -1176,6 +1177,7 @@ function KycSection({
   });
 
   useEffect(() => {
+    if (isMocking) return;
     if (!config || clientRef.current || kycStatus !== "not_started") return;
     if (!containerRef.current) return;
 
