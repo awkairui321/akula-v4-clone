@@ -420,7 +420,15 @@ export default function AdminSubscriptionsPage() {
                 <button
                   key={stage.key}
                   type="button"
-                  onClick={() => setActiveStage(activeStage === stage.key ? null : stage.key)}
+                  onClick={() => {
+                    setActiveStage(activeStage === stage.key ? null : stage.key);
+                    if (stageFromUrl || statusFromUrl) {
+                      const next = new URLSearchParams(searchParams);
+                      next.delete("stage");
+                      next.delete("status");
+                      setSearchParams(next);
+                    }
+                  }}
                   className={`rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${activeStage === stage.key ? "border-primary bg-primary/5" : "bg-card"}`}
                   aria-expanded={activeStage === stage.key}
                 >
