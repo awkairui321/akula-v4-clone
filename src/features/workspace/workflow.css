@@ -101,6 +101,113 @@
   background: var(--muted);
   color: var(--muted-foreground);
 }
+.wf-queue-tabs,
+.wf-queue-filters,
+.wf-publication-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.wf-queue-filters .wf-field {
+  flex: 1 1 210px;
+  min-width: 0;
+}
+.wf-queue-list {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.wf-queue-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.8fr;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  border-top: 1px solid var(--border);
+  background: #fff;
+}
+.wf-queue-row:first-child {
+  border-top: 0;
+}
+.wf-queue-row:hover,
+.wf-queue-row-active {
+  background: #edf5f8;
+}
+.wf-queue-row span,
+.wf-report-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.wf-queue-row small,
+.wf-report-row small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.wf-publication-link {
+  display: flex;
+  flex: 1 1 210px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+}
+.wf-publication-link:hover {
+  background: #edf5f8;
+}
+.wf-publication-link span,
+.wf-publication-link small {
+  color: var(--muted-foreground);
+}
+.wf-report-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 10px 0;
+  background: white;
+}
+.wf-report-group summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  padding: 15px;
+}
+.wf-report-group summary span {
+  color: var(--muted-foreground);
+}
+.wf-report-table {
+  padding: 0 15px 15px;
+  overflow-x: auto;
+}
+.wf-report-head,
+.wf-report-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.8fr 0.9fr;
+  gap: 10px;
+  min-width: 600px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+.wf-report-head {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+@media (max-width: 767px) {
+  .wf-queue-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .wf-queue-row > span:last-child {
+    grid-column: 1/-1;
+  }
+  .wf-report-group summary {
+    flex-direction: column;
+  }
+}
 .wf-sidebar {
   width: 235px;
   flex-shrink: 0;
