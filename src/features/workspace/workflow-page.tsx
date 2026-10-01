@@ -602,7 +602,229 @@ export default function WorkflowPage() {
                                 label="Correct currency"
                                 value={sub.currency}
                               />
-                              <Field …2452 tokens truncated…" required={false} />
+                              <Field name="text" label="Correction reference / source" />
+                            </Action>
+                          </details>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </Panel>
+                <Panel title="Allocation & registry">
+                  {d.actor.role === "eam" && sub.status === "institution_review" && (
+                    <Action
+                      label="Complete institution review"
+                      command={{ type: "institution-review", id: sub.id }}
+                    />
+                  )}
+                  {manager &&
+                    !allocation &&
+                    !sub.holdingId &&
+                    ["allocation_pending", "reconciliation"].includes(sub.status) && (
+                      <Action label="Approve allocation" command={{ type: "allocate", id: sub.id }}>
+                        <Field
+                          name="amount"
+                          type="number"
+                          label="Allocated principal (zero permitted)"
+                          value={sub.amount}
+                        />
+                        <Field name="price" type="number" label="Illustrative class unit price" />
+                        <p>
+                          Class units use this explicit class price, not an underlying company share
+                          price.
+                        </p>
+                      </Action>
+                    )}
+                  {ops && !!allocation?.principal && !sub.holdingId && (
+                    <Action
+                      label="Confirm simulated registry issuance"
+                      command={{ type: "issue", id: sub.id }}
+                    />
+                  )}
+                  <p>
+                    Allocation alone does not create a holding. Issuance is a separate Ops action.
+                  </p>
+                </Panel>
+                <Panel title="Independent return obligations">
+                  {!returns.length && <p>No recorded return obligation.</p>}
+                  {returns.map((r) => (
+                    <article className="wf-record" key={r.id}>
+                      <h3>
+                        Return #{r.id} · {money(r.amount, sub.currency)}
+                      </h3>
+                      <p>
+                        {r.status} · {date(r.at)}
+                      </p>
+                      {ops && r.status !== "confirmed" && (
+                        <Action
+                          label="Update return"
+                          command={{ type: "return", id: sub.id, target: r.id }}
+                        >
+                          <Choice
+                            name="status"
+                            label="Settlement status"
+                            items={
+                              r.status === "processing"
+                                ? [
+                                    { id: "confirmed", name: "Confirmed" },
+                                    { id: "failed", name: "Failed" },
+                                  ]
+                                : [{ id: "processing", name: "Processing / retry" }]
+                            }
+                          />
+                        </Action>
+                      )}
+                    </article>
+                  ))}
+                </Panel>
+              </>
+            )}
+          </>
+        )}
+        {tab === "Support" && <Cases data={d} />}
+        {tab === "Documents" && (
+          <Panel title="Versioned investment documents">
+            <p>
+              Signed snapshots remain available after revisions or consent withdrawal. Downloads and
+              previews use this same immutable version.
+            </p>
+            {d.versions.map((v) => (
+              <article key={v.id} className="wf-record">
+                <h3>
+                  {v.snapshot.codename} · version {v.number}
+                </h3>
+                <p>
+                  {v.status} · {date(v.at)}
+                  {d.signatures
+                    .filter((s) => s.versionId === v.id)
+                    .map((s) => ` · Signed for investment #${s.subscriptionId} by ${s.name}`)
+                    .join("")}
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => setPreview(preview === v.id ? null : v.id)}
+                >
+                  Preview
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    download(
+                      `term-sheet-${v.fundId}-v${v.number}.doc`,
+                      documentHtml(v),
+                      "application/msword",
+                    )
+                  }
+                >
+                  Download Word (.doc)
+                </Button>
+                {preview === v.id && (
+                  <iframe
+                    title={`${v.snapshot.codename} version ${v.number}`}
+                    sandbox=""
+                    srcDoc={documentHtml(v)}
+                    className="wf-document"
+                  />
+                )}
+              </article>
+            ))}
+          </Panel>
+        )}
+        {tab === "Publication" && privileged && (
+          <>
+            <Panel title="Offering preparation">
+              <p>
+                Use the existing <Link to="/luca/deals">deal editor</Link> to author content.
+                Prepare a version, request review, obtain LUCA approval, then publish as Ops.
+              </p>
+              <Action label="Prepare draft version" command={{ type: "prepare" }}>
+                <Choice name="id" label="Offering" items={d.funds} />
+              </Action>
+            </Panel>
+            <Panel title="Publication queue">
+              {d.versions
+                .filter((v) => v.status !== "published")
+                .map((v) => (
+                  <article className="wf-record" key={v.id}>
+                    <h3>
+                      {v.snapshot.codename} · version {v.number}
+                    </h3>
+                    <p>{v.status}</p>
+                    {ops && v.status === "draft" && (
+                      <Action
+                        label="Submit for LUCA review"
+                        command={{ type: "review", id: v.id }}
+                      />
+                    )}
+                    {manager && v.status === "review" && (
+                      <Action
+                        label="Approve exact version"
+                        command={{ type: "approve", id: v.id }}
+                      />
+                    )}
+                    {ops && v.status === "approved" && (
+                      <Action
+                        label="Publish approved version"
+                        command={{ type: "publish", id: v.id }}
+                      />
+                    )}
+                  </article>
+                ))}
+            </Panel>
+          </>
+        )}
+        {tab === "Relationships" && (rm || manager) && (
+          <>
+            <Panel title={manager ? "Assign LUCA relationship managers" : "Assigned clients"}>
+              {manager && (
+                <Action label="Record mock eligibility decision" command={{ type: "eligibility" }}>
+                  <Choice name="id" label="Investor identity" items={d.clients} />
+                  <Choice
+                    name="status"
+                    label="Manager decision"
+                    items={[
+                      { id: "approved", name: "Approved" },
+                      { id: "failed", name: "Declined" },
+                    ]}
+                  />
+                </Action>
+              )}
+              {manager && (
+                <Action label="Assign RM" command={{ type: "assign" }}>
+                  <Choice name="id" label="Client" items={d.clients} />
+                  <Choice
+                    name="target"
+                    label="LUCA employee"
+                    items={[
+                      { id: 6, name: "LUCA RM · rm@akula.vc" },
+                      { id: 8, name: "LUCA RM · rm2@akula.vc" },
+                    ]}
+                  />
+                </Action>
+              )}
+              {d.clients.map((c) => (
+                <article className="wf-record" key={c.id}>
+                  <h3>{c.name}</h3>
+                  <p>
+                    Client #{c.id} · LUCA RM #
+                    {d.assignments.find((a) => a.investorId === c.id)?.staffId || "unassigned"}
+                  </p>
+                  {rm && (
+                    <>
+                      <Action
+                        label="Highlight approved opportunity"
+                        command={{ type: "highlight", id: c.id }}
+                      >
+                        <Choice
+                          name="target"
+                          label="Opportunity"
+                          items={d.funds.filter((f) => f.state === "open")}
+                        />
+                        <Field name="text" label="Client-facing note" />
+                      </Action>
+                      <Action label="Save private follow-up" command={{ type: "note", id: c.id }}>
+                        <Field name="text" label="Internal note (not visible to investor)" />
+                        <Field name="due" label="Follow-up date" type="date" required={false} />
                       </Action>
                     </>
                   )}
