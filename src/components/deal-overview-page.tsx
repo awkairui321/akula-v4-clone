@@ -666,7 +666,13 @@ function RecordingSection({ fund }: { fund: Fund }) {
 
 /* ─── Documents section ─── */
 
-function DocumentsSection({ fund, viewer }: { fund: Fund; viewer: "investor" | "luca" | "eam" }) {
+function DocumentsSection({
+  fund,
+  viewer,
+}: {
+  fund: Fund;
+  viewer: "investor" | "luca" | "eam" | "rm";
+}) {
   const { data, isLoading } = useQuery({
     queryKey: ["documents", { fund_id: fund.id }],
     queryFn: () => api<{ documents: Document[] }>(`/api/v1/documents?fund_id=${fund.id}`),
@@ -878,7 +884,7 @@ export default function DealOverviewPage({
   preview = false,
 }: {
   fund: Fund;
-  viewer: "investor" | "luca" | "eam";
+  viewer: "investor" | "luca" | "eam" | "rm";
   backTo: string;
   backLabel: string;
   onEditDeal?: () => void;
@@ -912,7 +918,7 @@ export default function DealOverviewPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         {preview ? (
           <Badge variant="outline">
-            {viewer === "eam" ? "EAM" : "Investor"} preview · read only
+            {viewer === "eam" ? "EAM" : viewer === "rm" ? "RM" : "Investor"} preview · read only
           </Badge>
         ) : (
           <Link to={backTo}>
@@ -967,7 +973,9 @@ export default function DealOverviewPage({
                     <p className="font-medium">
                       {viewer === "eam"
                         ? "Adviser-facing opportunity"
-                        : "Investor opportunity access"}
+                        : viewer === "rm"
+                          ? "RM opportunity overview"
+                          : "Investor opportunity access"}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Read-only preview. No allocation, watchlist or subscription is created.
@@ -975,7 +983,9 @@ export default function DealOverviewPage({
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                    Investors see a subscribe calculator here. LUCA sees deal terms only.
+                    {viewer === "eam" || viewer === "rm"
+                      ? "Adviser access is read-only. Investors can review and subscribe from their own workspace."
+                      : "Investors see a subscribe calculator here. LUCA sees deal terms only."}
                   </div>
                 )}
               </div>
