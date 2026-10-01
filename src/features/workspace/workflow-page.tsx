@@ -33,10 +33,12 @@ function Action({
   label,
   command,
   children,
+  disabled = false,
 }: {
   label: string;
   command: WorkflowCommand;
   children?: ReactNode;
+  disabled?: boolean;
 }) {
   const qc = useQueryClient();
   const mutation = useMutation({
@@ -60,7 +62,7 @@ function Action({
   return (
     <form className="wf-action" onSubmit={submit}>
       {children}
-      <Button disabled={mutation.isPending} type="submit">
+      <Button disabled={mutation.isPending || disabled} type="submit">
         {mutation.isPending ? "Saving…" : label}
       </Button>
       {mutation.error && (
@@ -107,15 +109,17 @@ function Choice({
   label,
   name,
   items,
+  required = true,
 }: {
   label: string;
   name: string;
   items: { id: number | string; name: string }[];
+  required?: boolean;
 }) {
   return (
     <label className="wf-field">
       <span>{label}</span>
-      <select name={name} required>
+      <select name={name} required={required}>
         {items.map((i) => (
           <option key={i.id} value={i.id}>
             {i.name}
@@ -172,35 +176,86 @@ export function ServiceDesk() {
 }
 function Cases({ data: d }: { data: WorkflowView }) {
   const staff = ["luca", "ops", "rm"].includes(d.actor.role) || d.actor.role === "eam";
+  const isRm = d.actor.role === "rm";
+  const [clientSearch, setClientSearch] = useState("");
+  const clients = isRm ? d.clients.filter((client) => client.type === "individual") : d.clients;
+  const selectedClient = clients.find(
+    (client) => client.name.toLowerCase() === clientSearch.trim().toLowerCase(),
+  );
+  const clientInvestments = selectedClient
+    ? d.subscriptions.filter((subscription) => subscription.investor_id === selectedClient.id)
+    : [];
   return (
     <>
       <Panel title="Raise a tracked case">
         <p>
           A reference appears immediately in your case history and the responsible team’s workspace.
         </p>
-        <Action label="Create case" command={{ type: "case", target: d.actor.id }}>
-          {staff && <Choice label="Client" name="target" items={d.clients} />}
+        <Action
+          label="Create case"
+          command={{ type: "case", target: d.actor.id }}
+          disabled={isRm && !selectedClient}
+        >
+          {isRm ? (
+            <>
+              <label className="wf-field">
+                <span>Individual client</span>
+                <Input
+                  list="rm-support-clients"
+                  value={clientSearch}
+                  onChange={(event) => setClientSearch(event.target.value)}
+                  placeholder="Type a client name"
+                  required
+                />
+                <datalist id="rm-support-clients">
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.name} />
+                  ))}
+                </datalist>
+                <input type="hidden" name="target" value={selectedClient?.id ?? ""} />
+              </label>
+              <Choice
+                label="Investment (optional)"
+                name="id"
+                required={false}
+                items={[
+                  { id: "", name: "Account question" },
+                  ...clientInvestments.map((investment) => ({
+                    id: investment.id,
+                    name: `#${investment.id} · ${investment.asset_name} · ${investment.status.replaceAll("_", " ")}`,
+                  })),
+                ]}
+              />
+            </>
+          ) : (
+            staff && <Choice label="Client" name="target" items={d.clients} />
+          )}
           <Choice
             label="Route to"
             name="status"
             items={[
               { id: "ops", name: "Akula Ops · processing" },
               { id: "luca", name: "LUCA · fund manager" },
-              { id: "rm", name: "Assigned LUCA RM" },
-              { id: "eam", name: "Assigned external institution" },
+              ...(!isRm ? [{ id: "rm", name: "Assigned LUCA RM" }] : []),
+              ...(!isRm || selectedClient?.eamFirm
+                ? [{ id: "eam", name: "Assigned external institution" }]
+                : []),
             ]}
           />
-          <Choice
-            label="Investment (optional)"
-            name="id"
-            items={[
-              { id: "", name: "Account question" },
-              ...d.subscriptions.map((s) => ({
-                id: s.id,
-                name: `#${s.id} · ${s.investor_name} · ${s.asset_name}`,
-              })),
-            ]}
-          />
+          {!isRm && (
+            <Choice
+              label="Investment (optional)"
+              name="id"
+              required={false}
+              items={[
+                { id: "", name: "Account question" },
+                ...d.subscriptions.map((s) => ({
+                  id: s.id,
+                  name: `#${s.id} · ${s.investor_name} · ${s.asset_name}`,
+                })),
+              ]}
+            />
+          )}
           <Field label="Question or issue" name="text" />
         </Action>
       </Panel>
@@ -350,12 +405,305 @@ function Analytics({ data: d }: { data: WorkflowView }) {
   );
 }
 
+const RM_STAGE_GUIDANCE: Record<string, { next: string; rm: string }> = {
+  reserved: { next: "Client completes application", rm: "Check in with the client if needed." },
+  documents_pending: { next: "Client signs documents", rm: "Remind the client if helpful." },
+  institution_review: {
+    next: "Institution reviews the file",
+    rm: "No action while review is in progress.",
+  },
+  under_luca_review: {
+    next: "LUCA reviews the file",
+    rm: "Wait for LUCA's decision or information request.",
+  },
+  information_requested: {
+    next: "Client or adviser provides information",
+    rm: "Help the client respond to the request.",
+  },
+  approved: {
+    next: "Client follows funding instructions",
+    rm: "Remind the client about the next step if needed.",
+  },
+  awaiting_funds: {
+    next: "Client arranges the transfer",
+    rm: "Check in if the transfer is overdue.",
+  },
+  payment_unmatched: {
+    next: "Akula Ops matches the transfer",
+    rm: "No processing action for the RM.",
+  },
+  reconciliation: { next: "Akula Ops reconciles funds", rm: "No processing action for the RM." },
+  allocation_pending: {
+    next: "LUCA records the allocation",
+    rm: "No allocation action for the RM.",
+  },
+  allocated: { next: "Investment recorded", rm: "Share an update with the client when useful." },
+  not_allocated: {
+    next: "Allocation not completed",
+    rm: "Contact the client if a follow-up is needed.",
+  },
+  funds_returned: { next: "Funds returned", rm: "The subscription is complete." },
+  rejected: {
+    next: "Application declined by LUCA",
+    rm: "Contact the client if a follow-up is needed.",
+  },
+  cancelled: { next: "Application cancelled", rm: "No further action is expected." },
+};
+const RM_STATUS_LABELS: Record<string, string> = {
+  reserved: "Application started",
+  documents_pending: "Awaiting client signature",
+  institution_review: "Institution review",
+  under_luca_review: "LUCA review",
+  information_requested: "Information needed",
+  approved: "Approved",
+  awaiting_funds: "Awaiting client transfer",
+  payment_unmatched: "Payment matching",
+  reconciliation: "Funds reconciliation",
+  allocation_pending: "Allocation in progress",
+  allocated: "Allocation recorded",
+  not_allocated: "Not allocated",
+  funds_returned: "Funds returned",
+  rejected: "Declined by LUCA",
+  cancelled: "Cancelled",
+};
+
+function RMOverview({
+  data: d,
+  onNavigate,
+}: {
+  data: WorkflowView;
+  onNavigate: (tab: string) => void;
+}) {
+  const clientCount = d.clients.filter((client) => client.type === "individual").length;
+  const clientActions = d.subscriptions.filter((subscription) =>
+    [
+      "reserved",
+      "documents_pending",
+      "information_requested",
+      "approved",
+      "awaiting_funds",
+    ].includes(subscription.status),
+  ).length;
+  const awaitingDecision = d.subscriptions.filter((subscription) =>
+    ["institution_review", "under_luca_review"].includes(subscription.status),
+  ).length;
+
+  return (
+    <>
+      <Panel title="Your client book">
+        <p>
+          Use this workspace to support assigned individual investors. Client signatures and
+          transfers belong to the client; LUCA and Akula Ops handle their own review and processing
+          steps.
+        </p>
+        <div className="wf-stats">
+          <div>
+            <span>Assigned individual clients</span>
+            <strong>{clientCount}</strong>
+          </div>
+          <div>
+            <span>Client follow-ups</span>
+            <strong>{clientActions}</strong>
+          </div>
+          <div>
+            <span>With LUCA or institution</span>
+            <strong>{awaitingDecision}</strong>
+          </div>
+          <div>
+            <span>Open support cases</span>
+            <strong>{d.cases.filter((item) => item.status === "open").length}</strong>
+          </div>
+        </div>
+      </Panel>
+      <Panel title="Client investment progress">
+        <p>
+          Each row explains who owns the next step. “No RM action” means the client’s subscription
+          is being handled by LUCA or Akula Ops.
+        </p>
+        {!d.subscriptions.length ? (
+          <div className="wf-empty">
+            <p>No investment applications are currently linked to your client book.</p>
+            <Button variant="outline" onClick={() => onNavigate("Opportunities")}>
+              Browse published opportunities
+            </Button>
+          </div>
+        ) : (
+          <div className="wf-table-wrap">
+            <table className="wf-table">
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Opportunity</th>
+                  <th>Stage</th>
+                  <th>Next step</th>
+                  <th>What you can do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.subscriptions.map((subscription) => {
+                  const guidance = RM_STAGE_GUIDANCE[subscription.status] ?? {
+                    next: subscription.status.replaceAll("_", " "),
+                    rm: "Review with the client if needed.",
+                  };
+                  return (
+                    <tr key={subscription.id}>
+                      <td>{subscription.investor_name}</td>
+                      <td>
+                        {subscription.asset_name}
+                        <small>Investment #{subscription.id}</small>
+                      </td>
+                      <td>
+                        {RM_STATUS_LABELS[subscription.status] ??
+                          subscription.status.replaceAll("_", " ")}
+                      </td>
+                      <td>
+                        {guidance.next}
+                        <small>{money(subscription.amount, subscription.currency)} requested</small>
+                      </td>
+                      <td>{guidance.rm}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+      <Panel title="RM shortcuts">
+        <div className="wf-shortcuts">
+          <button onClick={() => onNavigate("Opportunities")}>
+            <strong>Browse opportunities →</strong>
+            <span>Review the open LUCA shelf before advising clients.</span>
+          </button>
+          <button onClick={() => onNavigate("Relationships")}>
+            <strong>Find a client →</strong>
+            <span>Search your assigned client book and manage follow-ups.</span>
+          </button>
+          <button onClick={() => onNavigate("Client reports")}>
+            <strong>View client reports →</strong>
+            <span>Check reported holding values and their as-of dates.</span>
+          </button>
+        </div>
+      </Panel>
+    </>
+  );
+}
+
+function RMOpportunities({ data: d }: { data: WorkflowView }) {
+  const [search, setSearch] = useState("");
+  const openFunds = d.funds.filter((fund) => fund.state === "open");
+  const filteredFunds = openFunds.filter((fund) =>
+    `${fund.name} ${fund.company} ${fund.descriptor} ${fund.hook}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase()),
+  );
+
+  return (
+    <>
+      <Panel title="Published opportunities">
+        <p>
+          Browse open LUCA offerings to support client conversations. A recommendation does not
+          reserve an allocation or replace LUCA approval.
+        </p>
+        <label className="wf-field wf-search">
+          <span>Search the opportunity shelf</span>
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by company or strategy"
+          />
+        </label>
+        <p className="wf-result-count">
+          Showing {filteredFunds.length} of {openFunds.length} open opportunities
+        </p>
+        {!filteredFunds.length ? (
+          <p className="wf-empty">No open opportunities match this search.</p>
+        ) : (
+          <div className="wf-opportunity-grid">
+            {filteredFunds.map((fund) => (
+              <article className="wf-opportunity" key={fund.id}>
+                <div className="wf-opportunity-head">
+                  <div>
+                    <span className="wf-eyebrow">{fund.name}</span>
+                    <h3>{fund.company}</h3>
+                  </div>
+                  <span className="wf-status">Open</span>
+                </div>
+                <p className="wf-opportunity-descriptor">{fund.descriptor}</p>
+                <p>{fund.hook}</p>
+                <div className="wf-opportunity-meta">
+                  <span>Minimum</span>
+                  <strong>{money(fund.minimum)}</strong>
+                  <span>Closing date</span>
+                  <strong>{fund.closesAt ? date(fund.closesAt) : "To be announced"}</strong>
+                </div>
+                {fund.risks.length > 0 && (
+                  <details>
+                    <summary>Key risk areas</summary>
+                    <ul>
+                      {fund.risks.map((risk) => (
+                        <li key={risk}>{risk}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {d.clients.some((client) => client.type === "individual") ? (
+                  <details className="wf-recommend">
+                    <summary>Share with a client</summary>
+                    <Action
+                      label="Save client recommendation"
+                      command={{ type: "highlight", target: fund.id }}
+                    >
+                      <Choice
+                        label="Individual client"
+                        name="id"
+                        items={d.clients.filter((client) => client.type === "individual")}
+                      />
+                      <Field label="Note for the client" name="text" />
+                    </Action>
+                  </details>
+                ) : (
+                  <p className="wf-empty">
+                    No assigned individual clients are available to recommend this to.
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </Panel>
+      <Panel title="Recently closed or in preparation">
+        <p>These offerings are not open for new client interest.</p>
+        {!d.funds.some((fund) => fund.state !== "open") ? (
+          <p>No other published offerings.</p>
+        ) : (
+          <div className="wf-closed-list">
+            {d.funds
+              .filter((fund) => fund.state !== "open")
+              .map((fund) => (
+                <div key={fund.id}>
+                  <strong>{fund.company}</strong>
+                  <span>
+                    {fund.name} · {fund.state.replaceAll("_", " ")}
+                  </span>
+                </div>
+              ))}
+          </div>
+        )}
+      </Panel>
+    </>
+  );
+}
+
 export default function WorkflowPage() {
   const q = useWorkspace(),
     { logout } = useAuth();
   const [tab, setTab] = useState("Overview");
   const [sid, setSid] = useState("");
   const [preview, setPreview] = useState<number | null>(null);
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [documentFund, setDocumentFund] = useState("all");
+  const [relationshipSearch, setRelationshipSearch] = useState("");
   const d = q.data;
   if (!d)
     return (
@@ -374,14 +722,32 @@ export default function WorkflowPage() {
   const receipts = d.receipts.filter((r) => r.subscriptionId === sub?.id);
   const allocation = d.allocations.find((a) => a.subscriptionId === sub?.id && !a.voided);
   const returns = d.returns.filter((r) => r.subscriptionId === sub?.id);
+  const visibleVersions = d.versions
+    .filter((version) => {
+      const query = documentSearch.trim().toLowerCase();
+      const title =
+        `${version.snapshot.codename} ${version.snapshot.name} ${version.status} ${version.number}`.toLowerCase();
+      return (
+        (!query || title.includes(query)) &&
+        (documentFund === "all" || String(version.fundId) === documentFund)
+      );
+    })
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const visibleClients = d.clients
+    .filter((client) =>
+      `${client.name} ${client.type}`
+        .toLowerCase()
+        .includes(relationshipSearch.trim().toLowerCase()),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
   const tabs = [
     "Overview",
-    "Investments",
+    rm ? "Opportunities" : "Investments",
     "Documents",
     "Support",
     ...(privileged ? ["Publication", "Demand"] : []),
     ...(rm || manager ? ["Relationships"] : []),
-    "Reporting",
+    rm ? "Client reports" : "Reporting",
     ...(!staff ? ["Company requests"] : []),
   ];
   const home = manager ? "/luca" : d.actor.role === "eam" ? "/eam" : "/portfolio";
@@ -430,84 +796,88 @@ export default function WorkflowPage() {
             {d.storageWarning}
           </p>
         )}
-        {tab === "Overview" && (
-          <>
-            <Analytics data={d} />
-            <div className="wf-stats">
-              <div>
-                <span>Investments in scope</span>
-                <strong>{d.subscriptions.length}</strong>
+        {tab === "Overview" &&
+          (rm ? (
+            <RMOverview data={d} onNavigate={setTab} />
+          ) : (
+            <>
+              <Analytics data={d} />
+              <div className="wf-stats">
+                <div>
+                  <span>Investments in scope</span>
+                  <strong>{d.subscriptions.length}</strong>
+                </div>
+                <div>
+                  <span>Unmatched receipts</span>
+                  <strong>{d.receipts.filter((r) => !r.matched && !r.supersededBy).length}</strong>
+                </div>
+                <div>
+                  <span>Open cases</span>
+                  <strong>{d.cases.filter((c) => c.status === "open").length}</strong>
+                </div>
+                <div>
+                  <span>Returns awaiting settlement</span>
+                  <strong>{d.returns.filter((r) => r.status !== "confirmed").length}</strong>
+                </div>
               </div>
-              <div>
-                <span>Unmatched receipts</span>
-                <strong>{d.receipts.filter((r) => !r.matched && !r.supersededBy).length}</strong>
-              </div>
-              <div>
-                <span>Open cases</span>
-                <strong>{d.cases.filter((c) => c.status === "open").length}</strong>
-              </div>
-              <div>
-                <span>Returns awaiting settlement</span>
-                <strong>{d.returns.filter((r) => r.status !== "confirmed").length}</strong>
-              </div>
-            </div>
-            <Panel title="Your next steps">
-              <div className="wf-grid">
-                {[
-                  ["Investments", "Follow cash exceptions, allocation, issuance and returns."],
-                  ["Support", "Review routed cases and reply using the shared reference."],
-                  ["Documents", "Read the exact version behind a simulated signature."],
-                  ["Reporting", "Check stale reports and separate experimental observations."],
-                ].map(([title, text]) => (
-                  <button className="wf-tile" key={title} onClick={() => setTab(title)}>
-                    <h3>{title} →</h3>
-                    <p>{text}</p>
-                  </button>
-                ))}
-              </div>
-            </Panel>
-            {d.highlights.length > 0 && (
-              <Panel title="LUCA RM highlights · full shelf remains available">
-                {d.highlights.map((h) => {
-                  const v = d.versions.find((v) => v.id === h.versionId);
-                  return (
-                    <article className="wf-record" key={h.id}>
-                      <h3>
-                        {v?.snapshot.codename} · v{v?.number}
-                      </h3>
-                      <p>{h.note}</p>
-                      {h.investorId === d.actor.id && (
-                        <Action
-                          label={h.openedAt ? "Reviewed" : "Record opening"}
-                          command={{ type: "open-highlight", id: h.id }}
-                        />
-                      )}
-                      <Link to={`/funds/${v?.fundId}`}>Review opportunity →</Link>
-                    </article>
-                  );
-                })}
+              <Panel title="Your next steps">
+                <div className="wf-grid">
+                  {[
+                    ["Investments", "Follow cash exceptions, allocation, issuance and returns."],
+                    ["Support", "Review routed cases and reply using the shared reference."],
+                    ["Documents", "Read the exact version behind a simulated signature."],
+                    ["Reporting", "Check stale reports and separate experimental observations."],
+                  ].map(([title, text]) => (
+                    <button className="wf-tile" key={title} onClick={() => setTab(title)}>
+                      <h3>{title} →</h3>
+                      <p>{text}</p>
+                    </button>
+                  ))}
+                </div>
               </Panel>
-            )}
-            <Panel title="Demo controls">
-              <p>
-                All screens use the same records in this browser. Exports contain fictional demo
-                data. There is no live backend or multi-user synchronization.
-              </p>
-              <Button
-                variant="outline"
-                onClick={async () =>
-                  download(
-                    "akula-v4-demo.json",
-                    JSON.stringify(await api("/api/v1/workflows/export"), null, 2),
-                  )
-                }
-              >
-                Export demo records
-              </Button>
-              <DemoResetButton />
-            </Panel>
-          </>
-        )}
+              {d.highlights.length > 0 && (
+                <Panel title="LUCA RM highlights · full shelf remains available">
+                  {d.highlights.map((h) => {
+                    const v = d.versions.find((v) => v.id === h.versionId);
+                    return (
+                      <article className="wf-record" key={h.id}>
+                        <h3>
+                          {v?.snapshot.codename} · v{v?.number}
+                        </h3>
+                        <p>{h.note}</p>
+                        {h.investorId === d.actor.id && (
+                          <Action
+                            label={h.openedAt ? "Reviewed" : "Record opening"}
+                            command={{ type: "open-highlight", id: h.id }}
+                          />
+                        )}
+                        <Link to={`/funds/${v?.fundId}`}>Review opportunity →</Link>
+                      </article>
+                    );
+                  })}
+                </Panel>
+              )}
+              <Panel title="Demo controls">
+                <p>
+                  All screens use the same records in this browser. Exports contain fictional demo
+                  data. There is no live backend or multi-user synchronization.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={async () =>
+                    download(
+                      "akula-v4-demo.json",
+                      JSON.stringify(await api("/api/v1/workflows/export"), null, 2),
+                    )
+                  }
+                >
+                  Export demo records
+                </Button>
+                <DemoResetButton />
+              </Panel>
+            </>
+          ))}
+        {rm && tab === "Opportunities" && <RMOpportunities data={d} />}
         {tab === "Investments" && (
           <>
             <Panel title="Investment record">
@@ -705,49 +1075,91 @@ export default function WorkflowPage() {
         {tab === "Documents" && (
           <Panel title="Versioned investment documents">
             <p>
-              Signed snapshots remain available after revisions or consent withdrawal. Downloads and
-              previews use this same immutable version.
+              Search published offering versions and the signed copies linked to your client
+              investments. Each version stays available after a later revision.
             </p>
-            {d.versions.map((v) => (
-              <article key={v.id} className="wf-record">
-                <h3>
-                  {v.snapshot.codename} · version {v.number}
-                </h3>
-                <p>
-                  {v.status} · {date(v.at)}
-                  {d.signatures
-                    .filter((s) => s.versionId === v.id)
-                    .map((s) => ` · Signed for investment #${s.subscriptionId} by ${s.name}`)
-                    .join("")}
-                </p>
-                <Button
-                  variant="outline"
-                  onClick={() => setPreview(preview === v.id ? null : v.id)}
+            <div className="wf-toolbar">
+              <label className="wf-field">
+                <span>Search documents</span>
+                <Input
+                  value={documentSearch}
+                  onChange={(event) => setDocumentSearch(event.target.value)}
+                  placeholder="Company, version or status"
+                />
+              </label>
+              <label className="wf-field">
+                <span>Filter by opportunity</span>
+                <select
+                  value={documentFund}
+                  onChange={(event) => setDocumentFund(event.target.value)}
                 >
-                  Preview
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    download(
-                      `term-sheet-${v.fundId}-v${v.number}.doc`,
-                      documentHtml(v),
-                      "application/msword",
-                    )
-                  }
-                >
-                  Download Word (.doc)
-                </Button>
-                {preview === v.id && (
-                  <iframe
-                    title={`${v.snapshot.codename} version ${v.number}`}
-                    sandbox=""
-                    srcDoc={documentHtml(v)}
-                    className="wf-document"
-                  />
-                )}
-              </article>
-            ))}
+                  <option value="all">All opportunities</option>
+                  {d.funds.map((fund) => (
+                    <option key={fund.id} value={fund.id}>
+                      {fund.company}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="wf-result-count">
+                {visibleVersions.length} of {d.versions.length} versions
+              </span>
+            </div>
+            {!visibleVersions.length ? (
+              <p className="wf-empty">No documents match these filters.</p>
+            ) : (
+              <div className="wf-doc-list">
+                {visibleVersions.map((v) => (
+                  <article key={v.id} className="wf-doc-row">
+                    <div>
+                      <h3>
+                        {v.snapshot.codename} · v{v.number}
+                      </h3>
+                      <p>
+                        {v.status} · {date(v.at)}
+                        {d.signatures
+                          .filter((signature) => signature.versionId === v.id)
+                          .map(
+                            (signature) =>
+                              ` · Signed for investment #${signature.subscriptionId} by ${signature.name}`,
+                          )
+                          .join("")}
+                      </p>
+                    </div>
+                    <div className="wf-doc-actions">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPreview(preview === v.id ? null : v.id)}
+                      >
+                        {preview === v.id ? "Close preview" : "Preview"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          download(
+                            `term-sheet-${v.fundId}-v${v.number}.doc`,
+                            documentHtml(v),
+                            "application/msword",
+                          )
+                        }
+                      >
+                        Download
+                      </Button>
+                    </div>
+                    {preview === v.id && (
+                      <iframe
+                        title={`${v.snapshot.codename} version ${v.number}`}
+                        sandbox=""
+                        srcDoc={documentHtml(v)}
+                        className="wf-document"
+                      />
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
           </Panel>
         )}
         {tab === "Publication" && privileged && (
@@ -796,6 +1208,19 @@ export default function WorkflowPage() {
         {tab === "Relationships" && (rm || manager) && (
           <>
             <Panel title={manager ? "Assign LUCA relationship managers" : "Assigned clients"}>
+              <p>
+                {manager
+                  ? "Find investors in the client book and review their assigned LUCA RM."
+                  : "Search the clients assigned to your RM account. Open a client record to review follow-ups and share a relevant published opportunity."}
+              </p>
+              <label className="wf-field wf-search">
+                <span>Search by client name</span>
+                <Input
+                  value={relationshipSearch}
+                  onChange={(event) => setRelationshipSearch(event.target.value)}
+                  placeholder="Type a client name"
+                />
+              </label>
               {manager && (
                 <Action label="Record mock eligibility decision" command={{ type: "eligibility" }}>
                   <Choice name="id" label="Investor identity" items={d.clients} />
@@ -822,7 +1247,8 @@ export default function WorkflowPage() {
                   />
                 </Action>
               )}
-              {d.clients.map((c) => (
+              {!visibleClients.length && <p className="wf-empty">No clients match this search.</p>}
+              {visibleClients.map((c) => (
                 <article className="wf-record" key={c.id}>
                   <h3>{c.name}</h3>
                   <p>
@@ -945,9 +1371,20 @@ export default function WorkflowPage() {
             </Panel>
           </>
         )}
-        {tab === "Reporting" && (
+        {(tab === "Reporting" || (rm && tab === "Client reports")) && (
           <>
-            <Panel title="Holdings & sourced reports">
+            <Panel title={rm ? "Client holdings & reported values" : "Holdings & sourced reports"}>
+              <p>
+                {rm
+                  ? "This is a read-only view of investments held by your assigned clients and their latest reported values. It helps you prepare client conversations; only LUCA publishes sourced valuations."
+                  : "Reported holding values are separate from experimental security-price observations."}
+              </p>
+              {!d.holdings.length && (
+                <p className="wf-empty">
+                  No holdings have been issued to your client book yet. Once Akula Ops records an
+                  issuance, its reported value will appear here.
+                </p>
+              )}
               {d.holdings.map((h) => {
                 const v = d.valuations.filter((v) => v.holdingId === h.id).at(-1);
                 const at = v?.at || h.nav_as_of;
@@ -983,34 +1420,36 @@ export default function WorkflowPage() {
                 );
               })}
             </Panel>
-            <Panel title="EXPERIMENTAL · Secondary-market pricing indicator">
-              <p>
-                Illustrative underlying-security observations only. Not a VCC/class NAV, executable
-                quote or liquidity promise. These observations never enter holding totals or
-                returns.
-              </p>
-              {manager && (
-                <Action label="Append illustrative observation" command={{ type: "secondary" }}>
-                  <Choice name="id" label="Company offering" items={d.funds} />
-                  <Field name="amount" label="Price per underlying security" type="number" />
-                  <Field name="currency" label="Currency" value="USD" />
-                  <Field name="text" label="Source and comparability notes" />
-                </Action>
-              )}
-              {!d.secondary.length && (
-                <p>No observation supplied. Nothing is inferred from company valuations.</p>
-              )}
-              {d.secondary.map((s) => (
-                <article className="wf-record" key={s.id}>
-                  <h3>
-                    {d.funds.find((f) => f.id === s.fundId)?.name} · {money(s.amount, s.currency)}
-                  </h3>
-                  <p>
-                    {date(s.at)} · {s.source}
-                  </p>
-                </article>
-              ))}
-            </Panel>
+            {(manager || ops) && (
+              <Panel title="EXPERIMENTAL · Secondary-market pricing indicator">
+                <p>
+                  Illustrative underlying-security observations only. Not a VCC/class NAV,
+                  executable quote or liquidity promise. These observations never enter holding
+                  totals or returns.
+                </p>
+                {manager && (
+                  <Action label="Append illustrative observation" command={{ type: "secondary" }}>
+                    <Choice name="id" label="Company offering" items={d.funds} />
+                    <Field name="amount" label="Price per underlying security" type="number" />
+                    <Field name="currency" label="Currency" value="USD" />
+                    <Field name="text" label="Source and comparability notes" />
+                  </Action>
+                )}
+                {!d.secondary.length && (
+                  <p>No observation supplied. Nothing is inferred from company valuations.</p>
+                )}
+                {d.secondary.map((s) => (
+                  <article className="wf-record" key={s.id}>
+                    <h3>
+                      {d.funds.find((f) => f.id === s.fundId)?.name} · {money(s.amount, s.currency)}
+                    </h3>
+                    <p>
+                      {date(s.at)} · {s.source}
+                    </p>
+                  </article>
+                ))}
+              </Panel>
+            )}
           </>
         )}
         <footer>
