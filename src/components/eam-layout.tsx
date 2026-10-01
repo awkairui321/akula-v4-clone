@@ -27,11 +27,11 @@ import DemoResetButton from "./demo-reset-button";
 
 const NAV_ITEMS = [
   { to: "/eam", label: "Overview", icon: LayoutDashboard, exact: true },
-  { to: "/eam/clients", label: "Clients", icon: Users },
+  { to: "/eam/reports", label: "Reports", icon: BarChart3Icon },
   { to: "/eam/opportunities", label: "Opportunities", icon: TrendingUp },
   { to: "/eam/documents", label: "Documents", icon: FileTextIcon },
+  { to: "/eam/clients", label: "Clients", icon: Users },
   { to: "/eam/support", label: "Support", icon: MessageCircleIcon },
-  { to: "/eam/reports", label: "Client reports", icon: BarChart3Icon },
   { to: "/eam/revenue", label: "Revenue", icon: BarChart3Icon },
   { to: "/eam/profile", label: "Profile", icon: UserIcon },
 ];
