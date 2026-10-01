@@ -21,9 +21,8 @@ import FundsPage from "@/features/investor/funds";
 import FundDetailPage from "@/features/investor/fund-detail";
 import CheckoutPage from "@/features/investor/checkout";
 import PortfolioPage from "@/features/investor/portfolio";
-import AccountPage from "@/features/investor/account";
+import AccountSupportPage from "@/features/investor/account-support";
 import DocumentsPage from "@/features/investor/documents";
-import SupportPage from "@/features/investor/support";
 import DiscoverPage from "@/features/investor/discover";
 import DiscoverDetailPage from "@/features/investor/discover-detail";
 import AdminDashboard from "@/features/admin/dashboard";
@@ -35,8 +34,6 @@ import CommunicationsPage from "@/features/admin/communications";
 import ComposeCommunicationPage from "@/features/admin/communications/compose";
 import CommunicationDetailPage from "@/features/admin/communications/detail";
 import LucaOnboardingPage from "@/features/admin/onboarding";
-import InvestorsByFundPage from "@/features/admin/investors/by-fund";
-import InvestorsByEamPage from "@/features/admin/investors/by-eam";
 import AdminInvestorDetailPage from "@/features/admin/investors/investor-detail";
 import AdminPartnersPage from "@/features/admin/partners";
 import AdminPartnerDetailPage from "@/features/admin/partners/partner-detail";
@@ -173,8 +170,8 @@ function App() {
                       <Route path="/discover/:id" element={<DiscoverDetailPage />} />
                       <Route path="/portfolio" element={<PortfolioPage />} />
                       <Route path="/documents" element={<DocumentsPage />} />
-                      <Route path="/account" element={<AccountPage />} />
-                      <Route path="/support" element={<SupportPage />} />
+                      <Route path="/account" element={<AccountSupportPage />} />
+                      <Route path="/support" element={<AccountSupportPage />} />
                     </Route>
                   </Route>
                 </Route>
@@ -185,8 +182,8 @@ function App() {
                       <Route path="/luca" element={<AdminDashboard />} />
                       <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />
                       <Route path="/luca/onboarding" element={<LucaOnboardingPage />} />
-                      <Route path="/luca/fund-search" element={<InvestorsByFundPage />} />
-                      <Route path="/luca/eam-search" element={<InvestorsByEamPage />} />
+                      <Route path="/luca/fund-search" element={<Navigate to="/luca/onboarding?mode=funds" replace />} />
+                      <Route path="/luca/eam-search" element={<Navigate to="/luca/onboarding?mode=entities" replace />} />
                       <Route path="/luca/investors/:id" element={<AdminInvestorDetailPage />} />
                       <Route path="/luca/partners" element={<AdminPartnersPage />} />
                       <Route path="/luca/partners/:id" element={<AdminPartnerDetailPage />} />
