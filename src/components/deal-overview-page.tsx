@@ -671,7 +671,7 @@ function DocumentsSection({
   viewer,
 }: {
   fund: Fund;
-  viewer: "investor" | "luca" | "eam" | "rm";
+  viewer: "investor" | "luca" | "ops" | "eam" | "rm";
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ["documents", { fund_id: fund.id }],
@@ -884,7 +884,7 @@ export default function DealOverviewPage({
   preview = false,
 }: {
   fund: Fund;
-  viewer: "investor" | "luca" | "eam" | "rm";
+  viewer: "investor" | "luca" | "ops" | "eam" | "rm";
   backTo: string;
   backLabel: string;
   onEditDeal?: () => void;
@@ -938,9 +938,11 @@ export default function DealOverviewPage({
             <BookmarkIcon className={`mr-1 size-4 ${isWatchlisted ? "fill-current" : ""}`} />
             {isWatchlisted ? "Watchlisted" : "Add to watchlist"}
           </Button>
-        ) : viewer === "luca" ? (
+        ) : viewer === "luca" || viewer === "ops" ? (
           <div className="flex items-center gap-2">
-            <Badge variant="outline">LUCA SGP authoring</Badge>
+            <Badge variant="outline">
+              {viewer === "ops" ? "Akula Ops publication editor" : "LUCA SGP authoring"}
+            </Badge>
             {onEditDeal && (
               <Button size="sm" onClick={onEditDeal}>
                 Edit published deal
