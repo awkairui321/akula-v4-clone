@@ -1,17 +1,14 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { formatPrice } from "@/lib/currency";
 import type { Fund } from "@/lib/types";
 import type { Highlight, AdviserClient } from "./types";
-import { CompanyInfoTabs } from "@/components/company-info-tabs";
+import DealOverviewPage from "@/components/deal-overview-page";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -20,7 +17,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { ArrowLeftIcon, StarIcon, Trash2Icon } from "lucide-react";
+import { StarIcon, Trash2Icon } from "lucide-react";
 
 export default function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,56 +39,14 @@ export default function OpportunityDetailPage() {
     );
   }
 
-  const allocated = parseFloat(fund.supply_allocated);
-  const total = fund.supply_total ? parseFloat(fund.supply_total) : null;
-  const pct = total && total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : null;
-
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <Link to="/eam/opportunities">
-          <Button variant="ghost" size="sm" className="mb-4">
-            <ArrowLeftIcon className="mr-1 size-4" />
-            Back to opportunities
-          </Button>
-        </Link>
-
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{fund.codename}</h1>
-            <p className="mt-1 text-muted-foreground">
-              {fund.asset.name}
-              {fund.fund_manager?.name ? ` · ${fund.fund_manager.name}` : ""}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Badge variant="outline">
-              {fund.deal_type === "primary" ? "Primary" : "Secondary"}
-            </Badge>
-            <Badge variant="default">{fund.state === "open" ? "Open" : fund.state}</Badge>
-          </div>
-        </div>
-      </div>
-
-      {/* Allocation */}
-      {pct !== null && total && (
-        <Card>
-          <CardContent className="space-y-2 pt-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Allocation</span>
-              <span className="font-medium">{pct}% filled</span>
-            </div>
-            <Progress value={pct} className="h-2" />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{formatPrice(allocated)} allocated</span>
-              <span>{formatPrice(total - allocated)} available</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Company info tabs — shared with investor side */}
-      <CompanyInfoTabs fund={fund} />
+      <DealOverviewPage
+        fund={fund}
+        viewer="eam"
+        backTo="/eam/opportunities"
+        backLabel="Back to opportunities"
+      />
 
       <Separator />
 
