@@ -147,7 +147,23 @@ function documentHtml(v: Version) {
 
 export function ServiceDesk() {
   const q = useWorkspace();
-  if (!q.data) return <p>{q.error?.message || "Loading shared cases…"}</p>;
+  if (q.isLoading)
+    return (
+      <p role="status" className="py-8 text-sm text-muted-foreground">
+        Loading your support requests…
+      </p>
+    );
+  if (q.error || !q.data)
+    return (
+      <div className="space-y-2">
+        <p role="alert" className="text-sm text-muted-foreground">
+          We couldn’t load your support requests. Your signed-in session is still active.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => void q.refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
   return (
     <div className="wf-content">
       <Cases data={q.data} />
