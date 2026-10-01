@@ -42,7 +42,10 @@ function FundCard({ fund }: { fund: Fund }) {
   return (
     <Link to={`/funds/${fund.id}`} className="opportunity-link">
       <Card className="opportunity-card flex h-full flex-col transition-shadow hover:ring-2 hover:ring-primary/20">
-        <div className="opportunity-card-art"><span>{fund.asset.name.slice(0, 1)}</span><small>{SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}</small></div>
+        <div className="opportunity-card-art">
+          <span>{fund.asset.name.slice(0, 1)}</span>
+          <small>{SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}</small>
+        </div>
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -211,7 +214,10 @@ export default function FundsPage() {
       <div className="space-y-1">
         <p className="opportunities-eyebrow">YOUR INVESTMENT WORKSPACE</p>
         <h1 className="text-4xl font-medium tracking-tight">Find your next opportunity.</h1>
-        <p className="max-w-2xl text-muted-foreground">The full published LUCA shelf, with terms and source-backed company information for every available deal.</p>
+        <p className="max-w-2xl text-muted-foreground">
+          The full published LUCA shelf, with terms and source-backed company information for every
+          available deal.
+        </p>
       </div>
 
       <p className="rounded-lg bg-muted/50 px-4 py-2 text-sm text-muted-foreground">
