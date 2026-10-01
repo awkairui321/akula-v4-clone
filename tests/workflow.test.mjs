@@ -337,3 +337,44 @@ test("drafts stay hidden, require manager approval, and appear only after Ops pu
   w.command(ops(), { type: "publish", id: v.id });
   assert.equal((await request(`funds/${created.id}`, investor())).status, 200);
 });
+
+test("EAM aggregate documents and reports stay within the adviser client book", async () => {
+  const eam = db.users.find((user) => user.id === 4);
+  const clientIds = new Set(
+    db.adviserClients
+      .filter((client) => client.eam_user_id === eam.id)
+      .map((client) => client.investor_id),
+  );
+  const docs = await (await request("eam/documents", eam)).json();
+  const reports = await (await request("eam/reports", eam)).json();
+  assert.ok(docs.length > 0);
+  assert.ok(reports.length > 0);
+  for (const row of docs) {
+    const owner = db.documents.find((document) => document.id === row.id)?.owner_id;
+    assert.ok(clientIds.has(owner));
+    assert.ok(row.fund_id);
+  }
+  for (const row of reports) {
+    const owner = db.holdings.find((holding) => holding.id === row.id)?.investor_id;
+    assert.ok(clientIds.has(owner));
+  }
+});
+
+test("EAM revenue share is calculated on the subscription fee base", async () => {
+  const eam = db.users.find((user) => user.id === 4);
+  const data = await (await request("eam/revenue", eam)).json();
+  assert.ok(data.transactions.length > 0);
+  for (const row of data.transactions) {
+    assert.equal(
+      row.fee_base_amount,
+      (row.allocated_volume * data.client_subscription_fee_pct) / 100,
+    );
+    assert.equal(row.share_amount, (row.fee_base_amount * data.revenue_share_pct) / 100);
+  }
+  assert.equal(
+    data.pending,
+    data.transactions
+      .filter((row) => row.status === "pending")
+      .reduce((sum, row) => sum + row.share_amount, 0),
+  );
+});
