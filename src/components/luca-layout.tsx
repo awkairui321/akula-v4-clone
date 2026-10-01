@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
+import DemoResetButton from "./demo-reset-button";
 import {
   Circle,
   LayoutDashboard,
@@ -58,12 +59,12 @@ export default function LucaLayout() {
   return (
     <div className="flex min-h-screen">
       <aside
-        className={`${collapsed ? "w-16" : "w-40 md:w-56"} flex shrink-0 flex-col border-r transition-all`}
+        className={`akula-sidebar ${collapsed ? "w-16" : "w-40 md:w-56"} flex shrink-0 flex-col border-r transition-all`}
       >
         <Link to="/luca" className="mt-1 px-3 py-4">
           <div className={`flex flex-row ${collapsed ? "justify-center" : ""}`}>
             <Circle className={collapsed ? "" : "mx-2"} />
-            {!collapsed && <div className="uppercase">LUCA</div>}
+            {!collapsed && <div className="uppercase text-[11px] font-semibold tracking-[0.16em]">LUCA · FUND MANAGER</div>}
           </div>
         </Link>
         <nav className="flex flex-col gap-1 px-3 py-4">
@@ -92,7 +93,7 @@ export default function LucaLayout() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-muted">
+      <div className="flex min-w-0 flex-1 flex-col bg-background">
         <header className="flex items-center border-b px-6 py-4">
           <div className="flex items-center">
             <Button
@@ -105,7 +106,9 @@ export default function LucaLayout() {
             </Button>
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
-          <div className="ml-auto flex items-center">
+          <div className="ml-auto flex items-center gap-3">
+            <Link to="/live-demo" className="text-xs text-primary underline">Live compare</Link>
+            <DemoResetButton compact />
             <Button variant="ghost" size="icon">
               <Moon />
             </Button>
