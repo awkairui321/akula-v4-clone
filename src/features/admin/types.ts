@@ -118,6 +118,7 @@ export const VERIFICATION_LABELS: Record<VerificationStatus, string> = {
 
 export type AdminInvestor = {
   id: number;
+  client_code: string;
   email: string;
   full_name: string;
   investor_type: "individual" | "institutional";
