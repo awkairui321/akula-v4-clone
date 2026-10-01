@@ -45,6 +45,9 @@ import EamOpportunitiesPage from "@/features/eam/opportunities";
 import EamProfilePage from "@/features/eam/profile";
 import EamRevenuePage from "@/features/eam/revenue";
 import EamOpportunityDetailPage from "@/features/eam/opportunity-detail";
+import EamDocumentsPage from "@/features/eam/documents";
+import EamSupportPage from "@/features/eam/support";
+import EamReportsPage from "@/features/eam/reports";
 
 // Instrumented <Routes> for named route traces.
 const SentryRoutes = Sentry.wrapReactRouterRouting(Routes);
@@ -217,6 +220,9 @@ function App() {
                       <Route path="/eam/clients/:id" element={<EamClientDetailPage />} />
                       <Route path="/eam/opportunities" element={<EamOpportunitiesPage />} />
                       <Route path="/eam/opportunities/:id" element={<EamOpportunityDetailPage />} />
+                      <Route path="/eam/documents" element={<EamDocumentsPage />} />
+                      <Route path="/eam/support" element={<EamSupportPage />} />
+                      <Route path="/eam/reports" element={<EamReportsPage />} />
                       <Route path="/eam/revenue" element={<EamRevenuePage />} />
                       <Route path="/eam/profile" element={<EamProfilePage />} />
                     </Route>
