@@ -11,7 +11,7 @@ import {
 } from "./types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { SummaryFigure } from "./summary-figure";
 import { Input } from "@/components/ui/input";
 import { SearchIcon } from "lucide-react";
 
@@ -130,11 +130,11 @@ export default function AdminDocumentsPage() {
       </div>
 
       {summary && (
-        <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryTile label="New arrivals" value={String(summary.received)} />
-          <SummaryTile label="To review" value={String(summary.reviewing)} />
-          <SummaryTile label="On hold" value={String(summary.on_hold)} />
-          <SummaryTile label="Archived" value={String(summary.filed)} />
+        <div className="mb-4 grid gap-x-8 gap-y-4 border-y py-5 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryFigure label="New arrivals" value={String(summary.received)} />
+          <SummaryFigure label="To review" value={String(summary.reviewing)} />
+          <SummaryFigure label="On hold" value={String(summary.on_hold)} />
+          <SummaryFigure label="Archived" value={String(summary.filed)} />
         </div>
       )}
 
@@ -338,16 +338,5 @@ export default function AdminDocumentsPage() {
         </div>
       </details>
     </div>
-  );
-}
-
-function SummaryTile({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="!py-3">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-bold">{value}</p>
-      </CardContent>
-    </Card>
   );
 }

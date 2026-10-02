@@ -89,7 +89,6 @@ function VehicleCard({
 }) {
   const days = daysUntil(fund.closes_at);
   const { allocated, total, pct } = allocationOf(fund);
-  const urgent = days !== null && days <= 7;
 
   return (
     <Card
@@ -142,10 +141,7 @@ function VehicleCard({
           {pct !== null && total !== null ? (
             <div className="space-y-1">
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted-foreground/20">
-                <div
-                  className={`h-full rounded-full ${urgent ? "bg-destructive" : "bg-primary"}`}
-                  style={{ width: `${pct}%` }}
-                />
+                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
               </div>
               <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>

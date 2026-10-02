@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import type { Communication, CommunicationsResponse, CommunicationStatus } from "../types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { SummaryFigure } from "../summary-figure";
 import {
   Table,
   TableHeader,
@@ -74,10 +74,10 @@ export default function CommunicationsPage() {
       </div>
 
       {summary && (
-        <div className="mb-4 grid gap-2 sm:grid-cols-3">
-          <SummaryTile label="Sent" value={String(summary.sent)} />
-          <SummaryTile label="Scheduled" value={String(summary.scheduled)} />
-          <SummaryTile label="Drafts" value={String(summary.draft)} />
+        <div className="mb-4 grid gap-x-8 gap-y-4 border-y py-5 sm:grid-cols-3">
+          <SummaryFigure label="Sent" value={String(summary.sent)} />
+          <SummaryFigure label="Scheduled" value={String(summary.scheduled)} />
+          <SummaryFigure label="Drafts" value={String(summary.draft)} />
         </div>
       )}
       <div className="mb-3 flex flex-wrap gap-2">
@@ -150,16 +150,5 @@ export default function CommunicationsPage() {
         </div>
       )}
     </div>
-  );
-}
-
-function SummaryTile({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="!py-3">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-bold">{value}</p>
-      </CardContent>
-    </Card>
   );
 }
