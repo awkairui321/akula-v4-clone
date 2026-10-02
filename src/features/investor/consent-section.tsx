@@ -73,46 +73,61 @@ export function ConsentList({
   const visible =
     mode === "management" ? consents.filter((c) => c.granted || c.required) : consents;
 
+  const management = mode === "management";
+  const renderItem = (item: ConsentItem) => {
+    const content = (
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">
+            {item.title}
+            {item.required && (
+              <span className="ml-1.5 text-xs text-muted-foreground">(required)</span>
+            )}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{item.body}</p>
+          {item.granted_at && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Granted {new Date(item.granted_at).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+        {item.granted ? (
+          management ? (
+            <Button variant="outline" size="sm" onClick={() => setPendingWithdraw(item)}>
+              Withdraw
+            </Button>
+          ) : (
+            <span className="text-xs font-medium text-green-600">Granted</span>
+          )
+        ) : (
+          <Button size="sm" onClick={() => grant.mutate(item.id)} disabled={grant.isPending}>
+            Grant
+          </Button>
+        )}
+      </div>
+    );
+    // Account settings reads as a divided list; onboarding keeps one card per item.
+    return management ? (
+      <div key={item.id} className="py-4">
+        {content}
+      </div>
+    ) : (
+      <Card key={item.id}>
+        <CardContent className="space-y-2 pt-6">{content}</CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-3">
       {visible.length === 0 && (
         <p className="text-sm text-muted-foreground">No consent items apply to your account.</p>
       )}
-      {visible.map((item) => (
-        <Card key={item.id}>
-          <CardContent className="space-y-2 pt-6">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">
-                  {item.title}
-                  {item.required && (
-                    <span className="ml-1.5 text-xs text-muted-foreground">(required)</span>
-                  )}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">{item.body}</p>
-                {item.granted_at && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Granted {new Date(item.granted_at).toLocaleDateString()}
-                  </p>
-                )}
-              </div>
-              {item.granted ? (
-                mode === "management" ? (
-                  <Button variant="outline" size="sm" onClick={() => setPendingWithdraw(item)}>
-                    Withdraw
-                  </Button>
-                ) : (
-                  <span className="text-xs font-medium text-green-600">Granted</span>
-                )
-              ) : (
-                <Button size="sm" onClick={() => grant.mutate(item.id)} disabled={grant.isPending}>
-                  Grant
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+      {visible.length > 0 && (
+        <div className={management ? "divide-y border-y" : "space-y-3"}>
+          {visible.map(renderItem)}
+        </div>
+      )}
 
       {pendingWithdraw && (
         <Dialog open onOpenChange={(open) => !open && setPendingWithdraw(null)}>

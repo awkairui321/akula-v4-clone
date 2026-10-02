@@ -6,10 +6,9 @@ import { clientCode } from "@/lib/client-code";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ConsentList } from "@/features/investor/consent-section";
-import { UserIcon, CheckCircleIcon, ShieldIcon, KeyIcon, SmartphoneIcon } from "lucide-react";
+import { UserIcon, CheckCircleIcon, ShieldIcon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type InvestorProfile = {
@@ -74,58 +73,56 @@ function ChangePasswordSection() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <KeyIcon className="size-4" />
-          Change password
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password">Current password</Label>
-            <Input
-              id="current-password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-password">New password</Label>
-            <Input
-              id="new-password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              minLength={6}
-              autoComplete="new-password"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm new password</Label>
-            <Input
-              id="confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              minLength={6}
-              autoComplete="new-password"
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {message && <p className="text-sm text-green-600">{message}</p>}
-          <Button type="submit" disabled={submitting}>
-            {submitting ? "Updating..." : "Update password"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-base font-medium">Change password</h3>
+        <p className="text-sm text-muted-foreground">
+          Use a strong password that you don’t use elsewhere.
+        </p>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="current-password">Current password</Label>
+          <Input
+            id="current-password"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="new-password">New password</Label>
+          <Input
+            id="new-password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+            minLength={6}
+            autoComplete="new-password"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="confirm-password">Confirm new password</Label>
+          <Input
+            id="confirm-password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            minLength={6}
+            autoComplete="new-password"
+          />
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {message && <p className="text-sm text-green-600">{message}</p>}
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "Updating..." : "Update password"}
+        </Button>
+      </form>
+    </section>
   );
 }
 
@@ -199,19 +196,16 @@ function TwoFactorSection() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <SmartphoneIcon className="size-4" />
-          Two-factor authentication
-        </CardTitle>
-        <CardDescription>
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-base font-medium">Two-factor authentication</h3>
+        <p className="text-sm text-muted-foreground">
           {enabled
             ? "Two-factor authentication is enabled."
             : "Add an extra layer of security to your account."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
+      </div>
+      <div>
         {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
         {enabled && !showDisable && (
@@ -321,8 +315,8 @@ function TwoFactorSection() {
             </div>
           </form>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -359,103 +353,81 @@ export default function AccountPage() {
       {!isLoading && profile && (
         <>
           {section === "profile" && (
-            <div className="grid items-stretch gap-4 lg:grid-cols-2">
-              {/* Profile card */}
-              <Card className="h-full">
-                <CardContent className="flex items-center gap-4 pt-6">
-                  <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-                    <UserIcon className="size-6 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-semibold">{displayName(profile)}</p>
-                    <p className="text-sm text-muted-foreground">{user?.email}</p>
-                    <div className="mt-1 flex items-center gap-2">
-                      {user?.verified ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary">
-                          <CheckCircleIcon className="size-3" />
-                          Verified
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                          Pending
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground">Individual</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="max-w-2xl space-y-8">
+              <div className="flex items-center gap-4">
+                <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                  <UserIcon className="size-6 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">{displayName(profile)}</p>
+                  <p className="text-sm text-muted-foreground">{user?.email}</p>
+                </div>
+                <div className="ml-auto">
+                  {user?.verified ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary">
+                      <CheckCircleIcon className="size-3" />
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                      Pending
+                    </span>
+                  )}
+                </div>
+              </div>
 
-              {/* Application details */}
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                    Application
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <dt className="text-sm text-muted-foreground">Reference</dt>
-                      <dd className="font-mono text-sm font-medium">
-                        AK-{new Date().getFullYear()}-{String(profile.id).padStart(4, "0")}
-                      </dd>
+              <section>
+                <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Application
+                </div>
+                <dl className="mt-2 divide-y border-y text-sm">
+                  <div className="flex items-center justify-between py-3">
+                    <dt className="text-muted-foreground">Reference</dt>
+                    <dd className="font-mono font-medium">
+                      AK-{new Date().getFullYear()}-{String(profile.id).padStart(4, "0")}
+                    </dd>
+                  </div>
+                  {user && (
+                    <div className="flex items-center justify-between py-3">
+                      <dt className="text-muted-foreground">Client tag</dt>
+                      <dd className="font-mono font-medium">{clientCode(user.id)}</dd>
                     </div>
-                    {user && (
-                      <div className="flex items-center justify-between">
-                        <dt className="text-sm text-muted-foreground">Client tag</dt>
-                        <dd className="font-mono text-sm font-medium">{clientCode(user.id)}</dd>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <dt className="text-sm text-muted-foreground">Verification status</dt>
-                      <dd className="text-sm font-medium">
-                        {user?.verified ? "Verified" : "Pending"}
-                      </dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-sm text-muted-foreground">Account type</dt>
-                      <dd className="text-sm font-medium">Individual</dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-sm text-muted-foreground">Country</dt>
-                      <dd className="text-sm font-medium">{profile.country}</dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-sm text-muted-foreground">Nationality</dt>
-                      <dd className="text-sm font-medium">{profile.nationality}</dd>
-                    </div>
-                  </dl>
-                </CardContent>
-              </Card>
+                  )}
+                  <div className="flex items-center justify-between py-3">
+                    <dt className="text-muted-foreground">Verification status</dt>
+                    <dd className="font-medium">{user?.verified ? "Verified" : "Pending"}</dd>
+                  </div>
+                  <div className="flex items-center justify-between py-3">
+                    <dt className="text-muted-foreground">Account type</dt>
+                    <dd className="font-medium">Individual</dd>
+                  </div>
+                  <div className="flex items-center justify-between py-3">
+                    <dt className="text-muted-foreground">Country</dt>
+                    <dd className="font-medium">{profile.country}</dd>
+                  </div>
+                  <div className="flex items-center justify-between py-3">
+                    <dt className="text-muted-foreground">Nationality</dt>
+                    <dd className="font-medium">{profile.nationality}</dd>
+                  </div>
+                </dl>
+              </section>
             </div>
           )}
 
           {section === "privacy" && (
-            <section className="max-w-4xl space-y-3">
-              <div>
-                <h2 className="text-lg font-semibold">Consent &amp; privacy</h2>
-                <p className="text-sm text-muted-foreground">
-                  Review your account permissions and communication preferences.
-                </p>
-              </div>
+            <section className="max-w-2xl space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Review your account permissions and communication preferences.
+              </p>
               <ConsentList mode="management" />
             </section>
           )}
 
           {section === "security" && (
-            <section className="space-y-3">
-              <div>
-                <h2 className="text-lg font-semibold">Security</h2>
-                <p className="text-sm text-muted-foreground">
-                  Manage your sign-in credentials and second factor.
-                </p>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <ChangePasswordSection />
-                <TwoFactorSection />
-              </div>
-            </section>
+            <div className="max-w-lg divide-y [&>*]:py-8 [&>*:first-child]:pt-0">
+              <ChangePasswordSection />
+              <TwoFactorSection />
+            </div>
           )}
         </>
       )}

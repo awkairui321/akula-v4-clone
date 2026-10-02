@@ -1146,7 +1146,9 @@
   flex-direction: column;
   gap: 4px;
 }
-.wf-demand-company-total { text-align: right; }
+.wf-demand-company-total {
+  text-align: right;
+}
 .wf-demand-company-total > strong {
   font-size: 14px;
   font-weight: 600;
@@ -1165,8 +1167,12 @@
   color: #42566b;
   font-size: 13px;
 }
-.wf-demand-share .wf-action { margin: 0; }
-.wf-demand-share .wf-action > button { white-space: nowrap; }
+.wf-demand-share .wf-action {
+  margin: 0;
+}
+.wf-demand-share .wf-action > button {
+  white-space: nowrap;
+}
 .wf-demand-luca-note {
   padding: 10px 12px;
   border-radius: 6px;
@@ -1188,11 +1194,47 @@
   font-size: 12px;
 }
 .wf-demand-indication > span small,
-.wf-demand-indication > small { color: #617087; }
-.wf-demand-indication > strong { font-weight: 500; }
+.wf-demand-indication > small {
+  color: #617087;
+}
+.wf-demand-indication > strong {
+  font-weight: 500;
+}
 @media (max-width: 760px) {
-  .wf-demand-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .wf-demand-company > summary { align-items: flex-start; }
-  .wf-demand-indication { grid-template-columns: minmax(0, 1fr) auto; }
-  .wf-demand-indication > small { grid-column: 1 / -1; }
+  .wf-demand-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .wf-demand-company > summary {
+    align-items: flex-start;
+  }
+  .wf-demand-indication {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .wf-demand-indication > small {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Investor Support page: open sections instead of stacked cards */
+.support-flat .wf-panel {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+.support-flat .wf-panel + .wf-panel {
+  border-top: 1px solid #dde3eb;
+  margin-top: 32px;
+  padding-top: 32px;
+}
+.support-flat .wf-panel h2 {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+.support-flat .wf-action {
+  margin: 16px 0 0;
+}
+.support-flat .wf-action > .wf-field:last-of-type {
+  flex-basis: 100%;
 }
