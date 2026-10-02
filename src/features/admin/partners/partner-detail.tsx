@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
 import { STATUS_LABELS, type PartnerDetailResponse } from "../types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeftIcon } from "lucide-react";
 
@@ -36,11 +37,34 @@ export default function AdminPartnerDetailPage() {
         Back to partners
       </Link>
 
-      <div className="mb-6 space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">{partner.firm_name}</h1>
-        <p className="text-muted-foreground">
-          {partner.display_name} · {partner.contact_email}
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">{partner.firm_name}</h1>
+          <p className="text-muted-foreground">
+            {partner.display_name} · {partner.contact_email}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link to={`/luca/subscriptions?q=${encodeURIComponent(partner.firm_name)}`} />}
+          >
+            View subscriptions
+          </Button>
+          <Button
+            size="sm"
+            nativeButton={false}
+            render={
+              <Link
+                to={`/luca/communications/new?audience=partner:${encodeURIComponent(partner.firm_name)}`}
+              />
+            }
+          >
+            Message partner
+          </Button>
+        </div>
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -60,7 +84,12 @@ export default function AdminPartnerDetailPage() {
             {clients.map((client) => (
               <div key={client.id} className="flex items-center justify-between gap-4">
                 <span className="truncate">
-                  <span className="block font-medium">{client.name}</span>
+                  <Link
+                    to={`/luca/investors/${client.investor_id}`}
+                    className="block font-medium hover:underline"
+                  >
+                    {client.name}
+                  </Link>
                   <span className="block truncate text-xs text-muted-foreground">
                     {client.email}
                   </span>

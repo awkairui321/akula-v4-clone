@@ -26,6 +26,8 @@ import {
   findOrCreateTag,
   investorPricing,
   nextInvestorPricingId,
+  documentRequests,
+  nextDocumentRequestId,
   bankTransfers,
   findBankTransferById,
   logEvent,
@@ -579,6 +581,99 @@ export const adminHandlers = [
     return HttpResponse.json({ document: doc });
   }),
 
+  // GET /api/v1/admin/document_requests — what has been asked of clients, and where it stands.
+  http.get("*/api/v1/admin/document_requests", ({ request }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const investors = adminInvestors();
+    const rows = documentRequests
+      .filter((r) => r.status !== "cancelled")
+      .map((r) => {
+        const investor = investors.find((i) => i.id === r.investor_id);
+        const fund = r.fund_id ? findFundById(r.fund_id) : null;
+        return {
+          ...r,
+          investor_name: investor?.full_name ?? `Investor #${r.investor_id}`,
+          investor_email: investor?.email ?? "",
+          client_code: investor?.client_code ?? "",
+          investor_type: investor?.investor_type ?? "individual",
+          eam_firm: investor?.eam_firm ?? null,
+          fund_name: fund?.name ?? null,
+        };
+      });
+    return HttpResponse.json({ requests: rows });
+  }),
+
+  // POST /api/v1/admin/document_requests — ask one or more clients for one or more documents.
+  http.post("*/api/v1/admin/document_requests", async ({ request }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const body = (await request.json()) as {
+      investor_ids?: number[];
+      kinds?: string[];
+      due_at?: string | null;
+      note?: string | null;
+      fund_id?: number | null;
+    };
+    const investorIds = body.investor_ids ?? [];
+    const kinds = body.kinds ?? [];
+    if (investorIds.length === 0 || kinds.length === 0)
+      return HttpResponse.json(
+        { error: "Choose at least one client and one document" },
+        { status: 422 },
+      );
+    let created = 0;
+    for (const investorId of investorIds) {
+      for (const kind of kinds) {
+        const open = documentRequests.some(
+          (r) =>
+            r.investor_id === investorId &&
+            r.kind === kind &&
+            (r.status === "requested" || r.status === "uploaded"),
+        );
+        if (open) continue; // never ask twice for the same thing
+        documentRequests.push({
+          id: nextDocumentRequestId(),
+          investor_id: investorId,
+          kind,
+          fund_id: body.fund_id ?? null,
+          note: body.note?.trim() || null,
+          requested_at: new Date().toISOString(),
+          due_at: body.due_at ?? null,
+          status: "requested",
+          reminded_at: null,
+          received_document_id: null,
+        });
+        created += 1;
+      }
+    }
+    logEvent(
+      "document_uploaded",
+      `${created} document request${created === 1 ? "" : "s"} sent to ${investorIds.length} client${investorIds.length === 1 ? "" : "s"}.`,
+    );
+    return HttpResponse.json({ created, skipped: investorIds.length * kinds.length - created });
+  }),
+
+  // POST /api/v1/admin/document_requests/:id/remind
+  http.post("*/api/v1/admin/document_requests/:id/remind", ({ request, params }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const req = documentRequests.find((r) => r.id === Number(params.id));
+    if (!req) return HttpResponse.json({ error: "Request not found" }, { status: 404 });
+    req.reminded_at = new Date().toISOString();
+    return HttpResponse.json({ ok: true });
+  }),
+
+  // DELETE /api/v1/admin/document_requests/:id — withdraw a request.
+  http.delete("*/api/v1/admin/document_requests/:id", ({ request, params }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const req = documentRequests.find((r) => r.id === Number(params.id));
+    if (!req) return HttpResponse.json({ error: "Request not found" }, { status: 404 });
+    req.status = "cancelled";
+    return HttpResponse.json({ ok: true });
+  }),
+
   // DELETE /api/v1/admin/documents/:id — remove a deal document.
   http.delete("*/api/v1/admin/documents/:id", ({ request, params }) => {
     const user = requireAdmin(request);
@@ -731,6 +826,19 @@ export const adminHandlers = [
     const body = (await request.json()) as { document?: { review_state?: string } };
     if (body.document?.review_state) {
       doc.review_state = body.document.review_state as typeof doc.review_state;
+      // Filing an investor's document closes the request it answers.
+      if (doc.review_state === "filed") {
+        const answered = documentRequests.find(
+          (r) =>
+            r.investor_id === doc.owner_id &&
+            r.kind === doc.kind &&
+            (r.status === "uploaded" || r.status === "requested"),
+        );
+        if (answered) {
+          answered.status = "received";
+          answered.received_document_id = doc.id;
+        }
+      }
     }
     return HttpResponse.json({ document: doc });
   }),

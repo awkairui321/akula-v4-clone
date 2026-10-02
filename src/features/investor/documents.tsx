@@ -1,10 +1,12 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { Document } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DOCUMENT_REQUEST_KINDS, documentKindLabel } from "@/lib/document-catalogue";
 import { DownloadIcon, FileTextIcon } from "lucide-react";
 
 const KIND_LABELS: Record<string, string> = {
@@ -59,6 +61,93 @@ function DocumentRow({ doc }: { doc: Document }) {
   );
 }
 
+type DocumentRequest = {
+  id: number;
+  kind: string;
+  note: string | null;
+  due_at: string | null;
+  fund_name: string | null;
+};
+
+/** What LUCA has asked this investor to provide, with an upload for each. */
+function RequestedFromYou() {
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["document-requests"],
+    queryFn: () => api<{ requests: DocumentRequest[] }>("/api/v1/document_requests"),
+  });
+  const upload = useMutation({
+    mutationFn: ({ id, filename }: { id: number; filename: string }) =>
+      api(`/api/v1/document_requests/${id}/upload`, { method: "POST", body: { filename } }),
+    onSuccess: () => {
+      toast.success("Sent to LUCA for review.");
+      queryClient.invalidateQueries({ queryKey: ["document-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const requests = data?.requests ?? [];
+  if (requests.length === 0) return null;
+
+  return (
+    <section className="space-y-2">
+      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        Requested from you ({requests.length})
+      </p>
+      <ul className="divide-y border-y">
+        {requests.map((r) => {
+          const overdue = r.due_at ? new Date(r.due_at).getTime() < Date.now() : false;
+          const reason = DOCUMENT_REQUEST_KINDS.find((k) => k.key === r.kind)?.reason;
+          return (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{documentKindLabel(r.kind)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {r.note ?? reason}
+                  {r.fund_name ? ` · for ${r.fund_name}` : ""}
+                </p>
+                {r.due_at && (
+                  <p
+                    className={`text-xs ${overdue ? "font-medium text-amber-700" : "text-muted-foreground"}`}
+                  >
+                    {overdue ? "Overdue · was due " : "Due "}
+                    {new Date(r.due_at).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </p>
+                )}
+              </div>
+              <label>
+                <span
+                  className={`inline-flex h-8 cursor-pointer items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 ${
+                    upload.isPending ? "pointer-events-none opacity-60" : ""
+                  }`}
+                >
+                  Upload
+                </span>
+                <input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  className="sr-only"
+                  aria-label={`Upload ${documentKindLabel(r.kind)}`}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) upload.mutate({ id: r.id, filename: file.name });
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export default function DocumentsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["documents"],
@@ -92,6 +181,8 @@ export default function DocumentsPage() {
           Subscription agreements, statements, and account documents, grouped by fund.
         </p>
       </div>
+
+      <RequestedFromYou />
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading documents...</p>}
 

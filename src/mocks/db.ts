@@ -462,6 +462,31 @@ export type InvestorPricing = {
 };
 
 export const investorPricing: InvestorPricing[] = [];
+
+// ---------------------------------------------------------------------------
+// Document requests: what the fund manager has asked a client to provide.
+//   requested -> uploaded (client sent it, awaiting review) -> received (approved)
+// ---------------------------------------------------------------------------
+
+export type MockDocumentRequest = {
+  id: number;
+  investor_id: number;
+  /** A key from the shared document catalogue (src/lib/document-catalogue.ts). */
+  kind: string;
+  fund_id: number | null;
+  note: string | null;
+  requested_at: string;
+  due_at: string | null;
+  status: "requested" | "uploaded" | "received" | "cancelled";
+  reminded_at: string | null;
+  received_document_id: number | null;
+};
+
+export const documentRequests: MockDocumentRequest[] = [];
+let documentRequestAutoId = 1;
+export function nextDocumentRequestId(): number {
+  return documentRequestAutoId++;
+}
 let investorPricingAutoId = 1;
 export function nextInvestorPricingId(): number {
   return investorPricingAutoId++;
@@ -2014,6 +2039,69 @@ for (const spec of dealSpecs) {
 export function findFundById(id: number): Fund | undefined {
   return funds.find((f) => f.id === id);
 }
+// Made-up document requests, in different states, so the Compliance flow is visible.
+{
+  const ask = (
+    investorId: number,
+    kind: string,
+    requestedAgo: number,
+    dueIn: number | null,
+    status: MockDocumentRequest["status"] = "requested",
+    fundId: number | null = null,
+    note: string | null = null,
+  ) =>
+    documentRequests.push({
+      id: nextDocumentRequestId(),
+      investor_id: investorId,
+      kind,
+      fund_id: fundId,
+      note,
+      requested_at: daysAgo(requestedAgo),
+      due_at: dueIn === null ? null : daysFromNow(dueIn),
+      status,
+      reminded_at: null,
+      received_document_id: null,
+    });
+  ask(25, "passport", 12, -6, "requested", null, "Needed to complete onboarding.");
+  ask(25, "proof_of_address", 12, -6);
+  ask(29, "trust_deed", 8, 4);
+  ask(29, "certificate_of_incorporation", 8, 4);
+  ask(
+    22,
+    "accreditation_letter",
+    5,
+    8,
+    "requested",
+    null,
+    "Your accreditation expires soon. Please send a renewal.",
+  );
+  ask(32, "proof_of_address", 3, 3, "uploaded");
+  ask(
+    31,
+    "accreditation_letter",
+    20,
+    -10,
+    "requested",
+    null,
+    "Needed to lift the block on new subscriptions.",
+  );
+  ask(26, "source_of_funds", 6, 5, "requested", 8, "Required for tickets above $100,000.");
+  ask(30, "authorised_signatories", 6, 12, "uploaded");
+  ask(23, "accreditation_letter", 9, null, "uploaded");
+  // The demo investor (Elena Cross) has a few open requests, so the loop is visible from her side.
+  ask(2, "source_of_funds", 4, 6, "requested", 8, "Required for tickets above $100,000.");
+  ask(
+    2,
+    "accreditation_letter",
+    3,
+    20,
+    "requested",
+    null,
+    "Your accreditation expires soon. Please send a renewal.",
+  );
+  ask(2, "bank_details", 2, 14);
+}
+
 // Made-up per-investor terms so the investor-pricing view has examples.
 investorPricing.push(
   {
@@ -2673,6 +2761,77 @@ function seedSubscriptions() {
     [9, 30000, "information_requested", sofia, 8],
   ];
   for (const [fundId, amount, status, who, age] of extra) {
+    subscriptions.push(makeSubscription(nextSubscriptionId(), fundId, amount, status, who, age));
+  }
+
+  // More made-up investors, each at a different point in the subscription journey.
+  const person = (
+    id: number,
+    name: string,
+    email: string,
+    eamFirm: string | null = null,
+    eamName: string | null = null,
+  ): SeedInvestor => ({ id, name, email, eamFirm, eamName });
+  const isabella = person(34, "Isabella Marchetti", "isabella.marchetti@example.com");
+  const tomas = person(
+    22,
+    "Tomás Herrera",
+    "tomas.herrera@example.com",
+    "Nimbus Wealth Partners",
+    "Oscar Bennett",
+  );
+  const rohan = person(
+    24,
+    "Rohan Mehta",
+    "rohan.mehta@example.com",
+    "Meridian Capital Advisors",
+    "Aisha Tan",
+  );
+  const omar = person(26, "Omar Haddad", "omar.haddad@example.com");
+  const chen = person(
+    27,
+    "Chen Wei",
+    "chen.wei@example.com",
+    "Straits Family Office",
+    "Nadia Farouk",
+  );
+  const sofiaL = person(28, "Sofia Lindqvist", "sofia.lindqvist@example.com");
+  const harbourview = person(
+    30,
+    "Harbourview Capital LP",
+    "investor.relations@harbourview.example.com",
+  );
+  const noah = person(31, "Noah Fitzgerald", "noah.fitzgerald@example.com");
+  const priyanka = person(
+    32,
+    "Priyanka Rao",
+    "priyanka.rao@example.com",
+    "Orchard Peak Advisory",
+    "Miriam Solberg",
+  );
+  const okafor = person(33, "Daniel Okafor", "daniel.okafor@example.com");
+  const journey: [number, number, SubscriptionStatus, SeedInvestor, number][] = [
+    [6, 90000, "allocated", isabella, 100],
+    [7, 50000, "awaiting_funds", isabella, 12],
+    [8, 85000, "under_luca_review", tomas, 6],
+    [1, 40000, "documents_pending", tomas, 3],
+    [9, 40000, "documents_pending", rohan, 4],
+    [3, 60000, "institution_review", rohan, 2],
+    [8, 150000, "reconciliation", omar, 18],
+    [6, 50000, "information_requested", omar, 9],
+    [7, 60000, "approved", chen, 2],
+    [1, 70000, "allocation_pending", chen, 26],
+    [6, 25000, "rejected", sofiaL, 40],
+    [8, 250000, "allocated", harbourview, 62],
+    [5, 200000, "payment_unmatched", harbourview, 14],
+    [2, 30000, "cancelled", noah, 120],
+    [3, 55000, "institution_review", priyanka, 1],
+    [1, 25000, "reserved", okafor, 3],
+    [9, 45000, "awaiting_funds", okafor, 20],
+    [5, 35000, "not_allocated", okafor, 70],
+    [2, 40000, "funds_returned", okafor, 90],
+  ];
+  for (const [fundId, amount, status, who, age] of journey) {
     subscriptions.push(makeSubscription(nextSubscriptionId(), fundId, amount, status, who, age));
   }
 }
@@ -3354,6 +3513,67 @@ export function nextDocumentId(): number {
   return documentAutoId++;
 }
 
+// Made-up compliance documents from the new investors, waiting for LUCA to review.
+{
+  const submitted = (
+    name: string,
+    kind: string,
+    ownerId: number,
+    ownerName: string,
+    email: string,
+    ageDays: number,
+    review: AdminDocument["review_state"] = "received",
+  ) =>
+    documents.push({
+      id: nextDocumentId(),
+      name,
+      kind,
+      status: "submitted",
+      review_state: review,
+      has_file: true,
+      fund_id: null,
+      fund_name: null,
+      subscription_id: null,
+      owner_id: ownerId,
+      owner_name: ownerName,
+      owner_email: email,
+      created_at: daysAgo(ageDays),
+    });
+  submitted(
+    "Aiko Tanaka — Accredited investor evidence",
+    "accreditation_letter",
+    23,
+    "Aiko Tanaka",
+    "aiko.tanaka@example.com",
+    6,
+  );
+  submitted(
+    "Priyanka Rao — Proof of address",
+    "proof_of_address",
+    32,
+    "Priyanka Rao",
+    "priyanka.rao@example.com",
+    2,
+  );
+  submitted(
+    "Isabella Marchetti — Tax self-certification (CRS)",
+    "tax",
+    34,
+    "Isabella Marchetti",
+    "isabella.marchetti@example.com",
+    4,
+    "reviewing",
+  );
+  submitted(
+    "Harbourview Capital LP — Authorised signatory list",
+    "authorised_signatories",
+    30,
+    "Harbourview Capital LP",
+    "investor.relations@harbourview.example.com",
+    1,
+  );
+}
+
 // Deal-level materials (no subscription attached) for every vehicle, so each
 // deal workspace has documents to browse. Investor-visible once published.
 const dealMaterials: [string, string][] = [
@@ -3533,6 +3753,18 @@ export const adviserClients: MockAdviserClient[] = [
     notes: "Self-directed on most deals; open to occasional RM ideas outside her usual sectors.",
     created_at: daysAgo(300),
     updated_at: daysAgo(6),
+  },
+  {
+    id: 7,
+    eam_user_id: 4,
+    investor_id: 24,
+    investor_profile_id: 24,
+    client_name: "Rohan Mehta",
+    client_email: "rohan.mehta@example.com",
+    stage: "active",
+    notes: "Referred two months ago; first subscriptions in progress.",
+    created_at: daysAgo(60),
+    updated_at: daysAgo(2),
   },
 ];
 
@@ -3969,6 +4201,242 @@ const adminInvestorSeeds: AdminInvestorSeed[] = [
     internal_notes:
       "Entity application — awaiting certificate of incorporation and authorised-signatory list.",
   },
+  // ── Made-up investors spread across the onboarding lifecycle ──
+  {
+    id: 34,
+    full_name: "Isabella Marchetti",
+    email: "isabella.marchetti@example.com",
+    investor_type: "individual",
+    country: "Italy",
+    nationality: "Italian",
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(210),
+    verification_status: "approved",
+    identity_status: "verified",
+    accreditation_status: "accredited",
+    accreditation_expiry: daysFromNow(200),
+    reviewed_at: daysAgo(205),
+    nda_status: "signed",
+    eam_firm: null,
+    internal_notes: "",
+  },
+  {
+    id: 22,
+    full_name: "Tomás Herrera",
+    email: "tomas.herrera@example.com",
+    investor_type: "individual",
+    country: "Spain",
+    nationality: "Spanish",
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(95),
+    verification_status: "approved",
+    identity_status: "verified",
+    accreditation_status: "accredited",
+    accreditation_expiry: daysFromNow(12),
+    reviewed_at: daysAgo(90),
+    nda_status: "signed",
+    eam_firm: "Nimbus Wealth Partners",
+    internal_notes: "Accreditation renewal letter requested via his adviser.",
+  },
+  {
+    id: 23,
+    full_name: "Aiko Tanaka",
+    email: "aiko.tanaka@example.com",
+    investor_type: "individual",
+    country: "Japan",
+    nationality: "Japanese",
+    onboarding_step: 3,
+    onboarding_completed_at: null,
+    verification_status: "in_review",
+    identity_status: "verified",
+    accreditation_status: "pending",
+    accreditation_expiry: null,
+    reviewed_at: null,
+    nda_status: "signed",
+    eam_firm: null,
+    internal_notes: "Identity verified. Accreditation evidence uploaded, waiting for LUCA review.",
+  },
+  {
+    id: 24,
+    full_name: "Rohan Mehta",
+    email: "rohan.mehta@example.com",
+    investor_type: "individual",
+    country: "India",
+    nationality: "Indian",
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(60),
+    verification_status: "approved",
+    identity_status: "verified",
+    accreditation_status: "accredited",
+    accreditation_expiry: daysFromNow(75),
+    reviewed_at: daysAgo(57),
+    nda_status: "signed",
+    eam_firm: "Meridian Capital Advisors",
+    internal_notes: "",
+  },
+  {
+    id: 25,
+    full_name: "Lena Fischer",
+    email: "lena.fischer@example.com",
+    investor_type: "individual",
+    country: "Germany",
+    nationality: "German",
+    onboarding_step: 2,
+    onboarding_completed_at: null,
+    verification_status: "pending",
+    identity_status: "pending",
+    accreditation_status: "not_started",
+    accreditation_expiry: null,
+    reviewed_at: null,
+    nda_status: "not_started",
+    eam_firm: null,
+    internal_notes: "",
+  },
+  {
+    id: 26,
+    full_name: "Omar Haddad",
+    email: "omar.haddad@example.com",
+    investor_type: "individual",
+    country: "United Arab Emirates",
+    nationality: "Emirati",
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(130),
+    verification_status: "approved",
+    identity_status: "verified",
+    accreditation_status: "accredited",
+    accreditation_expiry: daysFromNow(365),
+    reviewed_at: daysAgo(128),
+    nda_status: "signed",
+    eam_firm: null,
+    internal_notes: "High-net-worth investor. Prefers late-stage deals.",
+  },
+  {
+    id: 27,
+    full_name: "Chen Wei",
+    email: "chen.wei@example.com",
+    investor_type: "individual",
+    country: "Singapore",
+    nationality: "Singaporean",
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(80),
+    verification_status: "approved",
+    identity_status: "verified",
+    accreditation_status: "accredited",
+    accreditation_expiry: daysFromNow(33),
+    reviewed_at: daysAgo(78),
+    nda_status: "signed",
+    eam_firm: "Straits Family Office",
+    internal_notes: "",
+  },
+  {
+    id: 28,
+    full_name: "Sofia Lindqvist",
+    email: "sofia.lindqvist@example.com",
+    investor_type: "individual",
+    country: "Sweden",
+    nationality: "Swedish",
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(40),
+    verification_status: "rejected",
+    identity_status: "failed",
+    accreditation_status: "not_accredited",
+    accreditation_expiry: null,
+    reviewed_at: daysAgo(38),
+    nda_status: "signed",
+    eam_firm: null,
+    internal_notes: "Declined after identity verification failed.",
+  },
+  {
+    id: 29,
+    full_name: "Atlas Family Trust",
+    email: "onboarding@atlasfamilytrust.example.com",
+    investor_type: "institutional",
+    country: "Cayman Islands",
+    nationality: null,
+    onboarding_step: 3,
+    onboarding_completed_at: null,
+    verification_status: "pending",
+    identity_status: "pending",
+    accreditation_status: "pending",
+    accreditation_expiry: null,
+    reviewed_at: null,
+    nda_status: "pending",
+    eam_firm: null,
+    internal_notes: "Entity application — awaiting trust deed and trustee list.",
+  },
+  {
+    id: 30,
+    full_name: "Harbourview Capital LP",
+    email: "investor.relations@harbourview.example.com",
+    investor_type: "institutional",
+    country: "United States",
+    nationality: null,
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(150),
+    verification_status: "approved",
+    identity_status: "verified",
+    accreditation_status: "accredited",
+    accreditation_expiry: daysFromNow(150),
+    reviewed_at: daysAgo(146),
+    nda_status: "signed",
+    eam_firm: null,
+    internal_notes: "Institutional investor. Larger tickets across several deals.",
+  },
+  {
+    id: 31,
+    full_name: "Noah Fitzgerald",
+    email: "noah.fitzgerald@example.com",
+    investor_type: "individual",
+    country: "Ireland",
+    nationality: "Irish",
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(360),
+    verification_status: "approved",
+    identity_status: "verified",
+    accreditation_status: "not_accredited",
+    accreditation_expiry: null,
+    reviewed_at: daysAgo(355),
+    nda_status: "signed",
+    eam_firm: null,
+    internal_notes:
+      "Accreditation lapsed 10 days ago. Blocked from new subscriptions until renewed.",
+  },
+  {
+    id: 32,
+    full_name: "Priyanka Rao",
+    email: "priyanka.rao@example.com",
+    investor_type: "individual",
+    country: "India",
+    nationality: "Indian",
+    onboarding_step: 3,
+    onboarding_completed_at: null,
+    verification_status: "in_review",
+    identity_status: "pending",
+    accreditation_status: "pending",
+    accreditation_expiry: null,
+    reviewed_at: null,
+    nda_status: "signed",
+    eam_firm: "Orchard Peak Advisory",
+    internal_notes: "",
+  },
+  {
+    id: 33,
+    full_name: "Daniel Okafor",
+    email: "daniel.okafor@example.com",
+    investor_type: "individual",
+    country: "Nigeria",
+    nationality: "Nigerian",
+    onboarding_step: 4,
+    onboarding_completed_at: daysAgo(70),
+    verification_status: "approved",
+    identity_status: "verified",
+    accreditation_status: "accredited",
+    accreditation_expiry: daysFromNow(95),
+    reviewed_at: daysAgo(68),
+    nda_status: "signed",
+    eam_firm: null,
+    internal_notes: "",
+  },
 ];
 
 export function adminInvestors(): AdminInvestor[] {
@@ -4071,6 +4539,63 @@ export const verificationDocumentsByInvestor: Record<
   ],
 };
 
+// Made-up verification files for the new investors, to match their onboarding stage.
+{
+  type VerificationDoc = (typeof verificationDocumentsByInvestor)[number][number];
+  let docId = 5000;
+  const doc = (
+    document_type: string,
+    status: string,
+    ageDays: number,
+    notes: string | null = null,
+  ): VerificationDoc => ({
+    id: docId++,
+    document_type,
+    status,
+    notes,
+    has_file: true,
+    created_at: daysAgo(ageDays),
+  });
+  const complete = (age: number) => [
+    doc("passport", "approved", age),
+    doc("proof_of_address", "approved", age),
+    doc("accreditation_letter", "approved", age),
+  ];
+  for (const [id, age] of [
+    [34, 208],
+    [22, 94],
+    [24, 59],
+    [26, 129],
+    [27, 79],
+    [30, 148],
+    [33, 69],
+  ] as const)
+    verificationDocumentsByInvestor[id] = complete(age);
+  verificationDocumentsByInvestor[23] = [
+    doc("passport", "approved", 12),
+    doc("proof_of_address", "approved", 12),
+    doc("accreditation_letter", "pending", 6, "Awaiting LUCA review."),
+  ];
+  verificationDocumentsByInvestor[25] = [doc("passport", "pending", 4)];
+  verificationDocumentsByInvestor[28] = [
+    doc("passport", "rejected", 42, "Document did not match the application."),
+    doc("proof_of_address", "approved", 42),
+  ];
+  verificationDocumentsByInvestor[29] = [
+    doc("certificate_of_incorporation", "pending", 9),
+    doc("trust_deed", "pending", 9),
+  ];
+  verificationDocumentsByInvestor[31] = [
+    doc("passport", "approved", 358),
+    doc("proof_of_address", "approved", 358),
+    doc("accreditation_letter", "rejected", 10, "Letter expired; a renewed letter is required."),
+  ];
+  verificationDocumentsByInvestor[32] = [
+    doc("passport", "approved", 7),
+    doc("proof_of_address", "pending", 7),
+  ];
+}
+
 // Partner firms
 export type MockPartner = AdminPartner & { clientInvestorIds: number[] };
 
@@ -4088,7 +4613,7 @@ export const partners: MockPartner[] = [
     accrued_revenue: "0",
     paid_revenue: "0",
     created_at: daysAgo(220),
-    clientInvestorIds: [11, 12, 13, 19],
+    clientInvestorIds: [11, 12, 13, 19, 24],
   },
   {
     id: 2,
@@ -4103,7 +4628,7 @@ export const partners: MockPartner[] = [
     accrued_revenue: "0",
     paid_revenue: "0",
     created_at: daysAgo(210),
-    clientInvestorIds: [18],
+    clientInvestorIds: [18, 27],
   },
   {
     id: 3,
@@ -4118,7 +4643,7 @@ export const partners: MockPartner[] = [
     accrued_revenue: "0",
     paid_revenue: "0",
     created_at: daysAgo(300),
-    clientInvestorIds: [16],
+    clientInvestorIds: [16, 22],
   },
   {
     id: 4,
@@ -4133,7 +4658,7 @@ export const partners: MockPartner[] = [
     accrued_revenue: "0",
     paid_revenue: "0",
     created_at: daysAgo(180),
-    clientInvestorIds: [17],
+    clientInvestorIds: [17, 32],
   },
 ];
 
@@ -4454,6 +4979,7 @@ const demoArrays = {
   communications,
   communicationRecipients,
   investorPricing,
+  documentRequests,
 };
 export function exportDemoState() {
   return structuredClone({
@@ -4464,7 +4990,7 @@ export function exportDemoState() {
 }
 export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
   // Tables added after a demo was saved are optional; keep their seed data.
-  const OPTIONAL_TABLES = ["investorPricing"];
+  const OPTIONAL_TABLES = ["investorPricing", "documentRequests"];
   if (
     !saved ||
     !saved.arrays ||

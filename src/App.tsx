@@ -31,7 +31,7 @@ import AdminVehiclesPage from "@/features/admin/vehicles/vehicles";
 import AdminVehicleOverviewPage from "@/features/admin/vehicles/vehicle-overview";
 import AdminSubscriptionsPage from "@/features/admin/subscription-inbox";
 import AdminSubscriptionHistoryPage from "@/features/admin/subscription-history";
-import AdminDocumentsPage from "@/features/admin/documents";
+import AdminCompliancePage from "@/features/admin/compliance";
 import CommunicationsPage from "@/features/admin/communications";
 import ComposeCommunicationPage from "@/features/admin/communications/compose";
 import CommunicationDetailPage from "@/features/admin/communications/detail";
@@ -210,7 +210,11 @@ function App() {
                       <Route path="/luca/investors/:id" element={<AdminInvestorDetailPage />} />
                       <Route path="/luca/partners" element={<AdminPartnersPage />} />
                       <Route path="/luca/partners/:id" element={<AdminPartnerDetailPage />} />
-                      <Route path="/luca/documents" element={<AdminDocumentsPage />} />
+                      <Route path="/luca/compliance" element={<AdminCompliancePage />} />
+                      <Route
+                        path="/luca/documents"
+                        element={<Navigate to="/luca/compliance" replace />}
+                      />
                       <Route path="/luca/communications" element={<CommunicationsPage />} />
                       <Route
                         path="/luca/communications/new"

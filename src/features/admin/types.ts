@@ -314,3 +314,23 @@ export type InvestorPricingResponse = {
   overrides: InvestorPricingRow[];
   investors: PricingInvestorOption[];
 };
+
+/** A request for a client to provide a document, and where it stands. */
+export type DocumentRequestRow = {
+  id: number;
+  investor_id: number;
+  kind: string;
+  fund_id: number | null;
+  note: string | null;
+  requested_at: string;
+  due_at: string | null;
+  status: "requested" | "uploaded" | "received" | "cancelled";
+  reminded_at: string | null;
+  received_document_id: number | null;
+  investor_name: string;
+  investor_email: string;
+  client_code: string;
+  investor_type: "individual" | "institutional";
+  eam_firm: string | null;
+  fund_name: string | null;
+};

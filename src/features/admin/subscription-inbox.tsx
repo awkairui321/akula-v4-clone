@@ -255,6 +255,7 @@ export default function AdminSubscriptionsPage() {
   const statusFromUrl = searchParams.get("status") as SubscriptionStatus | null;
   const stageFromUrl = searchParams.get("stage");
   const dealFromUrl = searchParams.get("deal");
+  const queryFromUrl = searchParams.get("q") ?? "";
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "subscriptions", "board"],
@@ -288,12 +289,12 @@ export default function AdminSubscriptionsPage() {
     const key = (stageFromUrl as StageFilter | null) ?? fromStatus;
     return key && SUBSCRIPTION_STAGES.some((st) => st.key === key) ? key : "all";
   })();
-  const filteredByUrl = Boolean(statusFromUrl || stageFromUrl || dealFromUrl);
+  const filteredByUrl = Boolean(statusFromUrl || stageFromUrl || dealFromUrl || queryFromUrl);
 
   const [stage, setStage] = useState<StageFilter>(urlStage);
   const [onlyMine, setOnlyMine] = useState(!filteredByUrl);
   const [deal, setDeal] = useState(dealFromUrl ?? "all");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(queryFromUrl);
   const [selected, setSelected] = useState<number[]>([]);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
@@ -317,6 +318,7 @@ export default function AdminSubscriptionsPage() {
           s.investor_name.toLowerCase().includes(q) ||
           s.investor_email.toLowerCase().includes(q) ||
           (s.payment_reference ?? "").toLowerCase().includes(q) ||
+          (s.eam_firm ?? "").toLowerCase().includes(q) ||
           s.asset_name.toLowerCase().includes(q)),
     );
   }, [active, onlyMine, deal, search]);
@@ -413,7 +415,7 @@ export default function AdminSubscriptionsPage() {
         <div className="relative min-w-60 flex-1 sm:max-w-sm">
           <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search investor, email or payment reference"
+            placeholder="Search investor, adviser, email or payment reference"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"

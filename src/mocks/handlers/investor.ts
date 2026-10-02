@@ -34,6 +34,8 @@ import {
   adviserClients,
   highlights,
   fundAsSeenBy,
+  documentRequests,
+  nextDocumentId,
 } from "../db";
 
 function unauthorized() {
@@ -393,6 +395,53 @@ export const investorHandlers = [
     user.kyc_status = "pending";
     user._kycPollCount = 0;
     return HttpResponse.json({ success: true });
+  }),
+
+  // GET /api/v1/document_requests — what LUCA has asked this investor to provide.
+  http.get("*/api/v1/document_requests", ({ request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    const mine = documentRequests
+      .filter((r) => r.investor_id === user.id && r.status === "requested")
+      .map((r) => ({
+        ...r,
+        fund_name: r.fund_id ? (findFundById(r.fund_id)?.name ?? null) : null,
+      }));
+    return HttpResponse.json({ requests: mine });
+  }),
+
+  // POST /api/v1/document_requests/:id/upload — send the requested document to LUCA for review.
+  http.post("*/api/v1/document_requests/:id/upload", async ({ request, params }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    const req = documentRequests.find(
+      (r) => r.id === Number(params.id) && r.investor_id === user.id,
+    );
+    if (!req) return HttpResponse.json({ error: "Request not found" }, { status: 404 });
+    const body = (await request.json().catch(() => ({}))) as { filename?: string };
+    const profile = findInvestorProfileByUserId(user.id);
+    const ownerName = profile
+      ? `${profile.first_name} ${profile.last_name}`.trim() || user.email
+      : user.email;
+    const doc = {
+      id: nextDocumentId(),
+      name: body.filename?.trim() || `${ownerName} — ${req.kind.replace(/_/g, " ")}`,
+      kind: req.kind,
+      status: "submitted",
+      review_state: "received" as const,
+      has_file: true,
+      fund_id: req.fund_id,
+      fund_name: req.fund_id ? (findFundById(req.fund_id)?.name ?? null) : null,
+      subscription_id: null,
+      owner_id: user.id,
+      owner_name: ownerName,
+      owner_email: user.email,
+      created_at: new Date().toISOString(),
+    };
+    documents.push(doc);
+    req.status = "uploaded";
+    req.received_document_id = doc.id;
+    return HttpResponse.json({ request: req });
   }),
 
   // GET /api/v1/documents (optionally ?fund_id=:id) — without a fund_id this

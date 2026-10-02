@@ -12,6 +12,7 @@ import type {
   InvestorsResponse,
   SubscriptionsResponse,
 } from "./types";
+import { DEAL_MATERIAL_KINDS } from "@/lib/document-catalogue";
 import { allocationOf, daysUntil, formatClose } from "./vehicles/deal-status";
 
 /** Statuses that count as "funded" — money is confirmed on its way to escrow
@@ -346,15 +347,17 @@ export default function AdminDashboard() {
       ageDays: daysSince(i.created_at),
       to: `/luca/investors/${i.id}`,
     })),
-    ...(documentsData?.documents ?? []).map((d) => ({
-      key: `document-${d.id}`,
-      title: d.name,
-      detail: `${d.owner_name}${d.fund_name ? ` · ${d.fund_name}` : ""}`,
-      needs: "Review document",
-      priority: 2,
-      ageDays: daysSince(d.created_at),
-      to: "/luca/documents",
-    })),
+    ...(documentsData?.documents ?? [])
+      .filter((d) => !DEAL_MATERIAL_KINDS.includes(d.kind))
+      .map((d) => ({
+        key: `document-${d.id}`,
+        title: d.name,
+        detail: `${d.owner_name}${d.fund_name ? ` · ${d.fund_name}` : ""}`,
+        needs: "Review document",
+        priority: 2,
+        ageDays: daysSince(d.created_at),
+        to: "/luca/compliance?tab=review",
+      })),
   ].sort((a, b) => a.priority - b.priority || b.ageDays - a.ageDays);
   const visibleAttention = showAllQueue ? attention : attention.slice(0, QUEUE_PREVIEW);
   const overdue = attention.filter((a) => a.ageDays > OVERDUE_DAYS).length;

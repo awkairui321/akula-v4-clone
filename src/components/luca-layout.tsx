@@ -7,7 +7,7 @@ import {
   Circle,
   LayoutDashboard,
   TrendingUp,
-  FileTextIcon,
+  ShieldCheckIcon,
   PanelLeft,
   UserCheckIcon,
   Building2Icon,
@@ -28,7 +28,7 @@ const NAV_ITEMS = [
   { to: "/luca/onboarding", label: "Onboarding", icon: UserCheckIcon },
   { to: "/luca/subscriptions", label: "Subscriptions", icon: CreditCard },
   { to: "/luca/partners", label: "Partners", icon: Building2Icon },
-  { to: "/luca/documents", label: "Documents", icon: FileTextIcon },
+  { to: "/luca/compliance", label: "Compliance", icon: ShieldCheckIcon },
   { to: "/luca/communications", label: "Communications", icon: MailIcon },
 ];
 
