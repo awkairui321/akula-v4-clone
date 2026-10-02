@@ -33,6 +33,7 @@ import {
   nextActionFor,
   adviserClients,
   highlights,
+  fundAsSeenBy,
 } from "../db";
 
 function unauthorized() {
@@ -80,7 +81,7 @@ export const investorHandlers = [
         .map((f) =>
           user.role === "luca" || user.role === "ops"
             ? f
-            : { ...(currentVersion(f.id)?.snapshot ?? f), state: f.state },
+            : fundAsSeenBy({ ...(currentVersion(f.id)?.snapshot ?? f), state: f.state }, user.id),
         ),
     });
   }),
@@ -103,7 +104,10 @@ export const investorHandlers = [
     return HttpResponse.json({
       fund: ["luca", "ops"].includes(user.role)
         ? fund
-        : { ...(currentVersion(fund.id)?.snapshot ?? fund), state: fund.state },
+        : fundAsSeenBy(
+            { ...(currentVersion(fund.id)?.snapshot ?? fund), state: fund.state },
+            user.id,
+          ),
     });
   }),
 

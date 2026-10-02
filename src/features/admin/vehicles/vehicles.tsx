@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { SECTOR_LABELS, DEAL_DOCUMENT_KINDS } from "@/lib/types";
-import type { Fund, Tag } from "@/lib/types";
-import type { AdminDocument } from "../types";
+import { SECTOR_LABELS } from "@/lib/types";
+import type { Fund } from "@/lib/types";
+import { daysUntil, formatClose, allocationOf, StateBadge } from "./deal-status";
 import { formatPrice, formatPriceCompact, formatPricePrecise } from "@/lib/currency";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import DealOverviewPage from "@/components/deal-overview-page";
-import PublishedDealEditor from "@/features/admin/vehicles/published-deal-editor";
 import {
   Select,
   SelectTrigger,
@@ -21,45 +19,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import {
-  ArrowRightIcon,
-  CheckIcon,
-  ClockIcon,
-  FileTextIcon,
-  PlusIcon,
-  SearchIcon,
-  UploadIcon,
-} from "lucide-react";
-
-/** Days remaining until a close date, or null when the fund is open-ended. */
-function daysUntil(dateString: string | null): number | null {
-  if (!dateString) return null;
-  const diff = new Date(dateString).getTime() - Date.now();
-  if (diff <= 0) return 0;
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
-function formatClose(days: number | null): string {
-  if (days === null) return "Open-ended";
-  if (days === 0) return "Closed";
-  return days === 1 ? "1 day" : `${days} days`;
-}
-
-type Allocation = {
-  allocated: number;
-  total: number | null;
-  pct: number | null;
-};
-
-function allocationOf(fund: Fund): Allocation {
-  const allocated = parseFloat(fund.supply_allocated);
-  const total = fund.supply_total ? parseFloat(fund.supply_total) : null;
-  return {
-    allocated,
-    total,
-    pct: total && total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : null,
-  };
-}
+import { ArrowRightIcon, ClockIcon, PlusIcon, SearchIcon } from "lucide-react";
 
 /** Last reported round valuation is free text on the asset (e.g. "$157B"). */
 function lastRoundValuation(fund: Fund): string {
@@ -67,413 +27,116 @@ function lastRoundValuation(fund: Fund): string {
   return rounds.length > 0 ? rounds[rounds.length - 1].valuation : "—";
 }
 
-function StateBadge({ days }: { days: number | null }) {
-  const closingSoon = days !== null && days <= 7;
-  return (
-    <Badge variant={closingSoon ? "destructive" : "default"} className="text-[10px]">
-      {closingSoon ? "Closing soon" : "Live"}
-    </Badge>
-  );
-}
-
-function VehicleCard({
-  fund,
-  tagCount,
-  selected,
-  onSelect,
-}: {
-  fund: Fund;
-  tagCount: number;
-  selected: boolean;
-  onSelect: () => void;
-}) {
+/** Whole card is the link: click anywhere to open the deal. */
+function VehicleCard({ fund, tagCount }: { fund: Fund; tagCount: number }) {
   const days = daysUntil(fund.closes_at);
   const { allocated, total, pct } = allocationOf(fund);
 
   return (
-    <Card
-      onClick={onSelect}
-      className={`flex h-full cursor-pointer flex-col transition-shadow hover:ring-2 hover:ring-primary/20 ${
-        selected ? "ring-2 ring-primary" : ""
-      }`}
+    <Link
+      to={`/luca/deals/${fund.id}`}
+      aria-label={`Open ${fund.codename}`}
+      className="group block h-full rounded-xl focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
     >
-      <CardContent className="flex flex-1 flex-col gap-3 pt-6">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-lg font-semibold">{fund.codename}</p>
-            <p className="truncate text-sm text-muted-foreground">
-              {fund.asset.name} · {fund.fund_manager.name}
-            </p>
-          </div>
-          <StateBadge days={days} />
-        </div>
-
-        <p className="line-clamp-2 text-sm text-muted-foreground">
-          {fund.hook || fund.asset.description}
-        </p>
-
-        <div className="flex flex-wrap gap-1.5">
-          <Badge variant="secondary" className="text-[10px]">
-            {SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}
-          </Badge>
-          <Badge variant="outline" className="text-[10px]">
-            {fund.deal_type === "primary" ? "Primary" : "Secondary"}
-          </Badge>
-          <Badge variant="outline" className="text-[10px]">
-            {tagCount} tag{tagCount === 1 ? "" : "s"}
-          </Badge>
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          <span className="text-muted-foreground">Company valuation</span>
-          <span className="text-right font-medium">{lastRoundValuation(fund)}</span>
-          <span className="text-muted-foreground">Acquired valuation</span>
-          <span className="text-right font-medium">
-            {fund.implied_valuation ? formatPriceCompact(fund.implied_valuation) : "—"}
-          </span>
-          <span className="text-muted-foreground">Price / share</span>
-          <span className="text-right font-medium">{formatPricePrecise(fund.price)}</span>
-          <span className="text-muted-foreground">Minimum</span>
-          <span className="text-right font-medium">{formatPrice(fund.min_subscription)}</span>
-        </div>
-
-        <div className="mt-auto space-y-2 pt-1">
-          {pct !== null && total !== null ? (
-            <div className="space-y-1">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted-foreground/20">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="flex justify-between text-[11px] text-muted-foreground">
-                <span>
-                  {formatPrice(allocated)} of {formatPrice(total)} committed
-                </span>
-                <span>{pct}%</span>
-              </div>
+      <Card className="flex h-full flex-col transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
+        <CardContent className="flex flex-1 flex-col gap-3 pt-6">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-lg font-semibold">{fund.codename}</p>
+              <p className="truncate text-sm text-muted-foreground">
+                {fund.asset.name} · {fund.fund_manager.name}
+              </p>
             </div>
-          ) : (
-            <p className="text-[11px] text-muted-foreground">
-              {formatPrice(allocated)} committed · no cap set
-            </p>
-          )}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <ClockIcon className="size-3.5" />
-              {formatClose(days)}
-            </span>
-            <Link
-              to={`/luca/deals/${fund.id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 text-primary hover:underline"
-            >
-              Overview
-              <ArrowRightIcon className="size-3.5" />
-            </Link>
+            <StateBadge fund={fund} />
           </div>
-        </div>
-      </CardContent>
-    </Card>
+
+          <p className="line-clamp-2 text-sm text-muted-foreground">
+            {fund.hook || fund.asset.description}
+          </p>
+
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="secondary" className="text-[10px]">
+              {SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}
+            </Badge>
+            <Badge variant="outline" className="text-[10px]">
+              {fund.deal_type === "primary" ? "Primary" : "Secondary"}
+            </Badge>
+            <Badge variant="outline" className="text-[10px]">
+              {tagCount} tag{tagCount === 1 ? "" : "s"}
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+            <span className="text-muted-foreground">Company valuation</span>
+            <span className="text-right font-medium">{lastRoundValuation(fund)}</span>
+            <span className="text-muted-foreground">Acquired valuation</span>
+            <span className="text-right font-medium">
+              {fund.implied_valuation ? formatPriceCompact(fund.implied_valuation) : "—"}
+            </span>
+            <span className="text-muted-foreground">Price / share</span>
+            <span className="text-right font-medium">{formatPricePrecise(fund.price)}</span>
+            <span className="text-muted-foreground">Minimum</span>
+            <span className="text-right font-medium">{formatPrice(fund.min_subscription)}</span>
+          </div>
+
+          <div className="mt-auto space-y-2 pt-1">
+            {pct !== null && total !== null ? (
+              <div className="space-y-1">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted-foreground/20">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    {formatPrice(allocated)} of {formatPrice(total)} committed
+                  </span>
+                  <span>{pct}%</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                {formatPrice(allocated)} committed · no cap set
+              </p>
+            )}
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <ClockIcon className="size-3.5" />
+                {fund.closes_at && days !== null && days > 0
+                  ? `Closes ${formatCloseDate(fund.closes_at)} · ${formatClose(days)}`
+                  : formatClose(days)}
+              </span>
+              <span className="flex items-center gap-1 text-primary group-hover:underline">
+                Open deal
+                <ArrowRightIcon className="size-3.5" />
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
-function VehicleDetail({
-  fund,
-  library,
-  onToggleTag,
-  savingTags,
-  tagError,
-  documents,
-  onUploaded,
-}: {
-  fund: Fund;
-  library: Tag[];
-  onToggleTag: (tag: Tag) => void;
-  savingTags: boolean;
-  tagError: string | null;
-  documents: AdminDocument[];
-  onUploaded: () => void;
-}) {
-  const tags = fund.tags;
-  const applied = new Set(tags.map((t) => t.id));
-  const [kind, setKind] = useState(DEAL_DOCUMENT_KINDS[0].value);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<"eam" | "investor" | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
+function formatCloseDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
 
-  const upload = useMutation({
-    mutationFn: (file: File) =>
-      new Promise<void>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("Could not read the file"));
-        reader.onload = async () => {
-          try {
-            await api("/api/v1/admin/documents", {
-              method: "POST",
-              body: {
-                document: {
-                  name: file.name,
-                  kind,
-                  fund_id: fund.id,
-                  file_data_url: reader.result as string,
-                },
-              },
-            });
-            resolve();
-          } catch (err) {
-            reject(err as Error);
-          }
-        };
-        reader.readAsDataURL(file);
-      }),
-    onSuccess: () => {
-      setUploadError(null);
-      onUploaded();
-    },
-    onError: (e: Error) => setUploadError(e.message),
-  });
-
-  const investorVisible = documents.length;
-
-  return (
-    <div className="@container flex w-full max-w-[1400px] flex-col gap-5">
-      <PublishedDealEditor
-        key={`${fund.id}-${editorOpen}`}
-        fund={fund}
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-      />
-      {/* Published overview */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="tracking-wide text-muted-foreground uppercase">Published overview</p>
-              <h3 className="mt-1 text-2xl">{fund.codename}</h3>
-              <p className="text-sm text-muted-foreground">
-                Review the published investor and adviser views, or edit this deal directly.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPreview("eam")}>
-                Preview as EAM
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPreview("investor")}>
-                Preview as investor
-              </Button>
-              <Button size="sm" onClick={() => setEditorOpen(true)}>
-                Edit published overview
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Materials & distribution */}
-      <Card>
-        <CardContent className="space-y-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="tracking-wide text-muted-foreground uppercase">
-                Materials &amp; distribution
-              </p>
-              <h3 className="mt-1 text-2xl">Deal documents</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Factsheet, offering memorandum, subscription agreement template, risk disclosure or
-                other supporting material for this deal.
-              </p>
-            </div>
-            <Badge variant="secondary" className="shrink-0 text-[10px]">
-              {investorVisible} uploaded
-            </Badge>
-          </div>
-
-          <div className="flex flex-row items-center gap-6">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Document kind</Label>
-              <Select value={kind} onValueChange={(val) => setKind(val as string)}>
-                <SelectTrigger className="w-full bg-muted sm:w-64">
-                  <SelectValue>
-                    {DEAL_DOCUMENT_KINDS.find((k) => k.value === kind)?.label}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {DEAL_DOCUMENT_KINDS.map((k) => (
-                    <SelectItem key={k.value} value={k.value}>
-                      {k.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <label
-              htmlFor="vehicle-material-upload"
-              className="flex w-full cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed bg-muted px-4 py-8 text-center transition-colors hover:bg-muted/50"
-            >
-              <UploadIcon className="size-5 text-muted-foreground" />
-              <span className="text-sm font-medium">
-                {upload.isPending ? "Uploading..." : "Choose a PDF to upload"}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Uploaded as: {DEAL_DOCUMENT_KINDS.find((k) => k.value === kind)?.label}
-              </span>
-              <input
-                id="vehicle-material-upload"
-                type="file"
-                accept="application/pdf"
-                className="hidden"
-                disabled={upload.isPending}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) upload.mutate(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-
-          {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
-
-          {documents.length > 0 && (
-            <div className="space-y-2">
-              {documents.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm"
-                >
-                  <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{doc.name}</p>
-                    <p className="text-xs text-muted-foreground capitalize">
-                      {doc.kind.replace(/_/g, " ")}
-                    </p>
-                  </div>
-                  {doc.file_data_url && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => window.open(doc.file_data_url!, "_blank")}
-                    >
-                      View
-                    </Button>
-                  )}
-                  <Badge variant="outline" className="shrink-0 text-[10px] capitalize">
-                    {doc.review_state}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <p className="rounded-lg border bg-muted p-4 text-xs text-muted-foreground">
-            Uploaded materials are visible to LUCA immediately and flow to the investor deal page
-            and EAM overview from this same record.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Shared tag library */}
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="tracking-wide text-muted-foreground uppercase">Shared tag library</p>
-              <h3 className="mt-1 text-2xl">Vehicle tags</h3>
-            </div>
-            <Badge variant="secondary" className="shrink-0 text-[10px]">
-              {tags.length} applied
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            These exact tags are compared with EAM client tags. Changes appear in adviser review
-            prompts after publication.
-          </p>
-
-          <div className="grid gap-2 @md:grid-cols-2">
-            {library.map((tag) => {
-              const on = applied.has(tag.id);
-              return (
-                <button
-                  key={tag.id}
-                  onClick={() => onToggleTag(tag)}
-                  disabled={savingTags}
-                  className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-60 ${
-                    on ? "border-primary bg-muted" : "hover:bg-muted/50"
-                  }`}
-                >
-                  <span className="text-muted-foreground">
-                    {on ? (
-                      <CheckIcon className="size-4 text-primary" />
-                    ) : (
-                      <PlusIcon className="size-4" />
-                    )}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{tag.name}</span>
-                    <span className="block text-xs text-muted-foreground">{tag.category}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {tagError && <p className="text-sm text-destructive">{tagError}</p>}
-
-          <p className="rounded-lg border bg-muted/50 p-3 text-xs text-muted-foreground">
-            Tag overlap is surfaced from shared vehicle and client tags in recorded relationships;
-            it does not rank or recommend this deal.
-          </p>
-          <div className="border-t pt-4">
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              EAM launch packet · readiness
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-3 @xl:grid-cols-4">
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Terms and pricing</p>
-                <p className="text-sm font-medium">
-                  {formatPrice(fund.min_subscription)} minimum · {formatPricePrecise(fund.price)} /
-                  unit
-                </p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Risks and disclosure</p>
-                <p className="text-sm font-medium">
-                  {fund.asset.risks.length > 0
-                    ? `${fund.asset.risks.length} disclosed`
-                    : "Not started"}
-                </p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Vehicle tags</p>
-                <p className="text-sm font-medium">{tags.length} applied</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Client materials</p>
-                <p className="text-sm font-medium">{investorVisible} investor-visible</p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      <Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
-        <DialogContent className="max-h-[94vh] max-w-[96vw] overflow-y-auto p-4 sm:max-w-6xl">
-          <DialogTitle className="sr-only">
-            {preview === "eam" ? "EAM" : "Investor"} opportunity preview
-          </DialogTitle>
-          {preview && (
-            <DealOverviewPage
-              key={`${fund.id}-${preview}`}
-              fund={fund}
-              viewer={preview}
-              backTo=""
-              backLabel=""
-              preview
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
+/**
+ * Order deals by closing date: open deals closing soonest first, then open-ended
+ * deals, then drafts, then closed deals (most recently closed first).
+ */
+function compareByClosing(a: Fund, b: Fund): number {
+  const rank = (f: Fund): number => {
+    const days = daysUntil(f.closes_at);
+    if (f.state === "draft") return 2;
+    if (["closed", "holding", "realized", "cancelled"].includes(f.state) || days === 0) return 3;
+    return days === null ? 1 : 0;
+  };
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  const ta = a.closes_at ? new Date(a.closes_at).getTime() : 0;
+  const tb = b.closes_at ? new Date(b.closes_at).getTime() : 0;
+  return ra === 3 ? tb - ta : ta - tb;
 }
 
 const SECTOR_OPTIONS = Object.entries(SECTOR_LABELS);
@@ -613,8 +276,7 @@ function isClosingSoon(fund: Fund): boolean {
 }
 
 export default function AdminVehiclesPage() {
-  const queryClient = useQueryClient();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const navigate = useNavigate();
   const [newDealOpen, setNewDealOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -625,19 +287,7 @@ export default function AdminVehiclesPage() {
     queryFn: () => api<{ funds: Fund[] }>("/api/v1/funds"),
   });
 
-  const { data: docsData } = useQuery({
-    queryKey: ["admin", "documents"],
-    queryFn: () => api<{ documents: AdminDocument[] }>("/api/v1/admin/documents"),
-  });
-
-  const { data: tagsData } = useQuery({
-    queryKey: ["tags"],
-    queryFn: () => api<{ tags: Tag[] }>("/api/v1/tags"),
-  });
-
   const funds = fundsData?.funds ?? [];
-  const documents = docsData?.documents ?? [];
-  const library = tagsData?.tags ?? [];
 
   const filtered = useMemo(() => {
     let result = funds;
@@ -662,7 +312,7 @@ export default function AdminVehiclesPage() {
     if (sectorFilter) {
       result = result.filter((f) => f.asset.sector === sectorFilter);
     }
-    return result;
+    return [...result].sort(compareByClosing);
   }, [funds, search, statusFilter, sectorFilter]);
 
   const sectorCounts = useMemo(() => {
@@ -672,26 +322,6 @@ export default function AdminVehiclesPage() {
     }
     return counts;
   }, [funds]);
-
-  const selected = filtered.find((f) => f.id === selectedId) ?? filtered[0] ?? null;
-
-  // The vehicle owns the complete tag set, so a toggle posts the whole list.
-  const saveTags = useMutation({
-    mutationFn: ({ fund, tagIds }: { fund: Fund; tagIds: number[] }) =>
-      api<{ fund: Fund }>(`/api/v1/funds/${fund.id}`, {
-        method: "PATCH",
-        body: { fund: { tag_ids: tagIds } },
-      }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "funds"] }),
-  });
-
-  const toggleTag = (fund: Fund, tag: Tag) => {
-    const current = fund.tags.map((t) => t.id);
-    const tagIds = current.includes(tag.id)
-      ? current.filter((id) => id !== tag.id)
-      : [...current, tag.id];
-    saveTags.mutate({ fund, tagIds });
-  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -712,7 +342,7 @@ export default function AdminVehiclesPage() {
       <NewDealDialog
         open={newDealOpen}
         onOpenChange={setNewDealOpen}
-        onCreated={(fund) => setSelectedId(fund.id)}
+        onCreated={(fund) => navigate(`/luca/deals/${fund.id}`)}
       />
 
       {/* Search + status filter */}
@@ -775,30 +405,11 @@ export default function AdminVehiclesPage() {
         <p className="py-12 text-center text-muted-foreground">No vehicles match your filters.</p>
       )}
 
-      {selected && (
-        <div className="grid gap-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((fund) => (
-              <VehicleCard
-                key={fund.id}
-                fund={fund}
-                tagCount={fund.tags.length}
-                selected={fund.id === selected.id}
-                onSelect={() => setSelectedId(fund.id)}
-              />
-            ))}
-          </div>
-
-          <VehicleDetail
-            key={selected.id}
-            fund={selected}
-            library={library}
-            onToggleTag={(tag) => toggleTag(selected, tag)}
-            savingTags={saveTags.isPending}
-            tagError={saveTags.isError ? saveTags.error.message : null}
-            documents={documents.filter((d) => d.fund_id === selected.id)}
-            onUploaded={() => queryClient.invalidateQueries({ queryKey: ["admin", "documents"] })}
-          />
+      {filtered.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((fund) => (
+            <VehicleCard key={fund.id} fund={fund} tagCount={fund.tags.length} />
+          ))}
         </div>
       )}
     </div>

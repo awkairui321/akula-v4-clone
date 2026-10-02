@@ -431,6 +431,62 @@ export function tagsFor(ids: number[]): Tag[] {
   return tags.filter((t) => ids.includes(t.id));
 }
 
+let tagAutoId = tags.length + 1;
+/** Find a tag by name (case-insensitive) or create it. Custom tags have no preset category. */
+export function findOrCreateTag(name: string): Tag {
+  const trimmed = name.trim();
+  const existing = tags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+  if (existing) return existing;
+  const tag: Tag = { id: tagAutoId++, name: trimmed, category: "Custom" };
+  tags.push(tag);
+  return tag;
+}
+
+// ---------------------------------------------------------------------------
+// Per-investor pricing: the fund manager can show an individual investor
+// different price / fees / valuation than the standard published terms.
+// A null field means "use the standard published value".
+// ---------------------------------------------------------------------------
+
+export type InvestorPricing = {
+  id: number;
+  fund_id: number;
+  investor_id: number;
+  price: string | null;
+  subscription_fee_pct: string | null;
+  management_fee_pct: string | null;
+  carried_interest_pct: string | null;
+  implied_valuation: string | null;
+  note: string | null;
+  updated_at: string;
+};
+
+export const investorPricing: InvestorPricing[] = [];
+let investorPricingAutoId = 1;
+export function nextInvestorPricingId(): number {
+  return investorPricingAutoId++;
+}
+export function pricingFor(fundId: number, investorId: number): InvestorPricing | undefined {
+  return investorPricing.find((p) => p.fund_id === fundId && p.investor_id === investorId);
+}
+/** The fund as one specific investor sees it: standard terms with their overrides applied. */
+export function fundAsSeenBy<T extends { id: number }>(fund: T, investorId: number): T {
+  const override = pricingFor(fund.id, investorId);
+  if (!override) return fund;
+  const patch: Record<string, string> = {};
+  for (const key of [
+    "price",
+    "subscription_fee_pct",
+    "management_fee_pct",
+    "carried_interest_pct",
+    "implied_valuation",
+  ] as const) {
+    const value = override[key];
+    if (value !== null) patch[key] = value;
+  }
+  return { ...fund, ...patch };
+}
+
 // ---------------------------------------------------------------------------
 // Funds (and embedded assets)
 // ---------------------------------------------------------------------------
@@ -1617,9 +1673,398 @@ export const funds: Fund[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Illustrative deals — made-up vehicles so the LUCA deals list, dashboard and
+// per-deal workspace have a realistic spread of closing dates and raise levels.
+// ---------------------------------------------------------------------------
+
+type DealSpec = {
+  id: number;
+  name: string;
+  codename: string;
+  descriptor: string;
+  hook: string;
+  state: Fund["state"];
+  sector: string;
+  subSector: string;
+  company: string;
+  country: string;
+  price: string;
+  min: string;
+  fees: [string, string, string];
+  total: string;
+  allocated: string;
+  valuation: string;
+  premium: string;
+  closesIn: number | null;
+  openedAgo: number;
+  entryMultiple: string;
+  about: string;
+  highlights: string[];
+  tagIds: number[];
+  buyer: string;
+  model: string;
+  metrics: Fund["key_metrics"];
+};
+
+const monthYear = (ago: number) =>
+  new Date(now - ago * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+
+const dealSpecs: DealSpec[] = [
+  {
+    id: 6,
+    name: "Helix Therapeutics SPV I",
+    codename: "Project Helix",
+    descriptor: "Late-stage oncology platform",
+    hook: "A clinical-stage platform with two programmes entering pivotal trials.",
+    state: "open",
+    sector: "biotech_health",
+    subSector: "Oncology",
+    company: "Helix Therapeutics",
+    country: "United States",
+    price: "96.40",
+    min: "25000",
+    fees: ["4", "2", "20"],
+    total: "4500000",
+    allocated: "3150000",
+    valuation: "2400000000",
+    premium: "10",
+    closesIn: 12,
+    openedAgo: 50,
+    entryMultiple: "n/a",
+    about:
+      "Helix Therapeutics develops targeted oncology treatments from a proprietary antibody platform.\n\nTwo lead programmes are entering pivotal trials, supported by a recent crossover round.",
+    highlights: [
+      "Two programmes entering pivotal trials",
+      "Crossover round led by tier-one healthcare investors",
+      "Cash runway into the second half of next year",
+    ],
+    tagIds: [3, 6],
+    buyer: "Hospitals and oncology centres treating late-stage patients",
+    model: "Clinical-stage: value driven by trial milestones and partnering revenue",
+    metrics: [
+      { label: "Programmes in clinic", value: "4", note: "Two entering pivotal trials" },
+      { label: "Cash runway", value: "30 months", note: "As of last quarter" },
+    ],
+  },
+  {
+    id: 7,
+    name: "Northwind Cyber SPV I",
+    codename: "Project Northwind",
+    descriptor: "Cloud-native security platform",
+    hook: "Enterprise security consolidation, sold on multi-year contracts.",
+    state: "open",
+    sector: "cybersecurity",
+    subSector: "Cloud security",
+    company: "Northwind Cyber",
+    country: "Israel",
+    price: "58.20",
+    min: "25000",
+    fees: ["4", "1.5", "15"],
+    total: "3500000",
+    allocated: "1400000",
+    valuation: "950000000",
+    premium: "6",
+    closesIn: 38,
+    openedAgo: 22,
+    entryMultiple: "11.4x",
+    about:
+      "Northwind Cyber sells a cloud-native security platform that consolidates detection, response and posture management for large enterprises.",
+    highlights: [
+      "Net revenue retention above 125%",
+      "Multi-year contracts with Fortune 500 customers",
+      "Recently crossed profitability on a contribution basis",
+    ],
+    tagIds: [1, 8],
+    buyer: "Large enterprises consolidating security vendors",
+    model: "Multi-year subscription contracts, priced per protected workload",
+    metrics: [
+      { label: "Net revenue retention", value: "125%", note: "Trailing twelve months" },
+      { label: "Customers", value: "310", note: "Enterprise accounts" },
+    ],
+  },
+  {
+    id: 8,
+    name: "Quanta Compute SPV I",
+    codename: "Project Quanta",
+    descriptor: "AI infrastructure and compute",
+    hook: "Dedicated GPU capacity sold to frontier AI labs on long-term take-or-pay terms.",
+    state: "open",
+    sector: "ai_machine_learning",
+    subSector: "AI infrastructure",
+    company: "Quanta Compute",
+    country: "United States",
+    price: "212.00",
+    min: "50000",
+    fees: ["4", "2", "20"],
+    total: "8000000",
+    allocated: "7300000",
+    valuation: "6200000000",
+    premium: "18",
+    closesIn: 3,
+    openedAgo: 70,
+    entryMultiple: "15.8x",
+    about:
+      "Quanta Compute builds and operates dedicated GPU clusters and leases capacity to AI labs under multi-year take-or-pay agreements.",
+    highlights: [
+      "Take-or-pay contracts covering most of installed capacity",
+      "Data-centre pipeline secured through the next two years",
+      "Strategic investors include a top-three cloud provider",
+    ],
+    tagIds: [1, 4, 7],
+    buyer: "AI labs and enterprises leasing dedicated GPU capacity",
+    model: "Take-or-pay capacity contracts with annual escalators",
+    metrics: [
+      { label: "Contracted capacity", value: "92%", note: "Of installed GPUs" },
+      { label: "Data-centre pipeline", value: "180MW", note: "Secured through next two years" },
+    ],
+  },
+  {
+    id: 9,
+    name: "Tidewater Carbon SPV I",
+    codename: "Project Tidewater",
+    descriptor: "Nature-based carbon removal",
+    hook: "Verified removal credits from restored coastal ecosystems.",
+    state: "closing",
+    sector: "climate_energy",
+    subSector: "Carbon removal",
+    company: "Tidewater Carbon",
+    country: "Australia",
+    price: "41.75",
+    min: "25000",
+    fees: ["3.5", "1.5", "15"],
+    total: "2500000",
+    allocated: "2380000",
+    valuation: "410000000",
+    premium: "4",
+    closesIn: 9,
+    openedAgo: 60,
+    entryMultiple: "8.1x",
+    about:
+      "Tidewater Carbon restores coastal ecosystems and sells independently verified carbon removal credits to corporate buyers.",
+    highlights: [
+      "Offtake agreements with investment-grade corporate buyers",
+      "Independent verification of removal volumes",
+      "Restoration sites across three jurisdictions",
+    ],
+    tagIds: [2, 5],
+    buyer: "Corporate buyers of verified carbon removal credits",
+    model: "Forward offtake agreements priced per verified tonne",
+    metrics: [
+      { label: "Verified removals", value: "1.2Mt", note: "Cumulative" },
+      { label: "Offtake coverage", value: "78%", note: "Of expected volume" },
+    ],
+  },
+  {
+    id: 10,
+    name: "Cobalt Semiconductors SPV I",
+    codename: "Project Cobalt",
+    descriptor: "Power semiconductors",
+    hook: "Wide-bandgap power devices for electric vehicles and data centres.",
+    state: "draft",
+    sector: "semiconductors",
+    subSector: "Power devices",
+    company: "Cobalt Semiconductors",
+    country: "Japan",
+    price: "73.10",
+    min: "25000",
+    fees: ["4", "2", "20"],
+    total: "5000000",
+    allocated: "0",
+    valuation: "1300000000",
+    premium: "9",
+    closesIn: 75,
+    openedAgo: 0,
+    entryMultiple: "9.6x",
+    about:
+      "Cobalt Semiconductors designs wide-bandgap power devices used in electric vehicle drivetrains and data-centre power supplies.",
+    highlights: [
+      "Design wins with two global automotive suppliers",
+      "In-house packaging reduces unit cost",
+      "Capacity expansion funded in the current round",
+    ],
+    tagIds: [3],
+    buyer: "Automotive suppliers and data-centre power-supply makers",
+    model: "Device sales under multi-year supply agreements",
+    metrics: [
+      { label: "Design wins", value: "2", note: "Global automotive suppliers" },
+      { label: "Capacity expansion", value: "Funded", note: "In the current round" },
+    ],
+  },
+];
+
+for (const spec of dealSpecs) {
+  const base = structuredClone(funds[0]);
+  const asset: Asset = {
+    ...base.asset,
+    id: spec.id,
+    name: spec.company,
+    legal_name: `${spec.company} Ltd.`,
+    description: spec.descriptor,
+    sector: spec.sector,
+    sub_sector: spec.subSector,
+    country: spec.country,
+    country_of_incorporation: spec.country,
+    headquarters: spec.country,
+    about: spec.about,
+    thesis: spec.hook,
+    highlights: spec.highlights,
+    website: `https://${spec.company.toLowerCase().replace(/[^a-z]+/g, "")}.example.com`,
+    risks: [
+      {
+        title: "Illustrative risk",
+        body: "Placeholder risk disclosure for this made-up deal. Replace with the real disclosure before publication.",
+      },
+      {
+        title: "Valuation and liquidity",
+        body: "Private-company holdings are illiquid and valuations are estimates.",
+      },
+    ],
+    team: [
+      { name: "Alex Morgan", role: "Chief Executive Officer" },
+      { name: "Jordan Lee", role: "Chief Financial Officer" },
+    ],
+    developments: [{ date: daysAgo(20), text: "Illustrative: milestone announced." }],
+    tagline: spec.hook,
+    typical_buyer: spec.buyer,
+    commercial_model: spec.model,
+    how_it_works: base.asset.how_it_works.map((row, i) => ({
+      label: row.label,
+      text: [
+        `Illustrative: ${spec.company} addresses a significant customer problem in ${spec.subSector.toLowerCase()}.`,
+        `${spec.company} provides ${spec.descriptor.toLowerCase()}.`,
+        `Used by ${spec.buyer.toLowerCase()}.`,
+        "Illustrative practical benefit for customers of this made-up company.",
+      ][i % 4],
+    })),
+    in_practice: null,
+    market_context: [
+      `Illustrative market context for ${spec.subSector.toLowerCase()}. Replace with the real market overview before publication.`,
+    ],
+    competitive_landscape: [],
+    thesis_points: [
+      {
+        title: "Illustrative thesis point",
+        text: spec.highlights[0] ?? "Placeholder thesis point.",
+      },
+    ],
+    business_columns: [{ title: "Who pays and for what", text: `Illustrative: ${spec.model}.` }],
+    product_disclosures: [],
+    product_disclosures_note: null,
+    product_disclosures_source: null,
+    financial_indicators: [],
+    funding_rounds: [
+      {
+        date: monthYear(400),
+        round: "Series B",
+        valuation: `$${(Number(spec.valuation) / 1e9 / 2).toFixed(2)}B`,
+      },
+      {
+        date: monthYear(120),
+        round: "Series C",
+        valuation: `$${(Number(spec.valuation) / 1e9 / 1.08).toFixed(2)}B`,
+      },
+    ],
+  };
+  funds.push({
+    ...base,
+    id: spec.id,
+    name: spec.name,
+    codename: spec.codename,
+    descriptor: spec.descriptor,
+    hook: spec.hook,
+    state: spec.state,
+    price: spec.price,
+    min_subscription: spec.min,
+    subscription_fee_pct: spec.fees[0],
+    management_fee_pct: spec.fees[1],
+    carried_interest_pct: spec.fees[2],
+    supply_total: spec.total,
+    supply_allocated: spec.allocated,
+    implied_valuation: spec.valuation,
+    premium_pct: spec.premium,
+    closes_at: spec.closesIn === null ? null : daysFromNow(spec.closesIn),
+    opened_at: spec.state === "draft" ? null : daysAgo(spec.openedAgo),
+    entry_multiple: spec.entryMultiple,
+    comparable_note: "Illustrative comparable note for a made-up deal.",
+    key_metrics: spec.metrics,
+    revenue_points: [
+      { period: "FY2024", value: "0.08" },
+      { period: "FY2025", value: "0.17" },
+    ],
+    peers: [],
+    activities: [
+      { date: daysAgo(spec.openedAgo), text: "Akula opened this vehicle.", kind: "commit" },
+    ],
+    asset,
+    share_class: { id: spec.id, name: "Class A Participating", class_type: "preference" },
+    tags: tagsFor(spec.tagIds),
+    primary_source: {
+      title: `${spec.company} investor materials`,
+      meta: "Illustrative source for a made-up deal",
+      text: "Illustrative placeholder content so the deal workspace can be reviewed.",
+    },
+    figures_checked_note: "Illustrative: figures have not been checked.",
+  });
+}
+
 export function findFundById(id: number): Fund | undefined {
   return funds.find((f) => f.id === id);
 }
+// Made-up per-investor terms so the investor-pricing view has examples.
+investorPricing.push(
+  {
+    id: nextInvestorPricingId(),
+    fund_id: 1,
+    investor_id: 11,
+    price: "178.00",
+    subscription_fee_pct: "2.5",
+    management_fee_pct: "1.25",
+    carried_interest_pct: "12.5",
+    implied_valuation: "1780000000",
+    note: "Founding-adviser terms agreed with Meridian Capital Advisors.",
+    updated_at: daysAgo(12),
+  },
+  {
+    id: nextInvestorPricingId(),
+    fund_id: 1,
+    investor_id: 14,
+    price: null,
+    subscription_fee_pct: "3",
+    management_fee_pct: null,
+    carried_interest_pct: null,
+    implied_valuation: null,
+    note: "Fee concession for a repeat investor.",
+    updated_at: daysAgo(9),
+  },
+  {
+    id: nextInvestorPricingId(),
+    fund_id: 2,
+    investor_id: 16,
+    price: "92.00",
+    subscription_fee_pct: "3",
+    management_fee_pct: "1.25",
+    carried_interest_pct: "15",
+    implied_valuation: null,
+    note: "Volume commitment across two vehicles.",
+    updated_at: daysAgo(6),
+  },
+  {
+    id: nextInvestorPricingId(),
+    fund_id: 8,
+    investor_id: 2,
+    price: "205.50",
+    subscription_fee_pct: "3.5",
+    management_fee_pct: null,
+    carried_interest_pct: null,
+    implied_valuation: "6000000000",
+    note: null,
+    updated_at: daysAgo(3),
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Discover companies (no live Akula vehicle)
@@ -1960,9 +2405,14 @@ export type MockSubscription = {
   _convertedToHoldingId: number | null;
 };
 
-function feeFor(fundId: number, amount: number): string {
+function feeFor(fundId: number, amount: number, investorId?: number): string {
   const fund = findFundById(fundId);
-  const pct = fund ? parseFloat(fund.subscription_fee_pct) : 4;
+  const override = investorId !== undefined ? pricingFor(fundId, investorId) : undefined;
+  const pct = override?.subscription_fee_pct
+    ? parseFloat(override.subscription_fee_pct)
+    : fund
+      ? parseFloat(fund.subscription_fee_pct)
+      : 4;
   return (amount * (pct / 100)).toFixed(2);
 }
 
@@ -2019,7 +2469,7 @@ function makeSubscription(
     owner: ownerFor(status, origin),
     next_action: nextActionFor(status),
     origin,
-    subscription_fee: feeFor(fundId, amount),
+    subscription_fee: feeFor(fundId, amount, investor.id),
     payment_reference: `AK-${fund.codename.replace(/\D/g, "").padStart(3, "0") || "000"}-${String(id).padStart(4, "0")}`,
     investor_id: investor.id,
     investor_name: investor.name,
@@ -2205,6 +2655,26 @@ function seedSubscriptions() {
   );
   subscriptions.push(makeSubscription(nextSubscriptionId(), 2, 65000, "approved", sofia, 3));
   subscriptions.push(makeSubscription(nextSubscriptionId(), 5, 38000, "rejected", daniel, 11));
+
+  // Made-up activity on the illustrative deals (Helix, Northwind, Quanta, Tidewater).
+  type SeedInvestor = Parameters<typeof makeSubscription>[4];
+  const extra: [number, number, SubscriptionStatus, SeedInvestor, number][] = [
+    [6, 60000, "under_luca_review", priya, 9],
+    [6, 100000, "allocated", julian, 40],
+    [6, 45000, "awaiting_funds", sofia, 14],
+    [7, 35000, "documents_pending", marcus, 6],
+    [7, 50000, "approved", grace, 5],
+    [7, 40000, "allocation_pending", daniel, 18],
+    [8, 120000, "allocated", amara, 55],
+    [8, 80000, "reconciliation", felix, 20],
+    [8, 90000, "payment_unmatched", investor2, 16],
+    [8, 75000, "under_luca_review", priya, 7],
+    [9, 60000, "allocated", julian, 45],
+    [9, 30000, "information_requested", sofia, 8],
+  ];
+  for (const [fundId, amount, status, who, age] of extra) {
+    subscriptions.push(makeSubscription(nextSubscriptionId(), fundId, amount, status, who, age));
+  }
 }
 seedSubscriptions();
 
@@ -2376,6 +2846,20 @@ logEvent("status_change", "Sofia Reyes's subscription to Palette Studio was appr
 logEvent("status_change", "Daniel Kim's subscription to Nightjar Labs was rejected.", {
   at: daysAgo(11),
   investorId: 16,
+});
+logEvent("deal_status_change", "Quanta Compute is 91% subscribed and closes in 3 days.", {
+  at: daysAgo(1),
+});
+logEvent(
+  "subscription_submitted",
+  "Priya Nair submitted a $75,000 subscription to Quanta Compute.",
+  {
+    at: daysAgo(7),
+  },
+);
+logEvent("deal_status_change", "Tidewater Carbon closed to new subscriptions.", { at: daysAgo(2) });
+logEvent("document_uploaded", "Offering Memorandum filed for Helix Therapeutics.", {
+  at: daysAgo(4),
 });
 logEvent("document_uploaded", "Updated risk disclosure filed for Kestrel Robotics.", {
   at: daysAgo(1),
@@ -2868,6 +3352,35 @@ export const documents: AdminDocument[] = [
 let documentAutoId = documents.length + 1;
 export function nextDocumentId(): number {
   return documentAutoId++;
+}
+
+// Deal-level materials (no subscription attached) for every vehicle, so each
+// deal workspace has documents to browse. Investor-visible once published.
+const dealMaterials: [string, string][] = [
+  ["factsheet", "Factsheet"],
+  ["offering_memorandum", "Offering Memorandum"],
+  ["risk_disclosure", "Risk Disclosure"],
+];
+for (const fund of funds) {
+  if (fund.id <= 5) continue;
+  dealMaterials.forEach(([kind, label], index) => {
+    if (fund.state === "draft" && index > 0) return;
+    documents.push({
+      id: nextDocumentId(),
+      name: `${fund.asset.name} — ${label}`,
+      kind,
+      status: "available",
+      review_state: "filed",
+      has_file: false,
+      fund_id: fund.id,
+      fund_name: fund.name,
+      subscription_id: null,
+      owner_id: 1,
+      owner_name: "LUCA SGP",
+      owner_email: "luca@akula.vc",
+      created_at: daysAgo(20 - index * 3),
+    });
+  });
 }
 
 // Backfill a signed subscription agreement for every subscription that has
@@ -3940,6 +4453,7 @@ const demoArrays = {
   partners,
   communications,
   communicationRecipients,
+  investorPricing,
 };
 export function exportDemoState() {
   return structuredClone({
@@ -3949,15 +4463,22 @@ export function exportDemoState() {
   });
 }
 export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
+  // Tables added after a demo was saved are optional; keep their seed data.
+  const OPTIONAL_TABLES = ["investorPricing"];
   if (
     !saved ||
     !saved.arrays ||
-    !Object.keys(demoArrays).every((k) => Array.isArray(saved.arrays[k as keyof typeof demoArrays]))
+    !Object.keys(demoArrays).every(
+      (k) =>
+        Array.isArray(saved.arrays[k as keyof typeof demoArrays]) || OPTIONAL_TABLES.includes(k),
+    )
   )
     throw new Error("Invalid saved database");
   for (const key of Object.keys(demoArrays) as (keyof typeof demoArrays)[]) {
+    const savedRows = saved.arrays[key];
+    if (!Array.isArray(savedRows)) continue;
     const target = demoArrays[key] as unknown[];
-    target.splice(0, target.length, ...structuredClone(saved.arrays[key]));
+    target.splice(0, target.length, ...structuredClone(savedRows));
   }
   consentGrants.clear();
   for (const [key, value] of saved.consents) consentGrants.set(key, value);

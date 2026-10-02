@@ -883,6 +883,7 @@ export default function DealOverviewPage({
   backLabel,
   onEditDeal,
   preview = false,
+  embedded = false,
 }: {
   fund: Fund;
   viewer: "investor" | "luca" | "ops" | "eam" | "rm";
@@ -890,6 +891,8 @@ export default function DealOverviewPage({
   backLabel: string;
   onEditDeal?: () => void;
   preview?: boolean;
+  /** Rendered inside another page that already provides the back link and actions. */
+  embedded?: boolean;
 }) {
   const { asset } = fund;
   const sections = useMemo(() => sectionsFor(fund), [fund]);
@@ -901,32 +904,34 @@ export default function DealOverviewPage({
       ref={topRef}
       className="deal-reading-page pompom-deal mx-auto w-full max-w-6xl min-w-0 space-y-8"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {preview ? (
-          <Badge variant="outline">
-            {viewer === "eam" ? "EAM" : viewer === "rm" ? "RM" : "Investor"} preview · read only
-          </Badge>
-        ) : (
-          <Link to={backTo}>
-            <Button variant="ghost" size="sm" className="p-0">
-              <ArrowLeftIcon className="mr-1 size-4" />
-              {backLabel}
-            </Button>
-          </Link>
-        )}
-        {viewer === "luca" || viewer === "ops" ? (
-          <div className="flex items-center gap-2">
+      {!embedded && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {preview ? (
             <Badge variant="outline">
-              {viewer === "ops" ? "Akula Ops publication editor" : "LUCA SGP authoring"}
+              {viewer === "eam" ? "EAM" : viewer === "rm" ? "RM" : "Investor"} preview · read only
             </Badge>
-            {onEditDeal && (
-              <Button size="sm" onClick={onEditDeal}>
-                Edit published deal
+          ) : (
+            <Link to={backTo}>
+              <Button variant="ghost" size="sm" className="p-0">
+                <ArrowLeftIcon className="mr-1 size-4" />
+                {backLabel}
               </Button>
-            )}
-          </div>
-        ) : null}
-      </div>
+            </Link>
+          )}
+          {viewer === "luca" || viewer === "ops" ? (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">
+                {viewer === "ops" ? "Akula Ops publication editor" : "LUCA SGP authoring"}
+              </Badge>
+              {onEditDeal && (
+                <Button size="sm" onClick={onEditDeal}>
+                  Edit published deal
+                </Button>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <Hero fund={fund} />
 

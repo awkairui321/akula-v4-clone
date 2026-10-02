@@ -283,3 +283,34 @@ export type PartnerDetailResponse = {
   subscriptions: AdminSubscription[];
   revenue_periods: Array<{ id: number; period: string; amount: string; status: string }>;
 };
+
+/** Terms shown to one investor that differ from the standard published terms (null = standard). */
+export type InvestorPricingRow = {
+  id: number;
+  fund_id: number;
+  investor_id: number;
+  price: string | null;
+  subscription_fee_pct: string | null;
+  management_fee_pct: string | null;
+  carried_interest_pct: string | null;
+  implied_valuation: string | null;
+  note: string | null;
+  updated_at: string;
+  investor_name: string;
+  investor_email: string;
+  client_code: string;
+  eam_firm: string | null;
+};
+
+export type PricingInvestorOption = {
+  id: number;
+  full_name: string;
+  email: string;
+  client_code: string;
+  eam_firm: string | null;
+};
+
+export type InvestorPricingResponse = {
+  overrides: InvestorPricingRow[];
+  investors: PricingInvestorOption[];
+};

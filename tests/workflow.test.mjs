@@ -289,7 +289,10 @@ test("revised published version gates allocation until exact investor acknowledg
 test("new identities cannot read published documents before disclosure access", () => {
   const fresh = db.users.find((u) => u.id === 3);
   assert.equal(w.view(fresh).versions.length, 0);
-  assert.equal(w.view(investor()).versions.length, 5);
+  assert.equal(
+    w.view(investor()).versions.length,
+    db.funds.filter((f) => f.state !== "draft").length,
+  );
 });
 
 test("signed acknowledgments are immutable and profile patch cannot change identity", async () => {

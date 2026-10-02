@@ -23,6 +23,9 @@ import {
   findFundById,
   fundManagers,
   tagsFor,
+  findOrCreateTag,
+  investorPricing,
+  nextInvestorPricingId,
   bankTransfers,
   findBankTransferById,
   logEvent,
@@ -38,6 +41,7 @@ import {
   type CommunicationRouting,
   type CommunicationStatus,
 } from "../db";
+import { clientCode } from "@/lib/client-code";
 import { STATUS_LABELS } from "@/lib/types";
 import type { SubscriptionStatus, Fund } from "@/lib/types";
 
@@ -573,6 +577,142 @@ export const adminHandlers = [
     });
 
     return HttpResponse.json({ document: doc });
+  }),
+
+  // DELETE /api/v1/admin/documents/:id — remove a deal document.
+  http.delete("*/api/v1/admin/documents/:id", ({ request, params }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const index = documents.findIndex((d) => d.id === Number(params.id));
+    if (index === -1) return HttpResponse.json({ error: "Document not found" }, { status: 404 });
+    const [removed] = documents.splice(index, 1);
+    logEvent("document_uploaded", `${removed.name} was removed.`, {
+      fundId: removed.fund_id,
+    });
+    return HttpResponse.json({ document: removed });
+  }),
+
+  // POST /api/v1/tags — create a custom tag (or reuse one with the same name).
+  http.post("*/api/v1/tags", async ({ request }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const body = (await request.json()) as { tag?: { name?: string } };
+    const name = body.tag?.name?.trim();
+    if (!name) return HttpResponse.json({ error: "Tag name is required" }, { status: 422 });
+    if (name.length > 40)
+      return HttpResponse.json(
+        { error: "Tag names are limited to 40 characters" },
+        { status: 422 },
+      );
+    return HttpResponse.json({ tag: findOrCreateTag(name) });
+  }),
+
+  // GET /api/v1/admin/funds/:id/investor_pricing — per-investor terms for one deal.
+  http.get("*/api/v1/admin/funds/:id/investor_pricing", ({ request, params }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const fund = findFundById(Number(params.id));
+    if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
+    const investors = adminInvestors().filter((i) => i.verification_status === "approved");
+    const overrides = investorPricing
+      .filter((p) => p.fund_id === fund.id)
+      .map((p) => {
+        const investor = adminInvestors().find((i) => i.id === p.investor_id);
+        return {
+          ...p,
+          investor_name: investor?.full_name ?? `Investor #${p.investor_id}`,
+          investor_email: investor?.email ?? "",
+          client_code: clientCode(p.investor_id),
+          eam_firm: investor?.eam_firm ?? null,
+        };
+      });
+    return HttpResponse.json({
+      overrides,
+      investors: investors.map((i) => ({
+        id: i.id,
+        full_name: i.full_name,
+        email: i.email,
+        client_code: i.client_code,
+        eam_firm: i.eam_firm,
+      })),
+    });
+  }),
+
+  // PUT /api/v1/admin/funds/:id/investor_pricing/:investorId — create or update.
+  http.put("*/api/v1/admin/funds/:id/investor_pricing/:investorId", async ({ request, params }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const fund = findFundById(Number(params.id));
+    if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
+    const investorId = Number(params.investorId);
+    const investor = adminInvestors().find((i) => i.id === investorId);
+    if (!investor) return HttpResponse.json({ error: "Investor not found" }, { status: 404 });
+
+    const body = (await request.json()) as {
+      pricing?: Record<string, string | null | undefined>;
+    };
+    const input = body.pricing ?? {};
+    const clean = (value: string | null | undefined) =>
+      value === undefined || value === null || String(value).trim() === ""
+        ? null
+        : String(value).trim();
+    const fields = {
+      price: clean(input.price),
+      subscription_fee_pct: clean(input.subscription_fee_pct),
+      management_fee_pct: clean(input.management_fee_pct),
+      carried_interest_pct: clean(input.carried_interest_pct),
+      implied_valuation: clean(input.implied_valuation),
+    };
+    const note = clean(input.note);
+
+    if (Object.values(fields).every((v) => v === null))
+      return HttpResponse.json(
+        { error: "Set at least one price, fee or valuation that differs from standard." },
+        { status: 422 },
+      );
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === null) continue;
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 0)
+        return HttpResponse.json({ error: `${key} must be a positive number` }, { status: 422 });
+      if (key.endsWith("_pct") && n > 100)
+        return HttpResponse.json({ error: `${key} cannot exceed 100%` }, { status: 422 });
+    }
+
+    const existing = investorPricing.find(
+      (p) => p.fund_id === fund.id && p.investor_id === investorId,
+    );
+    const now = new Date().toISOString();
+    if (existing) {
+      Object.assign(existing, fields, { note, updated_at: now });
+    } else {
+      investorPricing.push({
+        id: nextInvestorPricingId(),
+        fund_id: fund.id,
+        investor_id: investorId,
+        ...fields,
+        note,
+        updated_at: now,
+      });
+    }
+    logEvent(
+      "deal_status_change",
+      `Custom terms ${existing ? "updated" : "set"} for ${investor.full_name} on ${fund.asset.name}.`,
+      { fundId: fund.id, investorId },
+    );
+    return HttpResponse.json({ ok: true });
+  }),
+
+  // DELETE /api/v1/admin/funds/:id/investor_pricing/:investorId — back to standard terms.
+  http.delete("*/api/v1/admin/funds/:id/investor_pricing/:investorId", ({ request, params }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    const index = investorPricing.findIndex(
+      (p) => p.fund_id === Number(params.id) && p.investor_id === Number(params.investorId),
+    );
+    if (index === -1) return HttpResponse.json({ error: "No custom terms found" }, { status: 404 });
+    investorPricing.splice(index, 1);
+    return HttpResponse.json({ ok: true });
   }),
 
   // PATCH /api/v1/admin/documents/:id
