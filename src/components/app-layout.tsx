@@ -4,7 +4,15 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Circle, TrendingUp, Clock3, FileTextIcon, PanelLeft, UserIcon } from "lucide-react";
+import {
+  Circle,
+  TrendingUp,
+  Clock3,
+  FileTextIcon,
+  LifeBuoyIcon,
+  PanelLeft,
+  UserIcon,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +27,8 @@ const NAV_ITEMS = [
   { to: "/portfolio", label: "Portfolio", icon: Clock3 },
   { to: "/funds", label: "Invest", icon: TrendingUp },
   { to: "/documents", label: "Documents", icon: FileTextIcon },
-  { to: "/account", label: "Account & Support", icon: UserIcon },
+  { to: "/account", label: "Account", icon: UserIcon },
+  { to: "/support", label: "Support", icon: LifeBuoyIcon },
 ];
 
 type InvestorProfile = {
@@ -60,13 +69,9 @@ export default function AppLayout() {
     screen.addEventListener("change", collapse);
     return () => screen.removeEventListener("change", collapse);
   }, []);
-  const activeItem =
-    NAV_ITEMS.find(
-      (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
-    ) ??
-    (location.pathname === "/support"
-      ? NAV_ITEMS.find((item) => item.to === "/account")
-      : undefined);
+  const activeItem = NAV_ITEMS.find(
+    (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+  );
 
   const { data, isLoading } = useQuery({
     queryKey: ["investorProfile"],

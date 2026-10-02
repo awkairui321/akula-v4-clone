@@ -339,7 +339,13 @@ export default function AccountPage() {
   const profile = data?.investor_profile;
 
   return (
-    <div className="w-full max-w-5xl space-y-4">
+    <div className="w-full max-w-5xl space-y-6">
+      <div>
+        <div className="text-3xl font-bold tracking-tight">Account</div>
+        <p className="text-muted-foreground">
+          Manage your profile, consent and privacy, and security.
+        </p>
+      </div>
       <Tabs value={section} onValueChange={(value) => value && setSection(value)}>
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
