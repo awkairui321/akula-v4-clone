@@ -1238,3 +1238,90 @@
 .support-flat .wf-action > .wf-field:last-of-type {
   flex-basis: 100%;
 }
+
+
+/* Compact live simulation control room with four independently scrollable workspaces. */
+.live-compare-wrap {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 14px clamp(12px, 2vw, 26px);
+  color: #193548;
+}
+.live-top { margin-bottom: 12px; }
+.live-top h1 { font-size: clamp(24px, 2.4vw, 32px); }
+.live-banner { padding: 8px 12px; margin-bottom: 12px; }
+.live-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.live-workspace-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 300px;
+  max-height: min(40vh, 440px);
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px;
+}
+.live-pane-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px !important;
+  padding: 2px 2px 12px;
+  border-bottom: 1px solid #e2e9ed;
+}
+.live-pane-controls h2 {
+  overflow: hidden;
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-selectors {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 8px;
+}
+.live-selectors label {
+  display: grid;
+  gap: 4px;
+  color: #607987;
+  font-size: 11px;
+}
+.live-selectors select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 4px 8px;
+  border: 1px solid #d1dde2;
+  background: white;
+  color: #193548;
+  font: inherit;
+}
+.live-pane-screen {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.live-pane-screen .wf-main,
+.wf-embed .wf-main {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  padding: 10px 6px 18px;
+}
+.live-pane-screen .wf-panel { margin: 12px 0; padding: 15px; }
+.live-pane-screen .wf-panel h2 { margin-bottom: 10px; font-size: 16px; }
+.live-pane-screen .wf-banner { margin-bottom: 12px; padding: 8px 10px; }
+.live-pane-screen .wf-main footer { margin-top: 12px; padding: 8px 0; }
+.wf-embed { min-width: 0; background: transparent; color: inherit; }
+@media (max-width: 680px) {
+  .live-split { grid-template-columns: 1fr; }
+  .live-workspace-pane { max-height: none; }
+  .live-top { display: block; }
+  .live-tools { justify-content: flex-start; margin-top: 14px; }
+}

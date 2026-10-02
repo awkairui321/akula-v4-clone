@@ -1,8 +1,8 @@
-import { useEffect, useState, type ReactNode, type FormEvent } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
-import { api } from "@/lib/api";
+import { api, apiAsDemo } from "@/lib/api";
 import type { WorkflowView, WorkflowCommand, Version } from "@/lib/workflow-types";
 import type { Fund } from "@/lib/types";
 import { SECTOR_LABELS } from "@/lib/types";
@@ -46,12 +46,18 @@ const RM_TAB_ICONS: Record<string, typeof Circle> = {
 };
 const date = (v: string) =>
   new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const DemoPersonaContext = createContext<number | undefined>(undefined);
+function personaApi<T>(personaId: number | undefined, path: string, options?: { method?: string; body?: Record<string, unknown> }) {
+  return personaId === undefined ? api<T>(path, options) : apiAsDemo<T>(personaId, path, options);
+}
 function useWorkspace() {
   const { user } = useAuth();
+  const demoPersonaId = useContext(DemoPersonaContext);
   return useQuery({
-    queryKey: ["workflows", user?.id],
-    queryFn: () => api<WorkflowView>("/api/v1/workflows"),
+    queryKey: ["workflows", demoPersonaId ?? user?.id],
+    queryFn: () => personaApi<WorkflowView>(demoPersonaId, "/api/v1/workflows"),
     staleTime: 0,
+    refetchInterval: demoPersonaId === undefined ? false : 1200,
   });
 }
 function Panel({ title, children }: { title: string; children: ReactNode }) {
@@ -62,6 +68,7 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
     </section>
   );
 }
+
 function Action({
   label,
   command,
@@ -74,9 +81,10 @@ function Action({
   disabled?: boolean;
 }) {
   const qc = useQueryClient();
+  const demoPersonaId = useContext(DemoPersonaContext);
   const mutation = useMutation({
     mutationFn: (body: WorkflowCommand) =>
-      api<WorkflowView>("/api/v1/workflows", { method: "POST", body }),
+      personaApi<WorkflowView>(demoPersonaId, "/api/v1/workflows", { method: "POST", body }),
     onSuccess: () => qc.invalidateQueries(),
   });
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -892,12 +900,13 @@ function RMOverview({
 }
 
 function RMOpportunities({ data: d }: { data: WorkflowView }) {
+  const demoPersonaId = useContext(DemoPersonaContext);
   const [search, setSearch] = useState("");
   const [sector, setSector] = useState("all");
   const [selectedFund, setSelectedFund] = useState<number | null>(null);
   const { data: deal, isLoading: loadingDeal } = useQuery({
     queryKey: ["rmDeal", selectedFund],
-    queryFn: () => api<{ fund: Fund }>(`/api/v1/funds/${selectedFund}`),
+    queryFn: () => personaApi<{ fund: Fund }>(demoPersonaId, `/api/v1/funds/${selectedFund}`),
     enabled: selectedFund !== null,
   });
   const openFunds = d.funds.filter((fund) => fund.state === "open");
@@ -1278,7 +1287,7 @@ function OpsInvestmentQueue({
   );
 }
 
-export default function WorkflowPage() {
+function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { surface?: string; compact?: boolean; onSurfaceChange?: (surface: string) => void }) {
   const q = useWorkspace(),
     { logout } = useAuth();
   const navigate = useNavigate();
@@ -1291,6 +1300,9 @@ export default function WorkflowPage() {
   const [relationshipView, setRelationshipView] = useState("clients");
   const [reviewSignal, setReviewSignal] = useState(0);
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
+  const demoPersonaId = useContext(DemoPersonaContext);
+  const chooseTab = (value: string) => { setTab(value); if (compact) onSurfaceChange?.(value); };
+  useEffect(() => { if (surface) setTab(surface); }, [surface]);
   useEffect(() => {
     const screen = window.matchMedia("(max-width: 767px)");
     const collapse = () => {
@@ -1362,7 +1374,8 @@ export default function WorkflowPage() {
         ];
   const home = manager ? "/luca" : d.actor.role === "eam" ? "/eam" : "/portfolio";
   return (
-    <div className={`wf-shell ${rm || ops ? "rm-shell" : ""}`}>
+    <div className={`${compact ? "wf-embed" : "wf-shell"} ${rm || ops ? "rm-shell" : ""}`}>
+      {!compact && <>
       <aside
         className={`wf-sidebar ${rm || ops ? `rm-sidebar ${collapsed ? "rm-sidebar-collapsed" : ""}` : ""}`}
       >
@@ -1386,7 +1399,7 @@ export default function WorkflowPage() {
                     aria-label={t}
                     aria-current={tab === t ? "page" : undefined}
                     className={`rm-nav-item w-full ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
-                    onClick={() => setTab(t)}
+                    onClick={() => chooseTab(t)}
                   >
                     <TabIcon className="size-4 shrink-0" />
                     {!collapsed && t}
@@ -1418,7 +1431,7 @@ export default function WorkflowPage() {
               {tabs.map((t) => (
                 <button
                   key={t}
-                  onClick={() => setTab(t)}
+                  onClick={() => chooseTab(t)}
                   aria-current={tab === t ? "page" : undefined}
                 >
                   {t}
@@ -1430,7 +1443,9 @@ export default function WorkflowPage() {
           </>
         )}
       </aside>
+      </>}
       <main className={`wf-main ${rm || ops ? "rm-main" : ""}`}>
+        {!compact && <>
         {rm || ops ? (
           <header className="rm-header">
             <div className="rm-header-title">
@@ -1459,7 +1474,7 @@ export default function WorkflowPage() {
                 />
                 <DropdownMenuContent>
                   <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={() => setTab("Overview")}>
+                    <DropdownMenuItem onClick={() => chooseTab("Overview")}>
                       {ops ? "Ops workspace" : "RM workspace"}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
@@ -1489,19 +1504,20 @@ export default function WorkflowPage() {
             {d.storageWarning}
           </p>
         )}
+        </>}
         {tab === "Overview" &&
           (rm ? (
             <RMOverview
               data={d}
               onNavigate={(value) => {
                 if (value === "Relationships") setRelationshipView("clients");
-                setTab(value);
+                chooseTab(value);
               }}
               reviewSignal={reviewSignal}
               onReview={() => setReviewSignal((value) => value + 1)}
               onFollowUps={() => {
                 setRelationshipView("tasks");
-                setTab("Relationships");
+                chooseTab("Relationships");
               }}
             />
           ) : ops ? (
@@ -1512,28 +1528,28 @@ export default function WorkflowPage() {
                   cash, issues approved holdings and publishes approved materials.
                 </p>
                 <div className="wf-grid">
-                  <button className="wf-tile" onClick={() => setTab("Investments")}>
+                  <button className="wf-tile" onClick={() => chooseTab("Investments")}>
                     <h3>
                       {d.subscriptions.filter((s) => !archivedInvestment(s)).length} investment
                       tasks →
                     </h3>
                     <p>Receipts, matching, registry issuance and returns</p>
                   </button>
-                  <button className="wf-tile" onClick={() => setTab("Support")}>
+                  <button className="wf-tile" onClick={() => chooseTab("Support")}>
                     <h3>
                       {d.cases.filter((c) => c.status === "open" && c.owner === "ops").length}{" "}
                       routed cases →
                     </h3>
                     <p>Respond through tracked case history</p>
                   </button>
-                  <button className="wf-tile" onClick={() => setTab("Publication")}>
+                  <button className="wf-tile" onClick={() => chooseTab("Publication")}>
                     <h3>
                       {d.versions.filter((v) => v.status !== "published").length} publication
                       versions →
                     </h3>
                     <p>Edit the overview and advance approved materials</p>
                   </button>
-                  <button className="wf-tile" onClick={() => setTab("Reporting")}>
+                  <button className="wf-tile" onClick={() => chooseTab("Reporting")}>
                     <h3>{d.holdings.length} issued holdings →</h3>
                     <p>Inspect vehicle owners, investors and reported values</p>
                   </button>
@@ -1570,7 +1586,7 @@ export default function WorkflowPage() {
                     ["Documents", "Read the exact version behind a simulated signature."],
                     ["Reporting", "Check stale reports and separate experimental observations."],
                   ].map(([title, text]) => (
-                    <button className="wf-tile" key={title} onClick={() => setTab(title)}>
+                    <button className="wf-tile" key={title} onClick={() => chooseTab(title)}>
                       <h3>{title} →</h3>
                       <p>{text}</p>
                     </button>
@@ -1609,7 +1625,7 @@ export default function WorkflowPage() {
                   onClick={async () =>
                     download(
                       "akula-v4-demo.json",
-                      JSON.stringify(await api("/api/v1/workflows/export"), null, 2),
+                      JSON.stringify(await personaApi(demoPersonaId, "/api/v1/workflows/export"), null, 2),
                     )
                   }
                 >
@@ -2448,4 +2464,8 @@ export default function WorkflowPage() {
       </main>
     </div>
   );
+}
+
+export default function WorkflowPage(props: { demoPersonaId?: number; surface?: string; compact?: boolean; onSurfaceChange?: (surface: string) => void }) {
+  return <DemoPersonaContext.Provider value={props.demoPersonaId}><WorkflowPageContent surface={props.surface} compact={props.compact} onSurfaceChange={props.onSurfaceChange} /></DemoPersonaContext.Provider>;
 }
