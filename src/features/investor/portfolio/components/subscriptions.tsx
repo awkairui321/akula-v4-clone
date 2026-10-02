@@ -4,22 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { Subscription, Holding, SubscriptionStatus, Fund } from "@/lib/types";
-import { SECTOR_LABELS, STATUS_LABELS, CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
+import { STATUS_LABELS, CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { StepTracker, type StepState } from "@/components/ui/step-tracker";
 import { formatPrice, formatPricePrecise, numericValue } from "@/lib/currency";
-import {
-  ChevronDownIcon,
-  ChevronUpIcon,
-  InfoIcon,
-  SparklesIcon,
-  MegaphoneIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
-} from "lucide-react";
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
 /* ─── RM highlight (an adviser's recommendation for this investor) ─── */
 type RmHighlight = {
@@ -87,10 +79,10 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
       ? `$${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}m`
       : `$${Math.round(value / 1000)}k`;
   return (
-    <div className="space-y-2 rounded-lg border bg-card p-4 sm:p-5">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold">Portfolio Value Over Time</p>
+          <p className="text-sm font-medium">Portfolio value over time</p>
           <p className="text-xs text-muted-foreground">
             Illustrative NAV · latest {formatPrice(nav)}
           </p>
@@ -165,7 +157,7 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
             key={index}
             x={x(index)}
             y={height - 18}
-            textAnchor="middle"
+            textAnchor={index === visible.length - 1 ? "end" : "middle"}
             className="fill-muted-foreground"
             fontSize="10"
           >
@@ -173,14 +165,14 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
           </text>
         ))}
       </svg>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-2">
           <i className="size-2 rounded-full bg-foreground" />
-          Estimated Portfolio Value
+          Estimated portfolio value
         </span>
         <span className="flex items-center gap-2">
           <i className="w-4 border-t-2 border-dashed border-muted-foreground/60" />
-          Invested Capital
+          Invested capital
         </span>
         <span className="ml-auto text-[10px]">
           Illustrative history · no live pricing feed connected
@@ -190,68 +182,91 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
   );
 }
 
-function PortfolioHero({ heldPositions }: { heldPositions: Holding[] }) {
+const gainTone = (gain: number) =>
+  gain > 0 ? "text-green-600" : gain < 0 ? "text-red-600" : "text-muted-foreground";
+
+function PortfolioHero({
+  heldPositions,
+  holdings,
+  activeSubs,
+}: {
+  heldPositions: Holding[];
+  holdings: Holding[];
+  activeSubs: Subscription[];
+}) {
   const invested = heldPositions.reduce((sum, h) => sum + numericValue(h.committed_amount), 0);
   const navTotal = heldPositions.reduce((sum, h) => sum + numericValue(h.current_nav), 0);
   const gain = navTotal - invested;
   const gainPct = invested ? (gain / invested) * 100 : 0;
-  const TrendIcon = gain >= 0 ? TrendingUpIcon : TrendingDownIcon;
+  const sign = gain > 0 ? "+" : "";
 
   if (heldPositions.length === 0) return null;
 
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex flex-col gap-8 lg:flex-row">
-          {/* Left: figures */}
-          <div className="flex shrink-0 flex-col gap-6 lg:w-56">
-            <div>
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                Estimated Portfolio Value
-                <InfoIcon className="size-3" />
-              </span>
-              <p className="mt-1 text-3xl font-bold tabular-nums">{formatPrice(navTotal)}</p>
-              <p
-                className={`mt-1 flex items-center gap-1 text-sm font-medium ${gain >= 0 ? "text-green-600" : "text-red-600"}`}
-              >
-                <TrendIcon className="size-4" />
-                {gain >= 0 ? "+" : ""}
-                {formatPrice(gain)} ({gainPct >= 0 ? "+" : ""}
-                {gainPct.toFixed(1)}%)
-              </p>
-            </div>
-            <div className="flex flex-col gap-4 border-t pt-4">
-              <div>
-                <span className="text-xs text-muted-foreground">Total Invested Capital</span>
-                <p className="mt-1 text-lg font-semibold tabular-nums">{formatPrice(invested)}</p>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground">Active Investments</span>
-                <p className="mt-1 text-lg font-semibold tabular-nums">{heldPositions.length}</p>
-              </div>
-            </div>
-          </div>
+    <section className="space-y-6">
+      <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        Portfolio overview
+      </div>
 
-          {/* Right: chart */}
-          <div className="min-w-0 flex-1">
-            <NavTrend nav={navTotal} invested={invested} />
-          </div>
+      {/* Primary figures: one row, separated by whitespace rather than boxes */}
+      <div className="grid grid-cols-2 gap-x-8 gap-y-6 lg:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
+        <div className="col-span-2 lg:col-span-1">
+          <p className="text-xs text-muted-foreground">Estimated portfolio value</p>
+          <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums">
+            {formatPrice(navTotal)}
+          </p>
         </div>
-      </CardContent>
-    </Card>
+        <div>
+          <p className="text-xs text-muted-foreground">Estimated gain</p>
+          <p className={`mt-1 text-xl font-semibold tabular-nums ${gainTone(gain)}`}>
+            {sign}
+            {formatPrice(gain)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Return</p>
+          <p className={`mt-1 text-xl font-semibold tabular-nums ${gainTone(gain)}`}>
+            {sign}
+            {gainPct.toFixed(1)}%
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Total invested capital</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">{formatPrice(invested)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Active investments</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">{heldPositions.length}</p>
+        </div>
+      </div>
+
+      {/* Trend + updates sit side by side beneath the figures */}
+      <div className="grid gap-6 border-t pt-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-0">
+        <div className="min-w-0 lg:pr-8">
+          <NavTrend nav={navTotal} invested={invested} />
+        </div>
+        <div className="min-w-0 border-t pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
+          <LatestUpdates holdings={holdings} activeSubs={activeSubs} />
+        </div>
+      </div>
+    </section>
   );
 }
 
-/* ─── Holdings breakdown: % of portfolio + by sector ─── */
+/* ─── Portfolio breakdown: allocation bar + ledger ─── */
 
-function HoldingsBreakdown({ holdings }: { holdings: Holding[] }) {
+// Restrained navy → light-blue ramp, darkest for the largest holding.
+const ALLOCATION_COLORS = ["#1e3a5f", "#2f5d8f", "#5b86b5", "#8fb0d3", "#c3d5e8"];
+
+function PortfolioBreakdown({ holdings }: { holdings: Holding[] }) {
   const held = holdings.filter((h) => h.state !== "realized");
   const total = held.reduce((s, h) => s + numericValue(h.current_nav), 0);
 
-  const byCompany = useMemo(
+  const rows = useMemo(
     () =>
       held
         .map((h) => ({
+          id: h.id,
           name: h.asset_name,
           value: numericValue(h.current_nav),
           pct: total > 0 ? (numericValue(h.current_nav) / total) * 100 : 0,
@@ -260,71 +275,113 @@ function HoldingsBreakdown({ holdings }: { holdings: Holding[] }) {
     [held, total],
   );
 
-  const bySector = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const h of held) {
-      map.set(h.sector, (map.get(h.sector) ?? 0) + numericValue(h.current_nav));
-    }
-    return [...map.entries()]
-      .map(([sector, value]) => ({
-        sector,
-        label: SECTOR_LABELS[sector] ?? sector,
-        value,
-        pct: total > 0 ? (value / total) * 100 : 0,
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [held, total]);
-
   if (held.length === 0) return null;
 
+  const colorFor = (index: number) => ALLOCATION_COLORS[index % ALLOCATION_COLORS.length];
+
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <CardContent className="pt-6">
-          <p className="mb-4 text-sm font-medium">Holdings by % of portfolio</p>
-          <div className="space-y-3">
-            {byCompany.map((c) => (
-              <div key={`${c.name}-${c.value}`} className="flex items-center gap-3">
-                <span className="w-32 shrink-0 truncate text-xs">{c.name}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${c.pct}%` }} />
-                </div>
-                <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">
-                  {c.pct.toFixed(0)}%
-                </span>
-              </div>
-            ))}
+    <section className="space-y-4">
+      <div>
+        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Portfolio breakdown
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Share of estimated portfolio value by holding
+        </p>
+      </div>
+
+      <div
+        role="img"
+        aria-label={`Portfolio allocation: ${rows.map((r) => `${r.name} ${r.pct.toFixed(0)}%`).join(", ")}`}
+        className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full"
+      >
+        {rows.map((r, i) =>
+          r.pct > 0 ? (
+            <div
+              key={r.id}
+              className="h-full"
+              style={{ width: `${r.pct}%`, backgroundColor: colorFor(i) }}
+            />
+          ) : null,
+        )}
+      </div>
+
+      <div className="text-sm">
+        <div className="grid grid-cols-[minmax(0,1fr)_5rem_3rem] gap-x-4 border-b pb-2 text-xs text-muted-foreground sm:grid-cols-[minmax(0,1fr)_6rem_5.5rem]">
+          <span>Holding</span>
+          <span className="text-right">Current NAV</span>
+          <span className="text-right">
+            <span className="sm:hidden">%</span>
+            <span className="hidden sm:inline">% of portfolio</span>
+          </span>
+        </div>
+        {rows.map((r, i) => (
+          <div
+            key={r.id}
+            className="grid grid-cols-[minmax(0,1fr)_5rem_3rem] items-center gap-x-4 border-b py-2.5 sm:grid-cols-[minmax(0,1fr)_6rem_5.5rem]"
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <i
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: colorFor(i) }}
+              />
+              <span className="truncate">{r.name}</span>
+            </span>
+            <span className="text-right tabular-nums">{formatPrice(r.value)}</span>
+            <span className="text-right text-muted-foreground tabular-nums">
+              {r.pct.toFixed(0)}%
+            </span>
           </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <p className="mb-4 text-sm font-medium">Holdings by sector</p>
-          <div className="space-y-3">
-            {bySector.map((s) => (
-              <div key={s.sector} className="flex items-center gap-3">
-                <span className="w-32 shrink-0 truncate text-xs">{s.label}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary/70"
-                    style={{ width: `${s.pct}%` }}
-                  />
-                </div>
-                <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">
-                  {s.pct.toFixed(0)}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        ))}
+        <div className="grid grid-cols-[minmax(0,1fr)_5rem_3rem] gap-x-4 pt-2.5 font-medium sm:grid-cols-[minmax(0,1fr)_6rem_5.5rem]">
+          <span>Total</span>
+          <span className="text-right tabular-nums">{formatPrice(total)}</span>
+          <span className="text-right tabular-nums">100%</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
-/* ─── Latest updates: new postings + RM recommendations + subscription progress ─── */
+/* ─── Company & investment updates: real items + clearly-labelled placeholders ─── */
 
-function LatestUpdates({ activeSubs }: { activeSubs: Subscription[] }) {
+// PLACEHOLDER: illustrative company updates so the layout can be reviewed. There is no
+// company-update feed yet. Replace with real data (or delete) once one exists. Headlines
+// deliberately carry no figures.
+const PLACEHOLDER_UPDATES = [
+  { kind: "Valuation", title: "Quarterly valuation update published", daysAgo: 2 },
+  { kind: "Company", title: "Management investor update available", daysAgo: 6 },
+  { kind: "Company", title: "Follow-on funding round announced", daysAgo: 11 },
+  { kind: "Company", title: "Board appointment announced", daysAgo: 19 },
+];
+
+const MAX_UPDATES = 5;
+
+type UpdateItem = {
+  key: string;
+  kind: string;
+  company: string;
+  title: string;
+  date: Date;
+  placeholder?: boolean;
+  onSelect: () => void;
+};
+
+function relativeDate(date: Date) {
+  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 30) return `${days}d ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function LatestUpdates({
+  holdings,
+  activeSubs,
+}: {
+  holdings: Holding[];
+  activeSubs: Subscription[];
+}) {
   const navigate = useNavigate();
 
   const { data: fundsData } = useQuery({
@@ -346,49 +403,83 @@ function LatestUpdates({ activeSubs }: { activeSubs: Subscription[] }) {
     .slice(0, 3);
 
   const highlights = highlightsData?.highlights ?? [];
+  const held = holdings.filter((h) => h.state !== "realized");
 
-  const items: { key: string; icon: React.ReactNode; title: string; sub: string; to: string }[] = [
+  const openHolding = (holdingId: number) =>
+    document
+      .getElementById(`holding-${holdingId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  const placeholders: UpdateItem[] =
+    held.length === 0
+      ? []
+      : PLACEHOLDER_UPDATES.map((u, i) => {
+          const holding = held[i % held.length];
+          return {
+            key: `placeholder-${i}`,
+            kind: u.kind,
+            company: holding.asset_name,
+            title: u.title,
+            date: new Date(Date.now() - u.daysAgo * 86_400_000),
+            placeholder: true,
+            onSelect: () => openHolding(holding.id),
+          };
+        });
+
+  const items: UpdateItem[] = [
     ...newPostings.map((f) => ({
       key: `posting-${f.id}`,
-      icon: <MegaphoneIcon className="size-4" />,
-      title: `New opportunity: ${f.asset.name}`,
-      sub: `${f.descriptor} · opened ${new Date(f.opened_at!).toLocaleDateString()}`,
-      to: `/funds/${f.id}`,
+      kind: "Opportunity",
+      company: f.asset.name,
+      title: f.descriptor || "New opportunity open for subscription",
+      date: new Date(f.opened_at!),
+      onSelect: () => navigate(`/funds/${f.id}`),
     })),
     ...highlights.map((h) => ({
       key: `highlight-${h.id}`,
-      icon: <SparklesIcon className="size-4" />,
-      title: `Your external institution highlighted ${h.fund_name}`,
-      sub: h.rationale,
-      to: `/funds/${h.fund_id}`,
+      kind: "Institution",
+      company: h.fund_name,
+      title: h.rationale,
+      date: new Date(h.created_at),
+      onSelect: () => navigate(`/funds/${h.fund_id}`),
     })),
-  ];
+    ...placeholders,
+  ]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, MAX_UPDATES);
 
   if (items.length === 0) return null;
 
   return (
     <div>
-      <p className="mb-1 text-sm font-medium">Company & investment updates</p>
-      <p className="mb-3 text-xs text-muted-foreground">
-        Opportunity news and recommendations related to companies on your investment shelf.
+      <p className="text-sm font-medium">Company & investment updates</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Recent news and recommendations on your holdings.
       </p>
-      <div className="space-y-2">
+      <ul className="mt-3 divide-y">
         {items.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => navigate(item.to)}
-            className="flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left text-sm transition-colors hover:bg-accent"
-          >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              {item.icon}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{item.title}</p>
-              <p className="truncate text-xs text-muted-foreground">{item.sub}</p>
-            </div>
-          </button>
+          <li key={item.key}>
+            <button
+              type="button"
+              onClick={item.onSelect}
+              className="-mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-3 text-left transition-colors hover:bg-muted/60"
+            >
+              <span className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
+                <span className="truncate">
+                  {item.kind} · {item.company}
+                </span>
+                <span className="shrink-0 tabular-nums">{relativeDate(item.date)}</span>
+              </span>
+              <span className="mt-1 line-clamp-2 block text-sm font-medium">{item.title}</span>
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
+      {items.some((i) => i.placeholder) && (
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          Illustrative company updates · no live feed connected
+        </p>
+      )}
     </div>
   );
 }
@@ -415,15 +506,12 @@ function HoldingCard({ holding }: { holding: Holding }) {
     : null;
 
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
+    <div id={`holding-${holding.id}`} className="scroll-mt-24 py-4">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <strong className="truncate text-sm font-bold">{holding.asset_name}</strong>
+          <div className="flex min-w-0 basis-full items-center gap-2 sm:flex-1 sm:basis-0">
+            <strong className="truncate text-sm font-semibold">{holding.asset_name}</strong>
             <span className="shrink-0 text-xs text-muted-foreground">{holding.fund_codename}</span>
-            <Badge variant={realized ? "default" : "secondary"} className="shrink-0 text-[10px]">
-              {realized ? "Realized" : "Held"}
-            </Badge>
           </div>
 
           <div className="flex shrink-0 gap-8">
@@ -437,9 +525,7 @@ function HoldingCard({ holding }: { holding: Holding }) {
                 </div>
                 <div className="text-right">
                   <p className="text-[11px] text-muted-foreground">Profit</p>
-                  <p
-                    className={`text-sm font-medium tabular-nums ${gain >= 0 ? "text-green-600" : "text-red-600"}`}
-                  >
+                  <p className={`text-sm font-medium tabular-nums ${gainTone(gain)}`}>
                     {gain >= 0 ? "+" : ""}
                     {formatPrice(gain)}
                   </p>
@@ -453,9 +539,7 @@ function HoldingCard({ holding }: { holding: Holding }) {
                 </div>
                 <div className="text-right">
                   <p className="text-[11px] text-muted-foreground">Unrealized gain</p>
-                  <p
-                    className={`text-sm font-medium tabular-nums ${gain >= 0 ? "text-green-600" : "text-red-600"}`}
-                  >
+                  <p className={`text-sm font-medium tabular-nums ${gainTone(gain)}`}>
                     {gain >= 0 ? "+" : ""}
                     {formatPrice(gain)} ({gainPct >= 0 ? "+" : ""}
                     {gainPct.toFixed(1)}%)
@@ -534,8 +618,8 @@ function HoldingCard({ holding }: { holding: Holding }) {
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -731,6 +815,7 @@ export default function Subscriptions() {
   const isLoading = holdingsLoading || subsLoading;
 
   const held = holdings.filter((h) => h.state !== "realized");
+  const realizedHoldings = holdings.filter((h) => h.state === "realized");
   const activeSubscriptions = subscriptions.filter(
     (s) => !CLOSED_SUBSCRIPTION_STATUSES.includes(s.status),
   );
@@ -754,39 +839,46 @@ export default function Subscriptions() {
 
   return (
     <div className="flex flex-col gap-8 py-2">
-      <PortfolioHero heldPositions={held} />
+      <PortfolioHero heldPositions={held} holdings={holdings} activeSubs={activeSubscriptions} />
 
-      <HoldingsBreakdown holdings={holdings} />
-
-      <LatestUpdates activeSubs={activeSubscriptions} />
-
-      {/* Issued holdings */}
+      {/* Issued holdings: held positions first, realized grouped beneath */}
       {holdings.length > 0 && (
-        <div className="space-y-3">
+        <section className="space-y-3">
           <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Issued holdings
           </div>
-          <div className="space-y-3">
-            {holdings.map((holding) => (
+          <div className="divide-y border-y">
+            {held.map((holding) => (
               <HoldingCard key={holding.id} holding={holding} />
             ))}
           </div>
-          <Card className="bg-muted/30">
-            <CardContent className="text-sm text-muted-foreground">
-              <strong>Need to exit a holding?</strong> Akula may attempt to facilitate a private
-              transfer to another verified accredited investor. A buyer, required consents and an
-              agreed price are not guaranteed.
-              <div className="mt-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate("/support?topic=early-exit")}
-                >
-                  Request an early-exit review
-                </Button>
+          {realizedHoldings.length > 0 && (
+            <>
+              <div className="pt-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Realized
               </div>
-            </CardContent>
-          </Card>
+              <div className="divide-y border-y">
+                {realizedHoldings.map((holding) => (
+                  <HoldingCard key={holding.id} holding={holding} />
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      <PortfolioBreakdown holdings={holdings} />
+
+      {holdings.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-6 text-sm text-muted-foreground">
+          <p className="max-w-3xl">
+            <strong className="text-foreground">Need to exit a holding?</strong> Akula may attempt
+            to facilitate a private transfer to another verified accredited investor. A buyer,
+            required consents and an agreed price are not guaranteed.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => navigate("/support?topic=early-exit")}>
+            Request an early-exit review
+          </Button>
         </div>
       )}
 
