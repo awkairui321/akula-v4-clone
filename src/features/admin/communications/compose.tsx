@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -356,6 +356,28 @@ export default function ComposeCommunicationPage() {
     }
   }
 
+  // Opened from a link with "request documents" chosen but no documents: start from the usual set.
+  const [presetApplied, setPresetApplied] = useState(false);
+  useEffect(() => {
+    if (presetApplied || purpose !== "request" || docKinds.length > 0 || audience.length === 0)
+      return;
+    const entity = audience.every((i) => i.investor_type === "institutional");
+    setDocKinds(REQUEST_PRESETS.find((p) => p.key === (entity ? "entity" : "onboarding"))!.kinds);
+    setPresetApplied(true);
+  }, [presetApplied, purpose, docKinds.length, audience]);
+
+  /** Fill the message from the chosen purpose, unless the user has already written their own. */
+  function seedMessage() {
+    if (edited || !purpose) return;
+    const tpl = templateFor(purpose, {
+      deal: dealName,
+      docs: docKinds.map(documentKindLabel),
+      due: dueDate,
+    });
+    setSubject(tpl.subject);
+    setBody(tpl.body);
+  }
+
   /* ─── Send ─── */
   const documents = (documentsData?.documents ?? []).filter(
     (d) => d.has_file && d.fund_id !== null && d.subscription_id === null && d.kind !== "agreement",
@@ -385,6 +407,7 @@ export default function ComposeCommunicationPage() {
             kinds: docKinds,
             due_at: new Date(`${dueDate}T23:59:00`).toISOString(),
             fund_id: kind === "deal" ? (deal?.id ?? null) : null,
+            communication_id: result.communication.id,
           },
         });
       }
@@ -957,7 +980,13 @@ export default function ComposeCommunicationPage() {
           {step === 0 ? "Cancel" : "Back"}
         </Button>
         {step < 3 ? (
-          <Button disabled={!canContinue} onClick={() => setStep(step + 1)}>
+          <Button
+            disabled={!canContinue}
+            onClick={() => {
+              if (step === 1) seedMessage();
+              setStep(step + 1);
+            }}
+          >
             Continue
           </Button>
         ) : (

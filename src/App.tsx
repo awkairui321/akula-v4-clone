@@ -23,6 +23,7 @@ import CheckoutPage from "@/features/investor/checkout";
 import PortfolioPage from "@/features/investor/portfolio";
 import AccountPage from "@/features/investor/account";
 import SupportPage from "@/features/investor/support";
+import MessagesPage from "@/features/investor/messages";
 import DocumentsPage from "@/features/investor/documents";
 import DiscoverPage from "@/features/investor/discover";
 import DiscoverDetailPage from "@/features/investor/discover-detail";
@@ -183,6 +184,7 @@ function App() {
                       <Route path="/discover/:id" element={<DiscoverDetailPage />} />
                       <Route path="/portfolio" element={<PortfolioPage />} />
                       <Route path="/documents" element={<DocumentsPage />} />
+                      <Route path="/messages" element={<MessagesPage />} />
                       <Route path="/account" element={<AccountPage />} />
                       <Route path="/support" element={<SupportPage />} />
                     </Route>

@@ -480,6 +480,8 @@ export type MockDocumentRequest = {
   status: "requested" | "uploaded" | "received" | "cancelled";
   reminded_at: string | null;
   received_document_id: number | null;
+  /** The message that asked for it, if it was requested through the composer. */
+  communication_id?: number | null;
 };
 
 export const documentRequests: MockDocumentRequest[] = [];
@@ -4803,6 +4805,66 @@ function seedCommunications() {
       opened_at: i === 2 ? null : daysAgo(9),
       downloaded_document_ids: i === 0 ? [1] : [],
     });
+  });
+
+  // A request message linked to the demo investor's open document requests, and a funding
+  // reminder, so her inbox shows the whole story.
+  const requestMsgId = nextCommunicationId();
+  communications.push({
+    id: requestMsgId,
+    subject: "Documents we need from you",
+    body: "Hello,\n\nTo keep your account in good standing and to process your Quanta Compute subscription, we need the following:\n\n- Source of funds declaration\n- Accredited investor evidence (your current approval expires soon)\n- Bank confirmation for returns and distributions\n\nYou can upload each one from the **Documents** page in your portal. If anything is unclear, reply to this message and we will help.\n\nThank you,\nLUCA SGP",
+    audience_type: "individual",
+    audience_description: "Elena Cross",
+    fund_id: null,
+    routing: "direct",
+    attachment_document_ids: [],
+    status: "sent",
+    scheduled_at: null,
+    sent_at: daysAgo(2),
+    created_at: daysAgo(2),
+  });
+  communicationRecipients.push({
+    id: nextCommunicationRecipientId(),
+    communication_id: requestMsgId,
+    investor_id: 2,
+    investor_name: "Elena Cross",
+    investor_email: "investor@akula.vc",
+    eam_firm: null,
+    routed_via: "investor",
+    delivered_at: daysAgo(2),
+    opened_at: null,
+    downloaded_document_ids: [],
+  });
+  for (const r of documentRequests)
+    if (r.investor_id === 2 && r.status === "requested") r.communication_id = requestMsgId;
+
+  const reminderId = nextCommunicationId();
+  communications.push({
+    id: reminderId,
+    subject: "Quanta Compute closes in 3 days",
+    body: "Hello,\n\nQuanta Compute SPV I closes to new subscriptions on 5 October. Your subscription is waiting for the payment to be matched. If you have already sent the transfer, please upload proof of payment from the **Subscription Activity** tab so we can match it.\n\nThank you,\nLUCA SGP",
+    audience_type: "fund",
+    audience_description: "Investors in Quanta Compute SPV I with funding outstanding (1 investor)",
+    fund_id: 8,
+    routing: "direct",
+    attachment_document_ids: [],
+    status: "sent",
+    scheduled_at: null,
+    sent_at: daysAgo(1),
+    created_at: daysAgo(1),
+  });
+  communicationRecipients.push({
+    id: nextCommunicationRecipientId(),
+    communication_id: reminderId,
+    investor_id: 2,
+    investor_name: "Elena Cross",
+    investor_email: "investor@akula.vc",
+    eam_firm: null,
+    routed_via: "investor",
+    delivered_at: daysAgo(1),
+    opened_at: null,
+    downloaded_document_ids: [],
   });
 
   const navRecipients = [

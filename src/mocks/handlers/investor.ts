@@ -36,6 +36,8 @@ import {
   fundAsSeenBy,
   documentRequests,
   nextDocumentId,
+  communications,
+  communicationRecipients,
 } from "../db";
 
 function unauthorized() {
@@ -395,6 +397,57 @@ export const investorHandlers = [
     user.kyc_status = "pending";
     user._kycPollCount = 0;
     return HttpResponse.json({ success: true });
+  }),
+
+  // GET /api/v1/messages — communications LUCA has sent this investor directly.
+  http.get("*/api/v1/messages", ({ request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    const messages = communicationRecipients
+      .filter((r) => r.investor_id === user.id && r.delivered_at && r.routed_via === "investor")
+      .map((r) => {
+        const communication = communications.find((c) => c.id === r.communication_id);
+        if (!communication || communication.status !== "sent") return null;
+        return {
+          id: communication.id,
+          subject: communication.subject,
+          body: communication.body,
+          sent_at: r.delivered_at,
+          read: r.opened_at !== null,
+          fund_id: communication.fund_id,
+          fund_name: communication.fund_id
+            ? (findFundById(communication.fund_id)?.name ?? null)
+            : null,
+          attachments: communication.attachment_document_ids
+            .map((id) => documents.find((d) => d.id === id))
+            .filter((d): d is NonNullable<typeof d> => Boolean(d))
+            .map((d) => ({ id: d.id, name: d.name })),
+          requests: documentRequests
+            .filter((q) => q.communication_id === communication.id && q.investor_id === user.id)
+            .map((q) => ({
+              id: q.id,
+              kind: q.kind,
+              due_at: q.due_at,
+              status: q.status,
+            })),
+        };
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+      .sort((a, b) => new Date(b.sent_at!).getTime() - new Date(a.sent_at!).getTime());
+    return HttpResponse.json({ messages });
+  }),
+
+  // POST /api/v1/messages/:id/read — opening a message records that the investor read it,
+  // which LUCA sees in the communication's open rate.
+  http.post("*/api/v1/messages/:id/read", ({ request, params }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    const recipient = communicationRecipients.find(
+      (r) => r.communication_id === Number(params.id) && r.investor_id === user.id,
+    );
+    if (!recipient) return HttpResponse.json({ error: "Message not found" }, { status: 404 });
+    if (!recipient.opened_at) recipient.opened_at = new Date().toISOString();
+    return HttpResponse.json({ ok: true });
   }),
 
   // GET /api/v1/document_requests — what LUCA has asked this investor to provide.

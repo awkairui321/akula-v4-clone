@@ -10,6 +10,7 @@ import {
   Clock3,
   FileTextIcon,
   LifeBuoyIcon,
+  MailIcon,
   PanelLeft,
   UserIcon,
 } from "lucide-react";
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { to: "/portfolio", label: "Portfolio", icon: Clock3 },
   { to: "/funds", label: "Invest", icon: TrendingUp },
   { to: "/documents", label: "Documents", icon: FileTextIcon },
+  { to: "/messages", label: "Messages", icon: MailIcon },
   { to: "/account", label: "Account", icon: UserIcon },
   { to: "/support", label: "Support", icon: LifeBuoyIcon },
 ];
@@ -79,6 +81,13 @@ export default function AppLayout() {
   });
 
   const profile = data?.investor_profile;
+
+  // Unread messages from LUCA show as a count on the Messages item.
+  const { data: inbox } = useQuery({
+    queryKey: ["messages"],
+    queryFn: () => api<{ messages: { read: boolean }[] }>("/api/v1/messages"),
+  });
+  const unreadMessages = inbox?.messages.filter((m) => !m.read).length ?? 0;
   return (
     <div className="flex min-h-screen">
       <aside
@@ -100,7 +109,7 @@ export default function AppLayout() {
               <Button
                 variant={activeItem?.to === item.to ? "secondary" : "ghost"}
                 size="lg"
-                className={`w-full py-6 ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
+                className={`relative w-full py-6 ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
                 title={collapsed ? item.label : undefined}
               >
                 <item.icon className={collapsed ? "" : "mr-2"} />
@@ -111,6 +120,18 @@ export default function AppLayout() {
                     </span>
                     {item.label}
                   </>
+                )}
+                {item.to === "/messages" && unreadMessages > 0 && (
+                  <span
+                    aria-label={`${unreadMessages} unread`}
+                    className={
+                      collapsed
+                        ? "absolute top-3 right-3 size-2 rounded-full bg-primary"
+                        : "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] text-primary-foreground"
+                    }
+                  >
+                    {collapsed ? null : unreadMessages}
+                  </span>
                 )}
               </Button>
             </Link>

@@ -614,6 +614,7 @@ export const adminHandlers = [
       due_at?: string | null;
       note?: string | null;
       fund_id?: number | null;
+      communication_id?: number | null;
     };
     const investorIds = body.investor_ids ?? [];
     const kinds = body.kinds ?? [];
@@ -643,6 +644,7 @@ export const adminHandlers = [
           status: "requested",
           reminded_at: null,
           received_document_id: null,
+          communication_id: body.communication_id ?? null,
         });
         created += 1;
       }
