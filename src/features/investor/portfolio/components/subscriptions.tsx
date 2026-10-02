@@ -1,15 +1,11 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { Subscription, Holding, SubscriptionStatus, Fund } from "@/lib/types";
-import { STATUS_LABELS, CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
-import { Badge } from "@/components/ui/badge";
+import type { Subscription, Holding, Fund } from "@/lib/types";
+import { CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { StepTracker, type StepState } from "@/components/ui/step-tracker";
 import { formatPrice, formatPricePrecise, numericValue } from "@/lib/currency";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
@@ -623,179 +619,6 @@ function HoldingCard({ holding }: { holding: Holding }) {
   );
 }
 
-/* ─── Subscriptions and outcomes: 4-step flow ─── */
-const SUBSCRIPTION_STEPS = [
-  { key: "documents", label: "Documents signed" },
-  { key: "funds", label: "Transfer of funds" },
-  { key: "verification", label: "Fund verification" },
-  { key: "holding", label: "Holding issued" },
-];
-
-const DOCUMENTS_DONE: SubscriptionStatus[] = [
-  "institution_review",
-  "under_luca_review",
-  "information_requested",
-  "approved",
-  "awaiting_funds",
-  "payment_unmatched",
-  "reconciliation",
-  "allocation_pending",
-  "allocated",
-];
-const FUNDS_DONE: SubscriptionStatus[] = ["reconciliation", "allocation_pending", "allocated"];
-const VERIFICATION_DONE: SubscriptionStatus[] = ["allocated"];
-
-function stepStateFor(status: SubscriptionStatus): (stepKey: string) => StepState {
-  const done: Record<string, boolean> = {
-    documents: DOCUMENTS_DONE.includes(status),
-    funds: FUNDS_DONE.includes(status),
-    verification: VERIFICATION_DONE.includes(status),
-    holding: status === "allocated",
-  };
-  const active: Record<string, boolean> = {
-    documents: status === "reserved" || status === "documents_pending",
-    funds:
-      status === "institution_review" ||
-      status === "under_luca_review" ||
-      status === "information_requested" ||
-      status === "approved" ||
-      status === "awaiting_funds" ||
-      status === "payment_unmatched",
-    verification: status === "reconciliation" || status === "allocation_pending",
-  };
-  return (stepKey) => (done[stepKey] ? "done" : active[stepKey] ? "active" : "upcoming");
-}
-
-function SubscriptionCard({ subscription }: { subscription: Subscription }) {
-  const queryClient = useQueryClient();
-  const getState = stepStateFor(subscription.status);
-  const isClosed = CLOSED_SUBSCRIPTION_STATUSES.includes(subscription.status);
-  const [uploadOpen, setUploadOpen] = useState(false);
-
-  const refundMutation = useMutation({
-    mutationFn: () =>
-      api<{ subscription: Subscription }>(
-        `/api/v1/subscriptions/${subscription.id}/refund_request`,
-        { method: "POST" },
-      ),
-    onSuccess: () => {
-      toast.success("Refund requested. Funds will be returned within 5 business days.");
-      queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <Card id={`subscription-${subscription.id}`} className="scroll-mt-24">
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <span className="font-medium">{subscription.asset_name}</span>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {formatPricePrecise(subscription.amount)} · {subscription.fund_name}
-              {subscription.reserved_at &&
-                ` · submitted ${new Date(subscription.reserved_at).toLocaleDateString()}`}
-            </p>
-          </div>
-          <Badge variant="secondary">
-            {STATUS_LABELS[subscription.status] ?? subscription.status}
-          </Badge>
-        </div>
-
-        {!isClosed && <StepTracker variant="dots" steps={SUBSCRIPTION_STEPS} getState={getState} />}
-
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Payment ref: {subscription.payment_reference}</span>
-        </div>
-
-        {!isClosed && (
-          <p className="text-xs text-muted-foreground">
-            Once fund verification is complete, this moves to Holding Issued above.
-          </p>
-        )}
-
-        {subscription.status === "awaiting_funds" && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refundMutation.mutate()}
-            disabled={refundMutation.isPending}
-          >
-            {refundMutation.isPending ? "Requesting refund..." : "Request refund"}
-          </Button>
-        )}
-
-        {subscription.status === "payment_unmatched" && (
-          <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
-            Upload proof of payment
-          </Button>
-        )}
-
-        {uploadOpen && (
-          <UploadProofDialog
-            subscriptionId={subscription.id}
-            onClose={() => setUploadOpen(false)}
-            onUploaded={() => {
-              setUploadOpen(false);
-              queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
-            }}
-          />
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function UploadProofDialog({
-  subscriptionId,
-  onClose,
-  onUploaded,
-}: {
-  subscriptionId: number;
-  onClose: () => void;
-  onUploaded: () => void;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-
-  const uploadMutation = useMutation({
-    mutationFn: () =>
-      api(`/api/v1/subscriptions/${subscriptionId}/payment_proof`, {
-        method: "POST",
-        body: { filename: file?.name },
-      }),
-    onSuccess: () => {
-      toast.success("Proof of payment uploaded. Ops will review it shortly.");
-      onUploaded();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogTitle>Upload proof of payment</DialogTitle>
-        <p className="text-sm text-muted-foreground">
-          Attach a bank transfer receipt or screenshot so ops can match your payment to this
-          subscription.
-        </p>
-        <input
-          type="file"
-          accept="image/*,application/pdf"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:bg-transparent file:px-2 file:py-1 file:text-xs file:font-medium"
-        />
-        <Button
-          className="w-full"
-          disabled={!file || uploadMutation.isPending}
-          onClick={() => uploadMutation.mutate()}
-        >
-          {uploadMutation.isPending ? "Uploading..." : "Upload"}
-        </Button>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 /* ─── Main Component ─── */
 export default function Subscriptions() {
   const navigate = useNavigate();
@@ -824,14 +647,24 @@ export default function Subscriptions() {
     return <p className="py-12 text-center text-muted-foreground">Loading portfolio...</p>;
   }
 
-  if (holdings.length === 0 && subscriptions.length === 0) {
+  if (holdings.length === 0) {
     return (
       <Card className="mt-2 border-2 border-dashed ring-0">
         <CardContent className="flex flex-col items-center justify-center gap-4 py-12">
-          <p className="text-muted-foreground">No holdings or subscriptions yet.</p>
-          <Button variant="outline" onClick={() => navigate("/funds")}>
-            Browse opportunities
-          </Button>
+          <p className="text-muted-foreground">
+            {subscriptions.length > 0
+              ? "No holdings issued yet. Your subscriptions are tracked under Subscription Activity."
+              : "No holdings or subscriptions yet."}
+          </p>
+          {subscriptions.length > 0 ? (
+            <Button variant="outline" onClick={() => navigate("/portfolio?section=activity")}>
+              View subscription activity
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => navigate("/funds")}>
+              Browse opportunities
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -878,23 +711,6 @@ export default function Subscriptions() {
           </p>
           <Button variant="outline" size="sm" onClick={() => navigate("/support?topic=early-exit")}>
             Request an early-exit review
-          </Button>
-        </div>
-      )}
-
-      {/* Subscriptions */}
-      {subscriptions.length > 0 && (
-        <div id="subscriptions-outcomes" className="scroll-mt-8 space-y-3">
-          <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Subscriptions and outcomes
-          </div>
-          <div className="space-y-3">
-            {subscriptions.map((subscription) => (
-              <SubscriptionCard key={subscription.id} subscription={subscription} />
-            ))}
-          </div>
-          <Button variant="outline" size="sm" onClick={() => navigate("/support?topic=allocation")}>
-            Report an allocation or funding issue
           </Button>
         </div>
       )}

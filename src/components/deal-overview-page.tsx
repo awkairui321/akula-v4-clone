@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { SECTOR_LABELS, STAGE_LABELS } from "@/lib/types";
-import type { Asset, Document, Fund, WatchlistItem } from "@/lib/types";
+import type { Asset, Document, Fund } from "@/lib/types";
 import { formatPrice, formatPricePrecise } from "@/lib/currency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import {
-  ArrowLeftIcon,
-  BookmarkIcon,
-  PlayCircleIcon,
-  FileTextIcon,
-  DownloadIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, PlayCircleIcon, FileTextIcon, DownloadIcon } from "lucide-react";
 
 /* ─── Formatting helpers ─── */
 
@@ -897,25 +891,10 @@ export default function DealOverviewPage({
   onEditDeal?: () => void;
   preview?: boolean;
 }) {
-  const queryClient = useQueryClient();
   const { asset } = fund;
   const sections = useMemo(() => sectionsFor(fund), [fund]);
   const active = useActiveSection(sections.map((s) => s.id));
   const topRef = useRef<HTMLDivElement>(null);
-
-  const { data: watchlistData } = useQuery({
-    queryKey: ["watchlist"],
-    queryFn: () => api<{ watchlist: WatchlistItem[] }>("/api/v1/watchlist"),
-    enabled: viewer === "investor" && !preview,
-  });
-  const isWatchlisted = watchlistData?.watchlist?.some((w) => w.fund_id === fund.id);
-  const toggleWatchlist = useMutation({
-    mutationFn: () =>
-      isWatchlisted
-        ? api(`/api/v1/watchlist/${fund.id}`, { method: "DELETE" })
-        : api("/api/v1/watchlist", { method: "POST", body: { fund_id: fund.id } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["watchlist"] }),
-  });
 
   return (
     <div
@@ -935,17 +914,7 @@ export default function DealOverviewPage({
             </Button>
           </Link>
         )}
-        {viewer === "investor" && !preview ? (
-          <Button
-            variant={isWatchlisted ? "secondary" : "outline"}
-            size="sm"
-            onClick={() => toggleWatchlist.mutate()}
-            disabled={toggleWatchlist.isPending}
-          >
-            <BookmarkIcon className={`mr-1 size-4 ${isWatchlisted ? "fill-current" : ""}`} />
-            {isWatchlisted ? "Watchlisted" : "Add to watchlist"}
-          </Button>
-        ) : viewer === "luca" || viewer === "ops" ? (
+        {viewer === "luca" || viewer === "ops" ? (
           <div className="flex items-center gap-2">
             <Badge variant="outline">
               {viewer === "ops" ? "Akula Ops publication editor" : "LUCA SGP authoring"}
