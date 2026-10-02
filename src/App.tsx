@@ -30,6 +30,7 @@ import AdminDashboard from "@/features/admin/dashboard";
 import AdminVehiclesPage from "@/features/admin/vehicles/vehicles";
 import AdminVehicleOverviewPage from "@/features/admin/vehicles/vehicle-overview";
 import AdminSubscriptionsPage from "@/features/admin/subscription-inbox";
+import AdminSubscriptionHistoryPage from "@/features/admin/subscription-history";
 import AdminDocumentsPage from "@/features/admin/documents";
 import CommunicationsPage from "@/features/admin/communications";
 import ComposeCommunicationPage from "@/features/admin/communications/compose";
@@ -193,6 +194,10 @@ function App() {
                     <Route element={<LucaLayout />}>
                       <Route path="/luca" element={<AdminDashboard />} />
                       <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />
+                      <Route
+                        path="/luca/subscriptions/history"
+                        element={<AdminSubscriptionHistoryPage />}
+                      />
                       <Route path="/luca/onboarding" element={<LucaOnboardingPage />} />
                       <Route
                         path="/luca/fund-search"

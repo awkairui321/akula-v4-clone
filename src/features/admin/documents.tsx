@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -243,8 +244,8 @@ export default function AdminDocumentsPage() {
                 <span className="block font-medium">{document.name}</span>
                 <span className="block text-xs text-muted-foreground">{document.kind}</span>
               </span>
-              <span className="truncate text-muted-foreground">{document.owner_name}</span>
-              <span className="truncate text-muted-foreground">{document.fund_name ?? "—"}</span>
+              <OwnerLink document={document} />
+              <DealLink document={document} />
               <span>
                 <Badge variant={REVIEW_VARIANT[document.review_state]} className="text-[10px]">
                   {REVIEW_STATE_LABELS[document.review_state]}
@@ -323,10 +324,8 @@ export default function AdminDocumentsPage() {
                       {document.kind}
                     </small>
                   </span>
-                  <span className="truncate text-muted-foreground">{document.owner_name}</span>
-                  <span className="truncate text-muted-foreground">
-                    {document.fund_name ?? "—"}
-                  </span>
+                  <OwnerLink document={document} />
+                  <DealLink document={document} />
                 </div>
               ))}
             </div>
@@ -338,5 +337,32 @@ export default function AdminDocumentsPage() {
         </div>
       </details>
     </div>
+  );
+}
+
+/** Investor-owned documents link to the investor's file; LUCA's own materials do not. */
+function OwnerLink({ document }: { document: AdminDocument }) {
+  if (document.owner_name === "LUCA SGP")
+    return <span className="truncate text-muted-foreground">{document.owner_name}</span>;
+  return (
+    <Link
+      to={`/luca/investors/${document.owner_id}`}
+      className="truncate text-muted-foreground hover:text-foreground hover:underline"
+    >
+      {document.owner_name}
+    </Link>
+  );
+}
+
+function DealLink({ document }: { document: AdminDocument }) {
+  if (!document.fund_id || !document.fund_name)
+    return <span className="truncate text-muted-foreground">—</span>;
+  return (
+    <Link
+      to={`/luca/deals/${document.fund_id}?tab=documents`}
+      className="truncate text-muted-foreground hover:text-foreground hover:underline"
+    >
+      {document.fund_name}
+    </Link>
   );
 }

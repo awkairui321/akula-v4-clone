@@ -607,6 +607,13 @@ export const adminHandlers = [
     return HttpResponse.json({ tag: findOrCreateTag(name) });
   }),
 
+  // GET /api/v1/admin/investor_pricing — every custom-terms row, across all deals.
+  http.get("*/api/v1/admin/investor_pricing", ({ request }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    return HttpResponse.json({ overrides: investorPricing });
+  }),
+
   // GET /api/v1/admin/funds/:id/investor_pricing — per-investor terms for one deal.
   http.get("*/api/v1/admin/funds/:id/investor_pricing", ({ request, params }) => {
     const user = requireAdmin(request);

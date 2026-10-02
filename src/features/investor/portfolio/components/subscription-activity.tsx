@@ -5,55 +5,37 @@ import { toast } from "sonner";
 import { ChevronDownIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Subscription, SubscriptionStatus } from "@/lib/types";
-import { STATUS_LABELS, CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
+import {
+  STATUS_LABELS,
+  CLOSED_SUBSCRIPTION_STATUSES,
+  SUBSCRIPTION_STAGES,
+  HOLDING_ISSUED_LABEL,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { StepTracker, type StepState } from "@/components/ui/step-tracker";
 import { formatPricePrecise } from "@/lib/currency";
 
-/* ─── Subscription flow: signature → funds → verification → holding ─── */
+/* ─── Subscription journey: the same stages LUCA and advisers see ─── */
 
 const SUBSCRIPTION_STEPS = [
-  { key: "documents", label: "Subscription form signature" },
-  { key: "funds", label: "Funds transfer" },
-  { key: "verification", label: "Fund verification" },
-  { key: "holding", label: "Holding issued" },
+  ...SUBSCRIPTION_STAGES.map((stage) => ({ key: stage.key, label: stage.milestone })),
+  { key: "holding", label: HOLDING_ISSUED_LABEL },
 ];
-
-const DOCUMENTS_DONE: SubscriptionStatus[] = [
-  "institution_review",
-  "under_luca_review",
-  "information_requested",
-  "approved",
-  "awaiting_funds",
-  "payment_unmatched",
-  "reconciliation",
-  "allocation_pending",
-  "allocated",
-];
-const FUNDS_DONE: SubscriptionStatus[] = ["reconciliation", "allocation_pending", "allocated"];
-const VERIFICATION_DONE: SubscriptionStatus[] = ["allocated"];
 
 function stepStateFor(status: SubscriptionStatus): (stepKey: string) => StepState {
-  const done: Record<string, boolean> = {
-    documents: DOCUMENTS_DONE.includes(status),
-    funds: FUNDS_DONE.includes(status),
-    verification: VERIFICATION_DONE.includes(status),
-    holding: status === "allocated",
+  const current = status === "allocated" ? SUBSCRIPTION_STEPS.length : (stageIndexOf(status) ?? -1);
+  return (stepKey) => {
+    const index = SUBSCRIPTION_STEPS.findIndex((step) => step.key === stepKey);
+    // A fully allocated subscription has completed every step, including the holding.
+    return index < current ? "done" : index === current ? "active" : "upcoming";
   };
-  const active: Record<string, boolean> = {
-    documents: status === "reserved" || status === "documents_pending",
-    funds:
-      status === "institution_review" ||
-      status === "under_luca_review" ||
-      status === "information_requested" ||
-      status === "approved" ||
-      status === "awaiting_funds" ||
-      status === "payment_unmatched",
-    verification: status === "reconciliation" || status === "allocation_pending",
-  };
-  return (stepKey) => (done[stepKey] ? "done" : active[stepKey] ? "active" : "upcoming");
+}
+
+function stageIndexOf(status: SubscriptionStatus): number | undefined {
+  const index = SUBSCRIPTION_STAGES.findIndex((stage) => stage.statuses.includes(status));
+  return index === -1 ? undefined : index;
 }
 
 /* ─── Actions the investor must take (replaces the old "Tasks to do" tab) ─── */

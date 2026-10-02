@@ -24,16 +24,7 @@ const AUM_STATUSES = [...FUNDED_STATUSES, "awaiting_funds", "payment_unmatched"]
 const OVERDUE_DAYS = 5;
 const QUEUE_PREVIEW = 6;
 // Restrained navy → light-blue ramp for the pipeline, earliest stage lightest.
-const STAGE_COLORS = [
-  "#c3d5e8",
-  "#a9c2dc",
-  "#8fb0d3",
-  "#6f98c4",
-  "#5b86b5",
-  "#3f6a9c",
-  "#2f5d8f",
-  "#1e3a5f",
-];
+const STAGE_COLORS = ["#c3d5e8", "#8fb0d3", "#5b86b5", "#2f5d8f", "#1e3a5f"];
 
 const SECTION_LABEL = "text-xs font-medium tracking-wide text-muted-foreground uppercase";
 const DAY = 24 * 60 * 60 * 1000;
@@ -422,7 +413,7 @@ export default function AdminDashboard() {
           </p>
           <dl className="mt-6 divide-y border-y text-sm">
             {[
-              ["Funded", formatPrice(funded), "/luca/subscriptions?stage=funded"],
+              ["Funded", formatPrice(funded), "/luca/subscriptions?stage=verification"],
               [
                 "Awaiting allocation",
                 formatPrice(summary?.awaiting_allocation_value ?? 0),

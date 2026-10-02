@@ -116,10 +116,18 @@ export default function AdminPartnerDetailPage() {
             {subscriptions.map((subscription) => (
               <div key={subscription.id} className="flex items-center justify-between gap-4">
                 <span className="truncate">
-                  <span className="block font-medium">{subscription.investor_name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
+                  <Link
+                    to={`/luca/investors/${subscription.investor_id}`}
+                    className="block font-medium hover:underline"
+                  >
+                    {subscription.investor_name}
+                  </Link>
+                  <Link
+                    to={`/luca/deals/${subscription.fund_id}`}
+                    className="block truncate text-xs text-muted-foreground hover:underline"
+                  >
                     {subscription.asset_name}
-                  </span>
+                  </Link>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
                   <Badge variant="outline" className="text-[10px]">

@@ -2,16 +2,18 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { LinkIcon, SearchIcon } from "lucide-react";
+import { HistoryIcon, LinkIcon, SearchIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
-import { CLOSED_SUBSCRIPTION_STATUSES, LUCA_PIPELINE_STAGES } from "@/lib/types";
+import { SUBSCRIPTION_STAGES, stageOfStatus } from "@/lib/types";
 import {
   NEXT_ACTION_LABELS,
   OWNER_LABELS,
   STATUS_LABELS,
   type AdminSubscription,
   type BulkTransitionResponse,
+  type InvestorPricingRow,
+  type PartnersResponse,
   type SubscriptionStatus,
   type SubscriptionsResponse,
 } from "./types";
@@ -29,26 +31,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-/* ─── Lenses: who has to act next ─── */
-
-type Lens = "decision" | "waiting" | "completed" | "closed";
-
-const LENSES: { key: Lens; label: string }[] = [
-  { key: "decision", label: "Needs my decision" },
-  { key: "waiting", label: "Waiting on others" },
-  { key: "completed", label: "Completed" },
-  { key: "closed", label: "Closed" },
-];
-
-const COMPLETED_STATUSES: SubscriptionStatus[] = ["allocated", "funds_returned"];
 const OVERDUE_DAYS = 5;
 const DAY = 24 * 60 * 60 * 1000;
 
-function lensOf(s: AdminSubscription): Lens {
-  if (COMPLETED_STATUSES.includes(s.status)) return "completed";
-  if (CLOSED_SUBSCRIPTION_STATUSES.includes(s.status)) return "closed";
-  return s.owner === "luca" ? "decision" : "waiting";
-}
+/** Open subscriptions only: finished and closed ones live on the History page. */
+const isActive = (s: AdminSubscription) => stageOfStatus(s.status) !== undefined;
 
 /** When the subscription entered its current stage, for "waiting" ages. */
 function stageSince(s: AdminSubscription): string | null {
@@ -81,10 +68,6 @@ function stageSince(s: AdminSubscription): string | null {
 
 const ageInDays = (s: AdminSubscription) =>
   Math.max(0, Math.floor((Date.now() - new Date(stageSince(s) ?? s.created_at).getTime()) / DAY));
-
-/** The pipeline stage a status belongs to, for the stage filter. */
-const stageOf = (status: SubscriptionStatus) =>
-  LUCA_PIPELINE_STAGES.find((st) => (st.statuses as string[]).includes(status));
 
 /* ─── One-click decisions (with a confirmation step) ─── */
 
@@ -255,104 +238,114 @@ function DecisionDialog({
   );
 }
 
-/* ─── The inbox ─── */
+/* ─── The subscriptions page: four stages, worked from the top ─── */
 
 // Fixed last column keeps every row's columns aligned whatever buttons it carries.
-const GRID_DECISION =
-  "lg:grid-cols-[1.25rem_minmax(0,2fr)_minmax(0,1.4fr)_6.5rem_minmax(0,1.8fr)_4.5rem_22rem]";
-const GRID_DEFAULT =
-  "lg:grid-cols-[1.25rem_minmax(0,2fr)_minmax(0,1.4fr)_6.5rem_minmax(0,1.8fr)_4.5rem_4rem]";
+const GRID =
+  "lg:grid-cols-[1.25rem_minmax(0,2fr)_minmax(0,1.4fr)_6.5rem_minmax(0,1.8fr)_4rem_21rem]";
+
+type StageFilter = "all" | (typeof SUBSCRIPTION_STAGES)[number]["key"];
+
+const stageLabel = (key: StageFilter) =>
+  key === "all" ? "All stages" : (SUBSCRIPTION_STAGES.find((st) => st.key === key)?.label ?? key);
 
 export default function AdminSubscriptionsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const statusFromUrl = searchParams.get("status") as SubscriptionStatus | null;
   const stageFromUrl = searchParams.get("stage");
+  const dealFromUrl = searchParams.get("deal");
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "subscriptions", "board"],
     queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
   });
-  const subscriptions = useMemo(() => data?.subscriptions ?? [], [data]);
+  const { data: partnersData } = useQuery({
+    queryKey: ["admin", "partners", ""],
+    queryFn: () => api<PartnersResponse>("/api/v1/admin/partners"),
+  });
+  const { data: pricingData } = useQuery({
+    queryKey: ["admin", "investor-pricing", "all"],
+    queryFn: () => api<{ overrides: InvestorPricingRow[] }>("/api/v1/admin/investor_pricing"),
+  });
 
-  // Links from the dashboard land on the right lens with the right stage selected.
-  const initialStage =
-    stageFromUrl ?? (statusFromUrl ? (stageOf(statusFromUrl)?.key ?? "all") : "all");
-  const initialLens: Lens = (() => {
-    if (statusFromUrl) {
-      const sample = subscriptions.find((s) => s.status === statusFromUrl);
-      if (sample) return lensOf(sample);
-      return statusFromUrl === "under_luca_review" || statusFromUrl === "allocation_pending"
-        ? "decision"
-        : "waiting";
-    }
-    return "decision";
+  const all = useMemo(() => data?.subscriptions ?? [], [data]);
+  const active = useMemo(() => all.filter(isActive), [all]);
+  const historyCount = all.length - active.length;
+
+  const partnerIdByFirm = useMemo(
+    () => new Map((partnersData?.partners ?? []).map((p) => [p.firm_name, p.id])),
+    [partnersData],
+  );
+  const customTerms = useMemo(
+    () => new Set((pricingData?.overrides ?? []).map((o) => `${o.fund_id}:${o.investor_id}`)),
+    [pricingData],
+  );
+
+  // Links from other pages (dashboard, deals, investors) arrive pre-filtered.
+  const urlStage: StageFilter = (() => {
+    const fromStatus = statusFromUrl ? stageOfStatus(statusFromUrl)?.key : undefined;
+    const key = (stageFromUrl as StageFilter | null) ?? fromStatus;
+    return key && SUBSCRIPTION_STAGES.some((st) => st.key === key) ? key : "all";
   })();
+  const filteredByUrl = Boolean(statusFromUrl || stageFromUrl || dealFromUrl);
 
-  const [lens, setLens] = useState<Lens>(initialLens);
-  const [stage, setStage] = useState<string>(initialStage);
-  const [deal, setDeal] = useState("all");
+  const [stage, setStage] = useState<StageFilter>(urlStage);
+  const [onlyMine, setOnlyMine] = useState(!filteredByUrl);
+  const [deal, setDeal] = useState(dealFromUrl ?? "all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<number[]>([]);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [matchingOpen, setMatchingOpen] = useState(false);
 
-  const GRID = lens === "decision" ? GRID_DECISION : GRID_DEFAULT;
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "subscriptions"] });
 
   const deals = useMemo(
-    () => [...new Map(subscriptions.map((s) => [s.fund_id, s.fund_name])).entries()],
-    [subscriptions],
+    () => [...new Map(active.map((s) => [s.fund_id, s.fund_name])).entries()],
+    [active],
   );
 
-  const counts = useMemo(() => {
-    const result: Record<Lens, number> = { decision: 0, waiting: 0, completed: 0, closed: 0 };
-    for (const s of subscriptions) result[lensOf(s)] += 1;
-    return result;
-  }, [subscriptions]);
-
-  const inLens = useMemo(
-    () => subscriptions.filter((s) => lensOf(s) === lens),
-    [subscriptions, lens],
-  );
-
-  const stageOptions = useMemo(() => {
-    const seen = new Map<string, { label: string; count: number }>();
-    for (const s of inLens) {
-      const st = stageOf(s.status);
-      if (!st) continue;
-      seen.set(st.key, { label: st.label, count: (seen.get(st.key)?.count ?? 0) + 1 });
-    }
-    return [...seen.entries()];
-  }, [inLens]);
-
-  const rows = useMemo(() => {
+  // Everything except the stage filter, so each stage tab can show its own count.
+  const scoped = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return inLens
-      .filter(
-        (s) =>
-          (deal === "all" || String(s.fund_id) === deal) &&
-          (stage === "all" || stageOf(s.status)?.key === stage) &&
-          (!q ||
-            s.investor_name.toLowerCase().includes(q) ||
-            s.investor_email.toLowerCase().includes(q) ||
-            (s.payment_reference ?? "").toLowerCase().includes(q) ||
-            s.asset_name.toLowerCase().includes(q)),
-      )
-      .sort((a, b) => ageInDays(b) - ageInDays(a));
-  }, [inLens, deal, stage, search]);
+    return active.filter(
+      (s) =>
+        (!onlyMine || s.owner === "luca") &&
+        (deal === "all" || String(s.fund_id) === deal) &&
+        (!q ||
+          s.investor_name.toLowerCase().includes(q) ||
+          s.investor_email.toLowerCase().includes(q) ||
+          (s.payment_reference ?? "").toLowerCase().includes(q) ||
+          s.asset_name.toLowerCase().includes(q)),
+    );
+  }, [active, onlyMine, deal, search]);
+
+  const mineCount = active.filter((s) => s.owner === "luca").length;
+
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: scoped.length };
+    for (const st of SUBSCRIPTION_STAGES) {
+      counts[st.key] = scoped.filter((s) => stageOfStatus(s.status)?.key === st.key).length;
+    }
+    return counts;
+  }, [scoped]);
+
+  const rows = useMemo(
+    () =>
+      scoped
+        .filter((s) => stage === "all" || stageOfStatus(s.status)?.key === stage)
+        .sort((a, b) => ageInDays(b) - ageInDays(a)),
+    [scoped, stage],
+  );
 
   const approvable = rows.filter((s) => s.available_transitions.includes("approved"));
   const selectedSubs = approvable.filter((s) => selected.includes(s.id));
-  const detail = subscriptions.find((s) => s.id === detailId) ?? null;
+  const detail = all.find((s) => s.id === detailId) ?? null;
   const rowTotal = rows.reduce((n, s) => n + parseFloat(s.amount), 0);
 
-  const switchLens = (next: Lens) => {
-    setLens(next);
-    setStage("all");
-    setSelected([]);
-    if (searchParams.get("stage") || searchParams.get("status")) setSearchParams({});
+  const clearUrl = () => {
+    if (filteredByUrl) setSearchParams({});
   };
 
   return (
@@ -361,45 +354,55 @@ export default function AdminSubscriptionsPage() {
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">Subscriptions</h1>
           <p className="text-muted-foreground">
-            {counts.decision === 0
+            {mineCount === 0
               ? "Nothing is waiting on your decision."
-              : `${counts.decision} subscription${counts.decision === 1 ? "" : "s"} waiting on your decision.`}
+              : `${mineCount} subscription${mineCount === 1 ? "" : "s"} waiting on you, out of ${active.length} in progress.`}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setMatchingOpen(true)}>
-          <LinkIcon className="size-4" />
-          Match payments
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link to="/luca/subscriptions/history" />}
+          >
+            <HistoryIcon className="size-4" />
+            History
+            <span className="text-muted-foreground tabular-nums">{historyCount}</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setMatchingOpen(true)}>
+            <LinkIcon className="size-4" />
+            Match payments
+          </Button>
+        </div>
       </div>
 
-      {/* Lenses */}
+      {/* The four stages of a subscription */}
       <div
         role="tablist"
-        aria-label="Subscription queues"
+        aria-label="Subscription stage"
         className="flex flex-wrap gap-x-6 border-b"
       >
-        {LENSES.map((l) => (
+        {(["all", ...SUBSCRIPTION_STAGES.map((st) => st.key)] as StageFilter[]).map((key) => (
           <button
-            key={l.key}
+            key={key}
             role="tab"
             type="button"
-            aria-selected={lens === l.key}
-            onClick={() => switchLens(l.key)}
+            aria-selected={stage === key}
+            onClick={() => {
+              setStage(key);
+              setSelected([]);
+              clearUrl();
+            }}
             className={`-mb-px flex items-center gap-2 border-b-2 px-1 pb-3 text-sm transition-colors ${
-              lens === l.key
+              stage === key
                 ? "border-primary font-medium text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {l.label}
-            <span
-              className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs ${
-                l.key === "decision" && counts.decision > 0
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {counts[l.key]}
+            {key === "all" ? "All in progress" : stageLabel(key)}
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
+              {stageCounts[key]}
             </span>
           </button>
         ))}
@@ -416,7 +419,13 @@ export default function AdminSubscriptionsPage() {
             className="pl-9"
           />
         </div>
-        <Select value={deal} onValueChange={(v) => setDeal(v as string)}>
+        <Select
+          value={deal}
+          onValueChange={(v) => {
+            setDeal(v as string);
+            clearUrl();
+          }}
+        >
           <SelectTrigger className="w-52">
             <SelectValue>
               {deal === "all" ? "All deals" : deals.find(([id]) => String(id) === deal)?.[1]}
@@ -431,29 +440,29 @@ export default function AdminSubscriptionsPage() {
             ))}
           </SelectContent>
         </Select>
-        {stageOptions.length > 1 && (
-          <Select value={stage} onValueChange={(v) => setStage(v as string)}>
-            <SelectTrigger className="w-52">
-              <SelectValue>
-                {stage === "all"
-                  ? "All stages"
-                  : (stageOptions.find(([key]) => key === stage)?.[1].label ?? "All stages")}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All stages</SelectItem>
-              {stageOptions.map(([key, info]) => (
-                <SelectItem key={key} value={key}>
-                  {info.label} ({info.count})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={onlyMine}
+            onChange={(e) => {
+              setOnlyMine(e.target.checked);
+              setSelected([]);
+              clearUrl();
+            }}
+          />
+          Waiting on me
+          <span className="text-muted-foreground tabular-nums">{mineCount}</span>
+        </label>
         <p className="ml-auto text-sm text-muted-foreground tabular-nums">
           {rows.length} subscription{rows.length === 1 ? "" : "s"} · {formatPrice(rowTotal)}
         </p>
       </div>
+
+      {stage !== "all" && (
+        <p className="-mt-2 text-sm text-muted-foreground">
+          {SUBSCRIPTION_STAGES.find((st) => st.key === stage)?.detail}
+        </p>
+      )}
 
       {/* Bulk approval */}
       {selectedSubs.length > 0 && (
@@ -475,9 +484,9 @@ export default function AdminSubscriptionsPage() {
         <p className="py-12 text-center text-muted-foreground">Loading...</p>
       ) : rows.length === 0 ? (
         <p className="border-y py-12 text-center text-sm text-muted-foreground">
-          {subscriptions.length === 0
-            ? "No subscriptions yet."
-            : lens === "decision"
+          {active.length === 0
+            ? "No subscriptions in progress."
+            : onlyMine && mineCount === 0
               ? "You’re all caught up. Nothing needs your decision."
               : "No subscriptions match these filters."}
         </p>
@@ -499,23 +508,26 @@ export default function AdminSubscriptionsPage() {
             <span>Investor</span>
             <span>Deal</span>
             <span className="text-right">Amount</span>
-            <span>Stage &amp; next step</span>
-            <span className="text-right">{lens === "decision" ? "Waiting" : "In stage"}</span>
-            <span className="text-right">{lens === "decision" ? "Decision" : ""}</span>
+            <span>Status &amp; next step</span>
+            <span className="text-right">Waiting</span>
+            <span />
           </div>
           <ul className="divide-y border-b">
             {rows.map((s) => {
               const age = ageInDays(s);
+              const mine = s.owner === "luca";
               const canApprove = s.available_transitions.includes("approved");
               const canInfo = s.available_transitions.includes("information_requested");
               const canDecline = s.available_transitions.includes("rejected");
+              const firmId = s.eam_firm ? partnerIdByFirm.get(s.eam_firm) : undefined;
+              const hasCustomTerms = customTerms.has(`${s.fund_id}:${s.investor_id}`);
               return (
                 <li
                   key={s.id}
                   className={`grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 py-3 transition-colors hover:bg-muted/40 lg:py-3.5 ${GRID}`}
                 >
                   <span>
-                    {canApprove && lens === "decision" && (
+                    {canApprove && (
                       <input
                         type="checkbox"
                         aria-label={`Select ${s.investor_name}`}
@@ -528,21 +540,39 @@ export default function AdminSubscriptionsPage() {
                       />
                     )}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setDetailId(s.id)}
-                    className="min-w-0 text-left"
-                  >
-                    <span className="block truncate text-sm font-medium hover:underline">
+                  <span className="min-w-0">
+                    <Link
+                      to={`/luca/investors/${s.investor_id}`}
+                      className="block truncate text-sm font-medium hover:underline"
+                    >
                       {s.investor_name}
-                    </span>
+                    </Link>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {s.eam_firm ?? "Direct"}
+                      {firmId ? (
+                        <Link to={`/luca/partners/${firmId}`} className="hover:underline">
+                          {s.eam_firm}
+                        </Link>
+                      ) : (
+                        (s.eam_firm ?? "Direct")
+                      )}
                       {s.on_hold ? " · On hold" : ""}
                     </span>
-                  </button>
+                  </span>
                   <span className="order-3 col-span-2 min-w-0 text-sm lg:order-none lg:col-span-1">
-                    <span className="block truncate">{s.asset_name}</span>
+                    <Link
+                      to={`/luca/deals/${s.fund_id}`}
+                      className="block truncate hover:underline"
+                    >
+                      {s.asset_name}
+                    </Link>
+                    {hasCustomTerms && (
+                      <Link
+                        to={`/luca/deals/${s.fund_id}?tab=pricing`}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Custom terms
+                      </Link>
+                    )}
                   </span>
                   <span className="text-right text-sm font-medium tabular-nums">
                     {formatPrice(s.amount)}
@@ -550,64 +580,56 @@ export default function AdminSubscriptionsPage() {
                   <span className="order-4 col-span-2 min-w-0 lg:order-none lg:col-span-1">
                     <span className="block truncate text-sm">{STATUS_LABELS[s.status]}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {s.owner === "complete"
-                        ? "Complete"
-                        : (NEXT_ACTION_LABELS[s.next_action] ?? OWNER_LABELS[s.owner])}
+                      {NEXT_ACTION_LABELS[s.next_action] ?? OWNER_LABELS[s.owner]}
                     </span>
                   </span>
                   <span
                     className={`hidden text-right text-sm tabular-nums lg:block ${
-                      lens === "decision" && age > OVERDUE_DAYS
+                      mine && age > OVERDUE_DAYS
                         ? "font-medium text-amber-700"
                         : "text-muted-foreground"
                     }`}
                   >
-                    {lens === "completed" || lens === "closed" ? "—" : `${age}d`}
+                    {age}d
                   </span>
                   <span className="order-5 col-span-3 flex flex-wrap items-center justify-end gap-2 lg:order-none lg:col-span-1">
-                    {lens === "decision" ? (
-                      <>
-                        {canApprove && (
-                          <Button
-                            size="sm"
-                            onClick={() => setDecision({ kind: "approve", subs: [s] })}
-                          >
-                            Approve
-                          </Button>
-                        )}
-                        {canInfo && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setDecision({ kind: "info", subs: [s] })}
-                          >
-                            Request info
-                          </Button>
-                        )}
-                        {canDecline && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-destructive"
-                            onClick={() => setDecision({ kind: "decline", subs: [s] })}
-                          >
-                            Decline
-                          </Button>
-                        )}
-                        {s.status === "allocation_pending" && (
-                          <Button size="sm" nativeButton={false} render={<Link to="/workflows" />}>
-                            Allocate in Workflows
-                          </Button>
-                        )}
-                        <Button size="sm" variant="ghost" onClick={() => setDetailId(s.id)}>
-                          Review
-                        </Button>
-                      </>
-                    ) : (
-                      <Button size="sm" variant="ghost" onClick={() => setDetailId(s.id)}>
-                        View
+                    {canApprove && (
+                      <Button size="sm" onClick={() => setDecision({ kind: "approve", subs: [s] })}>
+                        Approve
                       </Button>
                     )}
+                    {canInfo && s.status === "under_luca_review" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setDecision({ kind: "info", subs: [s] })}
+                      >
+                        Request info
+                      </Button>
+                    )}
+                    {canDecline && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setDecision({ kind: "decline", subs: [s] })}
+                      >
+                        Decline
+                      </Button>
+                    )}
+                    {s.status === "allocation_pending" && (
+                      <Button size="sm" nativeButton={false} render={<Link to="/workflows" />}>
+                        Allocate in Workflows
+                      </Button>
+                    )}
+                    {s.status === "payment_unmatched" && (
+                      <Button size="sm" variant="outline" onClick={() => setMatchingOpen(true)}>
+                        Match payment
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => setDetailId(s.id)}>
+                      {mine ? "Review" : "View"}
+                    </Button>
                   </span>
                 </li>
               );

@@ -236,7 +236,7 @@ export default function InvestorsByFundPage() {
               <CardHeader>
                 <CardTitle className="text-base">Subscription pipeline</CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-4 gap-2">
+              <CardContent className="grid grid-cols-5 gap-2">
                 {LUCA_PIPELINE_STAGES.map((stage) => {
                   const count = fundSubs.filter((s) => stage.statuses.includes(s.status)).length;
                   return (

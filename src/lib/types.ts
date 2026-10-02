@@ -184,32 +184,76 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   cancelled: "Cancelled",
 };
 
-/** LUCA Command Dashboard pipeline stage labels — a coarser grouping than
- *  STATUS_LABELS for the pipeline bar chart specifically. "Funded" buckets
- *  every status between approval and issuance, since that machinery
- *  (payment matching/reconciliation) is one continuous ops workflow, not
- *  separate pipeline stages from LUCA's vantage point. */
+/**
+ * The subscription journey, in four stages. This one definition is shared by the
+ * investor, adviser (EAM) and LUCA views so everyone uses the same words.
+ *
+ * Statuses are the fine-grained backend states that decide who acts next; stages
+ * are what people reason about. Several statuses fold into one stage:
+ *  - signature: reserved + documents_pending (the investor has not signed yet)
+ *  - approval: institution_review + under_luca_review + information_requested
+ *    (a decision is being made; a request for information pauses it)
+ *  - transfer: approved + awaiting_funds + payment_unmatched (money is due)
+ *  - verification: reconciliation + allocation_pending (money is being checked)
+ * `allocated` is the outcome ("Holding issued"); everything else terminal is closed.
+ */
+export type SubscriptionStageKey = "signature" | "approval" | "transfer" | "verification";
+
+export const SUBSCRIPTION_STAGES: {
+  key: SubscriptionStageKey;
+  /** State wording for queues and filters ("what is happening"). */
+  label: string;
+  /** Milestone wording for steppers ("what the investor completes"). */
+  milestone: string;
+  /** One line on what happens in this stage and who acts. */
+  detail: string;
+  statuses: SubscriptionStatus[];
+}[] = [
+  {
+    key: "signature",
+    label: "Awaiting signature",
+    milestone: "Subscription form signature",
+    detail: "The investor completes and signs the subscription form.",
+    statuses: ["reserved", "documents_pending"],
+  },
+  {
+    key: "approval",
+    label: "Pending approval",
+    milestone: "Approval",
+    detail: "The adviser and LUCA review the investor and decide.",
+    statuses: ["institution_review", "under_luca_review", "information_requested"],
+  },
+  {
+    key: "transfer",
+    label: "Awaiting funds",
+    milestone: "Funds transfer",
+    detail: "The investor transfers funds; Akula Ops matches the payment.",
+    statuses: ["approved", "awaiting_funds", "payment_unmatched"],
+  },
+  {
+    key: "verification",
+    label: "Verifying funds",
+    milestone: "Fund verification",
+    detail: "Akula Ops reconciles the funds; LUCA confirms the allocation.",
+    statuses: ["reconciliation", "allocation_pending"],
+  },
+];
+
+/** The outcome after the four stages: units are allocated and a holding is issued. */
+export const HOLDING_ISSUED_LABEL = "Holding issued";
+
+export function stageOfStatus(status: SubscriptionStatus) {
+  return SUBSCRIPTION_STAGES.find((stage) => stage.statuses.includes(status));
+}
+
+/** Dashboard pipeline: the four active stages plus the issued-holding outcome. */
 export const LUCA_PIPELINE_STAGES: {
   key: string;
   label: string;
   statuses: SubscriptionStatus[];
 }[] = [
-  { key: "draft", label: "Draft", statuses: ["reserved"] },
-  { key: "awaiting_signature", label: "Awaiting Signature", statuses: ["documents_pending"] },
-  { key: "institution_review", label: "Institution Review", statuses: ["institution_review"] },
-  { key: "under_luca_review", label: "Under LUCA Review", statuses: ["under_luca_review"] },
-  {
-    key: "information_requested",
-    label: "Information Requested",
-    statuses: ["information_requested"],
-  },
-  { key: "approved", label: "Approved", statuses: ["approved"] },
-  {
-    key: "funded",
-    label: "Funding & reconciliation",
-    statuses: ["awaiting_funds", "payment_unmatched", "reconciliation", "allocation_pending"],
-  },
-  { key: "active_holding", label: "Allocated", statuses: ["allocated"] },
+  ...SUBSCRIPTION_STAGES.map(({ key, label, statuses }) => ({ key, label, statuses })),
+  { key: "holding", label: HOLDING_ISSUED_LABEL, statuses: ["allocated"] },
 ];
 
 export const OWNER_LABELS: Record<SubscriptionOwner, string> = {

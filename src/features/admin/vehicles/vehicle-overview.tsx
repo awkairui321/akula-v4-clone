@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { SECTOR_LABELS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
-import type { AdminDocument } from "../types";
+import type { AdminDocument, SubscriptionsResponse } from "../types";
 import { formatPrice, formatPricePrecise } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -13,11 +13,12 @@ import { ArrowLeftIcon } from "lucide-react";
 import DealOverviewPage from "@/components/deal-overview-page";
 import PublishedDealEditor from "@/features/admin/vehicles/published-deal-editor";
 import DealDocuments from "./deal-documents";
+import DealSubscriptions from "./deal-subscriptions";
 import DealTags from "./deal-tags";
 import InvestorPricing from "./investor-pricing";
 import { StateBadge, allocationOf, daysUntil, formatClose } from "./deal-status";
 
-const TABS = ["overview", "documents", "tags", "pricing"] as const;
+const TABS = ["overview", "subscriptions", "documents", "tags", "pricing"] as const;
 type DealTab = (typeof TABS)[number];
 
 function Count({ n }: { n: number }) {
@@ -69,6 +70,13 @@ function DealWorkspace({ fund }: { fund: Fund }) {
     queryKey: ["admin", "investor-pricing", fund.id],
     queryFn: () => api<{ overrides: unknown[] }>(`/api/v1/admin/funds/${fund.id}/investor_pricing`),
   });
+  const { data: subsData } = useQuery({
+    queryKey: ["admin", "subscriptions", "board"],
+    queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
+  });
+  const subscriptionCount = (subsData?.subscriptions ?? []).filter(
+    (s) => s.fund_id === fund.id,
+  ).length;
   const documentCount = (docsData?.documents ?? []).filter(
     (d) => d.fund_id === fund.id && d.subscription_id === null,
   ).length;
@@ -183,6 +191,11 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           <TabsTrigger value="overview" className="flex-none">
             Overview
           </TabsTrigger>
+          <TabsTrigger value="subscriptions" className="flex-none">
+            <span className="flex items-center gap-2">
+              Subscriptions <Count n={subscriptionCount} />
+            </span>
+          </TabsTrigger>
           <TabsTrigger value="documents" className="flex-none">
             <span className="flex items-center gap-2">
               Documents <Count n={documentCount} />
@@ -209,6 +222,9 @@ function DealWorkspace({ fund }: { fund: Fund }) {
             onEditDeal={() => setEditorOpen(true)}
             embedded
           />
+        </TabsContent>
+        <TabsContent value="subscriptions" className="pt-6">
+          <DealSubscriptions fund={fund} />
         </TabsContent>
         <TabsContent value="documents" className="pt-6">
           <DealDocuments fund={fund} />
