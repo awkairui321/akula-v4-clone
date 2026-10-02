@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import WorkflowPage from "@/features/workspace/workflow-page";
 import { isMocking } from "@/mocks/browser";
@@ -110,6 +110,8 @@ function PersonaPane({
 }
 
 export default function LiveComparePage() {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [paneHeight, setPaneHeight] = useState(620);
   const [panes, setPanes] = useState([
     { personaId: 2, surface: "Overview" },
     { personaId: 7, surface: "Overview" },
@@ -129,6 +131,41 @@ export default function LiveComparePage() {
       previous.map((pane, paneIndex) => (paneIndex === index ? { ...pane, surface } : pane)),
     );
   };
+
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    let frame = 0;
+    const measure = () => {
+      const requiredHeights = Array.from(
+        grid.querySelectorAll<HTMLElement>(".live-workspace-pane"),
+      ).map((pane) => {
+        const controls = pane.querySelector<HTMLElement>(".live-pane-controls");
+        const screen = pane.querySelector<HTMLElement>(".live-pane-screen");
+        return Math.ceil((controls?.getBoundingClientRect().height ?? 0) + (screen?.scrollHeight ?? 0) + 44);
+      });
+      const nextHeight = Math.max(620, ...requiredHeights);
+      setPaneHeight((current) => (current === nextHeight ? current : nextHeight));
+    };
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    const observer = new ResizeObserver(scheduleMeasure);
+    const mutationObserver = new MutationObserver(scheduleMeasure);
+    grid.querySelectorAll(".live-pane-controls, .live-pane-screen").forEach((element) => {
+      observer.observe(element);
+      mutationObserver.observe(element, { childList: true, subtree: true, characterData: true });
+    });
+    window.addEventListener("resize", scheduleMeasure);
+    scheduleMeasure();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", scheduleMeasure);
+    };
+  }, [panes]);
 
   if (!isMocking)
     return (
@@ -157,7 +194,12 @@ export default function LiveComparePage() {
         DEMO PERSONA VIEW · Select a different role and surface in either pane. All changes remain
         fictional and browser-local.
       </div>
-      <div className="live-split" aria-label="Four live platform views">
+      <div
+        ref={gridRef}
+        className="live-split"
+        aria-label="Four live platform views"
+        style={{ "--live-pane-height": `${paneHeight}px` } as React.CSSProperties}
+      >
         {panes.map((pane, index) => (
           <PersonaPane
             key={index}
