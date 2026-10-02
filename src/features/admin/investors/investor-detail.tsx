@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -359,9 +359,8 @@ function HoldingsTable({ holdings }: { holdings: Holding[] }) {
         {holdings.map((h) => {
           const isOpen = expanded === h.id;
           return (
-            <>
+            <Fragment key={h.id}>
               <TableRow
-                key={h.id}
                 className="cursor-pointer"
                 onClick={() => setExpanded(isOpen ? null : h.id)}
               >
@@ -379,7 +378,7 @@ function HoldingsTable({ holdings }: { holdings: Holding[] }) {
                 </TableCell>
               </TableRow>
               {isOpen && (
-                <TableRow key={`${h.id}-detail`}>
+                <TableRow>
                   <TableCell colSpan={6} className="bg-muted/30">
                     <div className="grid grid-cols-2 gap-3 py-2 text-sm sm:grid-cols-3">
                       <Row label="Units" value={h.units} />
@@ -404,7 +403,7 @@ function HoldingsTable({ holdings }: { holdings: Holding[] }) {
                   </TableCell>
                 </TableRow>
               )}
-            </>
+            </Fragment>
           );
         })}
       </TableBody>
