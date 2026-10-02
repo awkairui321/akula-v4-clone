@@ -139,6 +139,23 @@ Before finishing, ask: "If an accredited investor with $1M+ invested opened this
 
 These principles are persistent. The user should not need to repeat them. Treat each prompt as an incremental product requirement within this larger LUCA design system.
 
+## LUCA fund manager portal — perspective
+
+When working on anything under `/luca` (LUCA SGP, the fund manager), stop thinking like an investor and think like the fund manager who runs the funds, the clients and the deals. The investor portal answers "what do I own?". The fund manager portal answers "what needs me today, and is every fund, deal and client on track?".
+
+The same design system applies (calm, precise, few boxes), but the priorities differ:
+
+- **Work first, reporting second.** Lead with what is waiting on LUCA: approvals, allocations, information requests, expiring accreditations, ageing items. Rank by urgency and age. Every item has a clear next action and a way to do it in place.
+- **Three lenses on the same data:** by deal/fund (raise progress, allocation vs. target, close dates, valuation marks, documents), by client/investor (KYC and accreditation, exposure, subscriptions, communications), and by partner/institution (their client book, volumes, outstanding items).
+- **Dense, scannable, tabular.** Fund managers work through lists all day: sortable and filterable tables, saved views, bulk actions, keyboard-friendly, with money columns aligned. Prefer rows and tables to cards; use cards only for a real functional grouping.
+- **Control and audit.** Material actions (approve, allocate, reject, publish, hold) are deliberate, confirmable and attributable. Show who did what and when. Keep the audit trail one click away.
+- **Capital view.** Raised vs. target, committed vs. funded vs. allocated, funds awaiting reconciliation, and returns or distributions owed, per deal and in total.
+- **Investor-facing output.** Valuation/NAV updates, investor communications, document publishing and the company updates investors see are authored here. Design these as publishing workflows with a preview of what investors will see.
+- **Compliance by default.** Accreditation, consent, KYC/AML and document completeness status is visible wherever a client or subscription appears, never buried.
+- **Placeholder data** is allowed only when clearly labelled, as everywhere else. Do not invent real-looking financial, client or compliance records.
+
+Before building a LUCA feature, ask: what decision is the fund manager making here, what do they need in front of them to make it, and what is the fastest safe way to act on it?
+
 ## Workflow preferences (from the user)
 
 - Show the diff (and ideally a screenshot) for review before committing or pushing. Do not push until the user approves.
