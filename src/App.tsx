@@ -29,7 +29,7 @@ import DiscoverDetailPage from "@/features/investor/discover-detail";
 import AdminDashboard from "@/features/admin/dashboard";
 import AdminVehiclesPage from "@/features/admin/vehicles/vehicles";
 import AdminVehicleOverviewPage from "@/features/admin/vehicles/vehicle-overview";
-import AdminSubscriptionsPage from "@/features/admin/subscriptions";
+import AdminSubscriptionsPage from "@/features/admin/subscription-inbox";
 import AdminDocumentsPage from "@/features/admin/documents";
 import CommunicationsPage from "@/features/admin/communications";
 import ComposeCommunicationPage from "@/features/admin/communications/compose";

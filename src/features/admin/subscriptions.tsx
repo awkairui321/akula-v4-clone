@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -33,8 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  SearchIcon,
-  LinkIcon,
   CheckCircle2Icon,
   XCircleIcon,
   ClockIcon,
@@ -116,7 +114,7 @@ const TRANSITION_LABELS: Partial<Record<SubscriptionStatus, string>> = {
   cancelled: "Cancel subscription",
 };
 
-const REJECTION_REASONS = [
+export const REJECTION_REASONS = [
   { value: "accreditation_lapsed", label: "Accreditation lapsed or insufficient" },
   { value: "incomplete_documents", label: "Incomplete or missing documents" },
   { value: "failed_kyc_aml", label: "Failed KYC/AML screening" },
@@ -139,7 +137,6 @@ const BOARD_STAGES = [
 /** The dialog's stepper only shows the open stages — "Closed" isn't a step
  *  to progress through, it's a terminal state handled separately. */
 const STEPPER_STAGES = BOARD_STAGES.filter((s) => s.key !== "closed");
-const EMPTY_SUBSCRIPTIONS: AdminSubscription[] = [];
 
 export function KanbanCard({
   subscription,
@@ -173,310 +170,6 @@ export function KanbanCard({
         )}
       </div>
     </button>
-  );
-}
-
-/** A full-width horizontal band for one stage — the board stacks these
- *  vertically (scroll down through stages) rather than side by side. */
-function StageBand({
-  label,
-  subs,
-  muted,
-  onCardClick,
-  bandRef,
-}: {
-  label: string;
-  subs: AdminSubscription[];
-  muted?: boolean;
-  onCardClick: (s: AdminSubscription) => void;
-  bandRef?: (el: HTMLDivElement | null) => void;
-}) {
-  const total = subs.reduce((sum, s) => sum + parseFloat(s.amount), 0);
-  return (
-    <div ref={bandRef} className="scroll-mt-4 space-y-2">
-      <div className="flex items-baseline gap-3 px-0.5">
-        <span className={`text-sm font-semibold ${muted ? "text-muted-foreground" : ""}`}>
-          {label}
-        </span>
-        <span className="text-xs text-muted-foreground">{subs.length}</span>
-        <span className="text-xs text-muted-foreground">{formatPrice(total)}</span>
-      </div>
-      <div
-        className={`overflow-x-auto rounded-lg border bg-background ${muted ? "opacity-75" : ""}`}
-      >
-        {subs.length === 0 ? (
-          <p className="p-3 text-center text-xs text-muted-foreground">Nothing here</p>
-        ) : (
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Investor</th>
-                <th className="px-3 py-2">Deal / channel</th>
-                <th className="px-3 py-2 text-right">Amount</th>
-                <th className="px-3 py-2">Stage &amp; next owner</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {subs.map((s) => (
-                <tr
-                  key={s.id}
-                  onClick={() => onCardClick(s)}
-                  className="cursor-pointer hover:bg-muted/30"
-                >
-                  <td className="px-3 py-2.5">
-                    <span className="font-medium">{s.investor_name}</span>
-                    <span className="block text-xs text-muted-foreground">{s.investor_email}</span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    {s.asset_name}
-                    <span className="block text-xs text-muted-foreground">
-                      {s.eam_firm ?? "Direct"}
-                      {s.on_hold ? " · On hold" : ""}
-                      {s.payment_claimed ? " · Payment claimed" : ""}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-medium tabular-nums">
-                    {formatPrice(s.amount)}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className="block font-medium">{STATUS_LABELS[s.status]}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      Next: {NEXT_ACTION_LABELS[s.next_action] ?? s.next_action} ·{" "}
-                      {OWNER_LABELS[s.owner]}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export default function AdminSubscriptionsPage() {
-  const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const statusFromUrl = searchParams.get("status");
-  const stageFromUrl = searchParams.get("stage");
-  const [search, setSearch] = useState("");
-  const [selectedDeal, setSelectedDeal] = useState("all");
-  const [activeStage, setActiveStage] = useState<string | null>(
-    stageFromUrl ??
-      (statusFromUrl
-        ? (BOARD_STAGES.find((stage) =>
-            stage.statuses.includes(statusFromUrl as SubscriptionStatus),
-          )?.key ?? null)
-        : null),
-  );
-  const [detailSubscription, setDetailSubscription] = useState<AdminSubscription | null>(null);
-  const [matchingOpen, setMatchingOpen] = useState(false);
-  const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin", "subscriptions", "board"],
-    queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
-  });
-
-  const subscriptions = data?.subscriptions ?? EMPTY_SUBSCRIPTIONS;
-  const deals = useMemo(
-    () => [
-      ...new Map(
-        subscriptions.map((subscription) => [subscription.fund_id, subscription.fund_name]),
-      ).entries(),
-    ],
-    [subscriptions],
-  );
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const routeStage = BOARD_STAGES.find((stage) => stage.key === stageFromUrl);
-    const routeStatuses = statusFromUrl
-      ? [statusFromUrl as SubscriptionStatus]
-      : routeStage?.statuses;
-    return subscriptions.filter(
-      (s) =>
-        (selectedDeal === "all" || String(s.fund_id) === selectedDeal) &&
-        (!routeStatuses || routeStatuses.includes(s.status)) &&
-        (!q ||
-          s.investor_name.toLowerCase().includes(q) ||
-          s.investor_email.toLowerCase().includes(q) ||
-          (s.payment_reference ?? "").toLowerCase().includes(q) ||
-          s.asset_name.toLowerCase().includes(q)),
-    );
-  }, [subscriptions, search, selectedDeal, stageFromUrl, statusFromUrl]);
-
-  useEffect(() => {
-    if ((!statusFromUrl && !stageFromUrl) || isLoading) return;
-    const stage = stageFromUrl
-      ? BOARD_STAGES.find((item) => item.key === stageFromUrl)
-      : BOARD_STAGES.find((item) => item.statuses.includes(statusFromUrl as SubscriptionStatus));
-    if (stage) {
-      setActiveStage(stage.key);
-      columnRefs.current[stage.key]?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFromUrl, stageFromUrl, isLoading]);
-
-  return (
-    <div className="w-full space-y-4">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Subscriptions</h1>
-          <p className="text-muted-foreground">
-            Follow each subscription from reservation through funding and allocation. Open a stage
-            to see only the records in it.
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => setMatchingOpen(true)}>
-          <LinkIcon className="mr-1.5 size-4" />
-          Match payments
-        </Button>
-      </div>
-
-      <div className="mb-4">
-        <div className="relative max-w-md">
-          <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by payment reference, investor name or email"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        {activeStage && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
-            <span>
-              Stage view:{" "}
-              <strong>{BOARD_STAGES.find((stage) => stage.key === activeStage)?.label}</strong>
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setActiveStage(null);
-                const next = new URLSearchParams(searchParams);
-                next.delete("stage");
-                next.delete("status");
-                setSearchParams(next);
-              }}
-            >
-              Show all stages
-            </Button>
-          </div>
-        )}
-        <div
-          className="mt-3 flex items-center gap-2 overflow-x-auto pb-1"
-          aria-label="Filter subscriptions by deal"
-        >
-          <Button
-            size="sm"
-            variant={selectedDeal === "all" ? "secondary" : "outline"}
-            className="shrink-0 rounded-full"
-            onClick={() => setSelectedDeal("all")}
-          >
-            All deals <span className="ml-1 text-xs opacity-70">{subscriptions.length}</span>
-          </Button>
-          {deals.map(([id, name]) => {
-            const count = subscriptions.filter(
-              (subscription) => subscription.fund_id === id,
-            ).length;
-            return (
-              <Button
-                key={id}
-                size="sm"
-                variant={selectedDeal === String(id) ? "secondary" : "outline"}
-                className="shrink-0 rounded-full"
-                onClick={() => setSelectedDeal(String(id))}
-              >
-                {name}
-                <span className="ml-1 text-xs opacity-70">{count}</span>
-              </Button>
-            );
-          })}
-        </div>
-        {(search || selectedDeal !== "all") && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Showing {filtered.length} of {subscriptions.length} subscriptions
-          </p>
-        )}
-      </div>
-
-      {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
-
-      {!isLoading && subscriptions.length === 0 && (
-        <p className="py-12 text-center text-muted-foreground">No subscriptions yet.</p>
-      )}
-
-      {!isLoading && subscriptions.length > 0 && (
-        <div className="space-y-4">
-          <div
-            className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
-            aria-label="Subscription pipeline at a glance"
-          >
-            {BOARD_STAGES.map((stage) => {
-              const rows = filtered.filter((s) => (stage.statuses as string[]).includes(s.status));
-              return (
-                <button
-                  key={stage.key}
-                  type="button"
-                  onClick={() => {
-                    setActiveStage(activeStage === stage.key ? null : stage.key);
-                    if (stageFromUrl || statusFromUrl) {
-                      const next = new URLSearchParams(searchParams);
-                      next.delete("stage");
-                      next.delete("status");
-                      setSearchParams(next);
-                    }
-                  }}
-                  className={`rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${activeStage === stage.key ? "border-primary bg-primary/5" : "bg-card"}`}
-                  aria-expanded={activeStage === stage.key}
-                >
-                  <span className="text-xs text-muted-foreground">{stage.label}</span>
-                  <span className="mt-1 block text-xl font-semibold tabular-nums">
-                    {rows.length}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatPrice(rows.reduce((sum, s) => sum + Number(s.amount), 0))}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Select a stage to inspect its subscriptions. Search filters every stage.
-          </p>
-          {BOARD_STAGES.map(
-            (stage) =>
-              activeStage === stage.key && (
-                <StageBand
-                  key={stage.key}
-                  label={stage.label}
-                  subs={filtered.filter((s) => (stage.statuses as string[]).includes(s.status))}
-                  muted={stage.key === "closed"}
-                  onCardClick={setDetailSubscription}
-                  bandRef={(el) => {
-                    columnRefs.current[stage.key] = el;
-                  }}
-                />
-              ),
-          )}
-        </div>
-      )}
-
-      {detailSubscription && (
-        <SubscriptionDialog
-          subscription={detailSubscription}
-          onClose={() => setDetailSubscription(null)}
-          onMoved={(updated) => {
-            setDetailSubscription(updated);
-            queryClient.invalidateQueries({ queryKey: ["admin", "subscriptions"] });
-          }}
-        />
-      )}
-
-      {matchingOpen && <PaymentMatchingDialog onClose={() => setMatchingOpen(false)} />}
-    </div>
   );
 }
 
@@ -1002,7 +695,7 @@ export function SubscriptionDialog({
   );
 }
 
-function PaymentMatchingDialog({ onClose }: { onClose: () => void }) {
+export function PaymentMatchingDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
