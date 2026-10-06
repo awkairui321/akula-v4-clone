@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type FormEvent,
 } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { api, apiAsDemo } from "@/lib/api";
@@ -1426,7 +1426,9 @@ function WorkflowPageContent({
   const q = useWorkspace(),
     { logout } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState("Overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const routeSurface = onSurfaceChange ? surface : searchParams.get("surface") || surface;
+  const [tab, setTab] = useState(routeSurface || "Overview");
   const [sid, setSid] = useState("");
   const [preview, setPreview] = useState<number | null>(null);
   const [documentSearch, setDocumentSearch] = useState("");
@@ -1439,11 +1441,17 @@ function WorkflowPageContent({
   const demoPersonaId = useContext(DemoPersonaContext);
   const chooseTab = (value: string) => {
     setTab(value);
-    if (compact) onSurfaceChange?.(value);
+    if (onSurfaceChange) onSurfaceChange(value);
+    else
+      setSearchParams((previous) => {
+        const next = new URLSearchParams(previous);
+        next.set("surface", value);
+        return next;
+      });
   };
   useEffect(() => {
-    if (surface) setTab(surface);
-  }, [surface]);
+    setTab(routeSurface || "Overview");
+  }, [routeSurface]);
   useEffect(() => {
     const screen = window.matchMedia("(max-width: 767px)");
     const collapse = () => {
@@ -1657,9 +1665,6 @@ function WorkflowPageContent({
                     />
                     <DropdownMenuContent>
                       <DropdownMenuGroup>
-                        <DropdownMenuItem onClick={() => chooseTab("Overview")}>
-                          {ops ? "Ops workspace" : "RM workspace"}
-                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
                       </DropdownMenuGroup>
                     </DropdownMenuContent>

@@ -147,9 +147,6 @@ export default function LucaLayout() {
               />
               <DropdownMenuContent>
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => navigate(home)}>
-                    Command Dashboard
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>

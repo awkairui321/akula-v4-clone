@@ -187,7 +187,9 @@ function DealWorkspace({ fund }: { fund: Fund }) {
 
       <Tabs
         value={visibleTab}
-        onValueChange={(value) => setSearchParams({ tab: String(value) }, { replace: true })}
+        onValueChange={(value) => {
+          if (value !== visibleTab) setSearchParams({ tab: String(value) });
+        }}
       >
         <TabsList variant="line" className="w-full justify-start border-b">
           <TabsTrigger value="overview" className="flex-none">

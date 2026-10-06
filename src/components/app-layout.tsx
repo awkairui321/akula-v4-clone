@@ -168,7 +168,6 @@ export default function AppLayout() {
               />
               <DropdownMenuContent>
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => navigate("/account")}>Profile</DropdownMenuItem>
                   <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
