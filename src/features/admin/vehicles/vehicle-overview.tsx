@@ -14,11 +14,11 @@ import DealOverviewPage from "@/components/deal-overview-page";
 import PublishedDealEditor from "@/features/admin/vehicles/published-deal-editor";
 import DealDocuments from "./deal-documents";
 import DealSubscriptions from "./deal-subscriptions";
-import DealTags from "./deal-tags";
-import InvestorPricing from "./investor-pricing";
+import DealFees from "./deal-fees";
+import { useAuth } from "@/contexts/auth-context";
 import { StateBadge, allocationOf, daysUntil, formatClose } from "./deal-status";
 
-const TABS = ["overview", "subscriptions", "documents", "tags", "pricing"] as const;
+const TABS = ["overview", "subscriptions", "documents", "fees"] as const;
 type DealTab = (typeof TABS)[number];
 
 function Count({ n }: { n: number }) {
@@ -52,13 +52,16 @@ function OpsVehicleOverview({ fund }: { fund: Fund }) {
   );
 }
 
-/** The fund manager's workspace for one deal: overview, documents, tags and investor pricing. */
+/** Offering workspace: overview, documents and fees; client subscriptions are manager-only. */
 function DealWorkspace({ fund }: { fund: Fund }) {
+  const { user } = useAuth();
+  const manager = user?.role === "luca";
   const [searchParams, setSearchParams] = useSearchParams();
-  const requested = searchParams.get("tab");
+  const requested = searchParams.get("tab") === "pricing" ? "fees" : searchParams.get("tab");
   const tab: DealTab = (TABS as readonly string[]).includes(requested ?? "")
     ? (requested as DealTab)
     : "overview";
+  const visibleTab = !manager && tab === "subscriptions" ? "overview" : tab;
   const [editorOpen, setEditorOpen] = useState(false);
   const [preview, setPreview] = useState<"eam" | "investor" | null>(null);
 
@@ -66,13 +69,10 @@ function DealWorkspace({ fund }: { fund: Fund }) {
     queryKey: ["admin", "documents"],
     queryFn: () => api<{ documents: AdminDocument[] }>("/api/v1/admin/documents"),
   });
-  const { data: pricingData } = useQuery({
-    queryKey: ["admin", "investor-pricing", fund.id],
-    queryFn: () => api<{ overrides: unknown[] }>(`/api/v1/admin/funds/${fund.id}/investor_pricing`),
-  });
   const { data: subsData } = useQuery({
     queryKey: ["admin", "subscriptions", "board"],
     queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
+    enabled: manager,
   });
   const subscriptionCount = (subsData?.subscriptions ?? []).filter(
     (s) => s.fund_id === fund.id,
@@ -80,7 +80,6 @@ function DealWorkspace({ fund }: { fund: Fund }) {
   const documentCount = (docsData?.documents ?? []).filter(
     (d) => d.fund_id === fund.id && d.subscription_id === null,
   ).length;
-  const pricingCount = pricingData?.overrides.length ?? 0;
 
   const days = daysUntil(fund.closes_at);
   const { allocated, total, pct } = allocationOf(fund);
@@ -115,6 +114,9 @@ function DealWorkspace({ fund }: { fund: Fund }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSearchParams({ tab: "fees" })}>
+              Configure fees
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setPreview("eam")}>
               Preview as EAM
             </Button>
@@ -122,7 +124,7 @@ function DealWorkspace({ fund }: { fund: Fund }) {
               Preview as investor
             </Button>
             <Button size="sm" onClick={() => setEditorOpen(true)}>
-              Edit published overview
+              Edit working overview
             </Button>
           </div>
         </div>
@@ -177,39 +179,34 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           <div>
             <p className="text-xs text-muted-foreground">Readiness</p>
             <p className="mt-1 text-sm">
-              {fund.asset.risks.length} risks · {fund.tags.length} tags · {documentCount} docs
+              {fund.asset.risks.length} risks · {documentCount} documents
             </p>
           </div>
         </div>
       </div>
 
       <Tabs
-        value={tab}
+        value={visibleTab}
         onValueChange={(value) => setSearchParams({ tab: String(value) }, { replace: true })}
       >
         <TabsList variant="line" className="w-full justify-start border-b">
           <TabsTrigger value="overview" className="flex-none">
             Overview
           </TabsTrigger>
-          <TabsTrigger value="subscriptions" className="flex-none">
-            <span className="flex items-center gap-2">
-              Subscriptions <Count n={subscriptionCount} />
-            </span>
-          </TabsTrigger>
+          {manager && (
+            <TabsTrigger value="subscriptions" className="flex-none">
+              <span className="flex items-center gap-2">
+                Subscriptions <Count n={subscriptionCount} />
+              </span>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="documents" className="flex-none">
             <span className="flex items-center gap-2">
               Documents <Count n={documentCount} />
             </span>
           </TabsTrigger>
-          <TabsTrigger value="tags" className="flex-none">
-            <span className="flex items-center gap-2">
-              Tags <Count n={fund.tags.length} />
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="pricing" className="flex-none">
-            <span className="flex items-center gap-2">
-              Investor pricing <Count n={pricingCount} />
-            </span>
+          <TabsTrigger value="fees" className="flex-none">
+            <span className="flex items-center gap-2">Fees</span>
           </TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="pt-6">
@@ -224,16 +221,16 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           />
         </TabsContent>
         <TabsContent value="subscriptions" className="pt-6">
-          <DealSubscriptions fund={fund} />
+          {manager && <DealSubscriptions fund={fund} />}
         </TabsContent>
         <TabsContent value="documents" className="pt-6">
           <DealDocuments fund={fund} />
         </TabsContent>
-        <TabsContent value="tags" className="pt-6">
-          <DealTags fund={fund} />
-        </TabsContent>
-        <TabsContent value="pricing" className="pt-6">
-          <InvestorPricing fund={fund} />
+        <TabsContent value="fees" className="pt-6">
+          <DealFees
+            key={`${fund.id}-${fund.subscription_fee_pct}-${fund.management_fee_pct}-${fund.carried_interest_pct}`}
+            fund={fund}
+          />
         </TabsContent>
       </Tabs>
 

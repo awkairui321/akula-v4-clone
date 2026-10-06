@@ -38,7 +38,7 @@ import ComposeCommunicationPage from "@/features/admin/communications/compose";
 import CommunicationDetailPage from "@/features/admin/communications/detail";
 import LucaOnboardingPage from "@/features/admin/onboarding";
 import AdminInvestorDetailPage from "@/features/admin/investors/investor-detail";
-import AdminPartnersPage from "@/features/admin/partners";
+
 import AdminPartnerDetailPage from "@/features/admin/partners/partner-detail";
 import EamLayout from "@/components/eam-layout";
 import EamDashboard from "@/features/eam/dashboard";
@@ -122,13 +122,21 @@ function OnboardedRoute() {
 function LucaRoute() {
   const { user } = useAuth();
 
-  if (user?.role !== "luca") {
+  if (!["luca", "investment_team"].includes(user?.role ?? "")) {
     return <Navigate to="/funds" replace />;
   }
 
   return <Outlet />;
 }
 
+function ManagerRoute() {
+  const { user } = useAuth();
+  return user?.role === "luca" ? <Outlet /> : <Navigate to="/luca/deals" replace />;
+}
+function RmRoute() {
+  const { user } = useAuth();
+  return user?.role === "rm" ? <Outlet /> : <Navigate to="/workflows" replace />;
+}
 function OpsRoute() {
   const { user } = useAuth();
   return user?.role === "ops" ? <Outlet /> : <Navigate to="/workflows" replace />;
@@ -194,44 +202,104 @@ function App() {
                   {/* LUCA (fund manager) */}
                   <Route element={<LucaRoute />}>
                     <Route element={<LucaLayout />}>
-                      <Route path="/luca" element={<AdminDashboard />} />
-                      <Route
-                        path="/luca/publication"
-                        element={<WorkflowPage surface="Publication" />}
-                      />
-                      <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />
-                      <Route
-                        path="/luca/subscriptions/history"
-                        element={<AdminSubscriptionHistoryPage />}
-                      />
-                      <Route path="/luca/onboarding" element={<LucaOnboardingPage />} />
-                      <Route
-                        path="/luca/fund-search"
-                        element={<Navigate to="/luca/onboarding?mode=funds" replace />}
-                      />
-                      <Route
-                        path="/luca/eam-search"
-                        element={<Navigate to="/luca/onboarding?mode=entities" replace />}
-                      />
-                      <Route path="/luca/investors/:id" element={<AdminInvestorDetailPage />} />
-                      <Route path="/luca/partners" element={<AdminPartnersPage />} />
-                      <Route path="/luca/partners/:id" element={<AdminPartnerDetailPage />} />
-                      <Route path="/luca/compliance" element={<AdminCompliancePage />} />
-                      <Route
-                        path="/luca/documents"
-                        element={<Navigate to="/luca/compliance" replace />}
-                      />
-                      <Route path="/luca/communications" element={<CommunicationsPage />} />
-                      <Route
-                        path="/luca/communications/new"
-                        element={<ComposeCommunicationPage />}
-                      />
-                      <Route
-                        path="/luca/communications/:id"
-                        element={<CommunicationDetailPage />}
-                      />
                       <Route path="/luca/deals" element={<AdminVehiclesPage />} />
                       <Route path="/luca/deals/:id" element={<AdminVehicleOverviewPage />} />
+                      <Route
+                        path="/luca/publication"
+                        element={<WorkflowPage surface="Publication" compact />}
+                      />
+                      <Route element={<ManagerRoute />}>
+                        <Route path="/luca" element={<AdminDashboard />} />
+                        <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />
+                        <Route
+                          path="/luca/subscriptions/history"
+                          element={<AdminSubscriptionHistoryPage />}
+                        />
+                        <Route path="/luca/onboarding" element={<LucaOnboardingPage />} />
+                        <Route
+                          path="/luca/fund-search"
+                          element={<Navigate to="/luca/onboarding?mode=funds" replace />}
+                        />
+                        <Route
+                          path="/luca/eam-search"
+                          element={<Navigate to="/luca/onboarding?mode=entities" replace />}
+                        />
+                        <Route path="/luca/investors/:id" element={<AdminInvestorDetailPage />} />
+                        <Route
+                          path="/luca/partners"
+                          element={<WorkflowPage surface="Partners" compact />}
+                        />
+                        <Route
+                          path="/luca/clients"
+                          element={<WorkflowPage surface="Relationships" compact />}
+                        />
+                        <Route
+                          path="/luca/opportunities"
+                          element={<WorkflowPage surface="Opportunities" compact />}
+                        />
+                        <Route
+                          path="/luca/reports"
+                          element={<WorkflowPage surface="Reports" compact />}
+                        />
+                        <Route
+                          path="/luca/reporting"
+                          element={<WorkflowPage surface="Reporting" compact />}
+                        />
+                        <Route
+                          path="/luca/support"
+                          element={<WorkflowPage surface="Support" compact />}
+                        />
+                        <Route
+                          path="/luca/client-documents"
+                          element={<WorkflowPage surface="Documents" compact />}
+                        />
+                        <Route path="/luca/partners/:id" element={<AdminPartnerDetailPage />} />
+                        <Route path="/luca/compliance" element={<AdminCompliancePage />} />
+                        <Route
+                          path="/luca/documents"
+                          element={<Navigate to="/luca/compliance" replace />}
+                        />
+                        <Route path="/luca/communications" element={<CommunicationsPage />} />
+                        <Route
+                          path="/luca/communications/new"
+                          element={<ComposeCommunicationPage />}
+                        />
+                        <Route
+                          path="/luca/communications/:id"
+                          element={<CommunicationDetailPage />}
+                        />
+                      </Route>
+                    </Route>
+                  </Route>
+                </Route>
+                <Route element={<AuthRequired />}>
+                  <Route element={<RmRoute />}>
+                    <Route element={<LucaLayout />}>
+                      <Route path="/rm" element={<WorkflowPage surface="Overview" compact />} />
+                      <Route
+                        path="/rm/clients"
+                        element={<WorkflowPage surface="Relationships" compact />}
+                      />
+                      <Route
+                        path="/rm/opportunities"
+                        element={<WorkflowPage surface="Opportunities" compact />}
+                      />
+                      <Route
+                        path="/rm/documents"
+                        element={<WorkflowPage surface="Documents" compact />}
+                      />
+                      <Route
+                        path="/rm/partners"
+                        element={<WorkflowPage surface="Partners" compact />}
+                      />
+                      <Route
+                        path="/rm/reports"
+                        element={<WorkflowPage surface="Reports" compact />}
+                      />
+                      <Route
+                        path="/rm/support"
+                        element={<WorkflowPage surface="Support" compact />}
+                      />
                     </Route>
                   </Route>
                 </Route>

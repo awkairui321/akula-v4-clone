@@ -200,7 +200,8 @@ export default function ComposeCommunicationPage() {
   const [body, setBody] = useState("");
   const [edited, setEdited] = useState(false);
   const [attachmentIds, setAttachmentIds] = useState<number[]>([]);
-  const [routing, setRouting] = useState<CommunicationRouting>("direct");
+  const routing: CommunicationRouting = "direct";
+  const emailOnly = ["request", "remind_sign", "remind_fund"].includes(purpose ?? "");
   const [timing, setTiming] = useState<"now" | "schedule">("now");
   const [scheduleDate, setScheduleDate] = useState("");
 
@@ -394,6 +395,8 @@ export default function ComposeCommunicationPage() {
           audience_description: audienceLabel,
           fund_id: kind === "deal" ? (deal?.id ?? null) : null,
           routing,
+          purpose,
+          delivery_channels: emailOnly ? ["email"] : ["email", "inbox"],
           attachment_document_ids: attachmentIds,
           send_at: timing === "schedule" ? new Date(scheduleDate).toISOString() : null,
           investor_ids: audience.map((i) => i.id),
@@ -885,22 +888,12 @@ export default function ComposeCommunicationPage() {
 
           <div className="space-y-2">
             <p className="text-sm font-medium">How should it be delivered?</p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={routing === "direct" ? "secondary" : "outline"}
-                onClick={() => setRouting("direct")}
-              >
-                Direct to the investor
-              </Button>
-              <Button
-                size="sm"
-                variant={routing === "through_rm" ? "secondary" : "outline"}
-                onClick={() => setRouting("through_rm")}
-              >
-                Through their adviser where there is one
-              </Button>
-            </div>
+            <p className="text-sm">{emailOnly ? "Email request" : "Email and investor inbox"}</p>
+            <p className="text-xs text-muted-foreground">
+              {emailOnly
+                ? "Investor action requests use email. Email delivery will be connected in a future release."
+                : "The update appears in the investor inbox. Email delivery will be connected in a future release."}
+            </p>
           </div>
         </section>
       )}
@@ -928,11 +921,7 @@ export default function ComposeCommunicationPage() {
             )}
             <ReviewRow
               label="Delivery"
-              value={
-                routing === "direct"
-                  ? "Direct to the investor"
-                  : "Through their adviser where there is one"
-              }
+              value={emailOnly ? "Email request" : "Email and investor inbox"}
             />
             <ReviewRow label="Attachments" value={String(attachmentIds.length)} />
             <ReviewRow label="Subject" value={subject} />

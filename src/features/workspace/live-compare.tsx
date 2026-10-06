@@ -13,39 +13,33 @@ const personas: Persona[] = [
     surfaces: ["Overview", "Investments", "Documents", "Support", "Reporting", "Company requests"],
   },
   {
-    id: 7,
-    label: "Akula Ops",
+    id: 6,
+    label: "LUCA RM",
     surfaces: [
       "Overview",
-      "Investments",
+      "Reports",
+      "Opportunities",
       "Documents",
-      "Publication",
-      "Demand",
-      "Reporting",
+      "Relationships",
+      "Partners",
       "Support",
     ],
   },
-  {
-    id: 6,
-    label: "LUCA RM",
-    surfaces: ["Overview", "Reports", "Opportunities", "Documents", "Relationships", "Support"],
-  },
-  {
-    id: 4,
-    label: "EAM · Meridian",
-    surfaces: ["Overview", "Investments", "Documents", "Support", "Reporting", "Company requests"],
-  },
+  { id: 9000, label: "LUCA Investment Team", surfaces: ["Publication", "Documents"] },
   {
     id: 1,
-    label: "LUCA · Fund manager",
+    label: "LUCA Fund Manager",
     surfaces: [
       "Overview",
       "Investments",
+      "Opportunities",
       "Documents",
       "Support",
       "Publication",
       "Demand",
       "Relationships",
+      "Partners",
+      "Reports",
       "Reporting",
     ],
   },
@@ -114,7 +108,7 @@ export default function LiveComparePage() {
   const [paneHeight, setPaneHeight] = useState(620);
   const [panes, setPanes] = useState([
     { personaId: 2, surface: "Overview" },
-    { personaId: 7, surface: "Overview" },
+    { personaId: 9000, surface: "Publication" },
     { personaId: 6, surface: "Overview" },
     { personaId: 1, surface: "Overview" },
   ]);
@@ -193,7 +187,7 @@ export default function LiveComparePage() {
         </div>
       </header>
       <div className="live-banner">
-        DEMO PERSONA VIEW · Select a different role and surface in either pane. All changes remain
+        DEMO PERSONA VIEW · Select a different role and surface in any pane. All changes remain
         fictional and browser-local.
       </div>
       <div

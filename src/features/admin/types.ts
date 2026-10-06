@@ -212,6 +212,7 @@ export type CommunicationRouting = "direct" | "through_rm";
 export type CommunicationStatus = "draft" | "scheduled" | "sent";
 
 export type CommunicationRecipient = {
+  email_status?: "pending_integration" | "scheduled";
   id: number;
   investor_id: number;
   investor_name: string;
@@ -224,6 +225,8 @@ export type CommunicationRecipient = {
 };
 
 export type Communication = {
+  delivery_channels?: ("email" | "inbox")[];
+  purpose?: string;
   id: number;
   subject: string;
   body: string;

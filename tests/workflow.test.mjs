@@ -7,6 +7,7 @@ import ts from "typescript";
 const out = path.resolve(".test-runtime");
 for (const file of [
   "src/lib/types.ts",
+  "src/lib/permissions.ts",
   "src/lib/investor-access.ts",
   "src/mocks/investor-access.ts",
   "src/lib/client-code.ts",
@@ -269,11 +270,12 @@ test("refund API creates a cancellation/obligation without claiming money return
   assert.equal(s.status, "cancelled");
 });
 test("support persists a scoped reference and actual staff reply", () => {
-  w.command(investor(), { type: "case", text: "Where is my issuance?", status: "ops" });
+  w.command(investor(), { type: "case", text: "Where is my issuance?" });
   const c = w.workflow.cases.at(-1);
   assert.ok(c.id);
-  assert.equal(w.view(ops()).cases.at(-1).id, c.id);
-  w.command(ops(), { type: "reply", id: c.id, text: "We are checking registry evidence." });
+  assert.equal(c.owner, "rm");
+  assert.equal(w.view(rm()).cases.at(-1).id, c.id);
+  w.command(rm(), { type: "reply", id: c.id, text: "We are checking registry evidence." });
   assert.equal(w.view(investor()).cases.at(-1).messages.length, 2);
   assert.equal(w.view(db.users.find((u) => u.id === 3)).cases.length, 0);
 });
@@ -837,4 +839,100 @@ test("existing declaration API supports a confirmed shortfall without recording 
       .status,
     422,
   );
+});
+
+test("Investment Team publishes only after Fund Manager approval and cannot access client records", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  assert.deepEqual(w.clientsFor(team), []);
+  assert.equal(w.view(team).subscriptions.length, 0);
+  assert.equal(w.view(team).notes.length, 0);
+  assert.equal(
+    (await request("funds/1", team, "PATCH", { fund: { state: "closed" } })).status,
+    403,
+  );
+  w.command(team, { type: "prepare", id: 1 });
+  const version = w.workflow.versions.at(-1);
+  w.command(team, { type: "review", id: version.id });
+  assert.throws(() => w.command(team, { type: "approve", id: version.id }));
+  assert.throws(() => w.command(team, { type: "publish", id: version.id }));
+  assert.throws(() =>
+    w.command(team, { type: "allocate", id: funded().id, amount: 100, price: 100 }),
+  );
+  assert.equal((await request("admin/investors", team)).status, 403);
+  w.command(manager(), { type: "approve", id: version.id });
+  w.command(team, { type: "publish", id: version.id });
+  assert.equal(w.currentVersion(1).id, version.id);
+});
+
+test("Fund Manager has RM recommendations and private follow-ups", () => {
+  w.command(manager(), { type: "note", id: 2, text: "Call about the offering", due: "2026-10-10" });
+  assert.equal(w.view(manager()).notes.at(-1).text, "Call about the offering");
+  assert.equal(w.view(investor()).notes.length, 0);
+  w.command(manager(), {
+    type: "highlight",
+    id: 2,
+    target: 1,
+    text: "Consider this published offering",
+  });
+  const recommendation = w.view(investor()).highlights.at(-1);
+  assert.equal(recommendation.staffId, manager().id);
+  w.command(investor(), { type: "open-highlight", id: recommendation.id });
+  assert.ok(w.view(manager()).highlights.find((h) => h.id === recommendation.id).openedAt);
+});
+
+test("Investor support rejects alternate routing and missing RM assignments without creating cases", () => {
+  const count = w.workflow.cases.length;
+  for (const status of ["luca", "ops", "eam"]) {
+    assert.throws(
+      () => w.command(investor(), { type: "case", text: "Investment question", status }),
+      /assigned LUCA RM/,
+    );
+  }
+  assert.equal(w.workflow.cases.length, count);
+  w.workflow.assignments = w.workflow.assignments.filter((a) => a.investorId !== investor().id);
+  assert.throws(
+    () => w.command(investor(), { type: "case", text: "Investment question" }),
+    /No RM assigned/,
+  );
+  assert.equal(w.workflow.cases.length, count);
+});
+
+test("LUCA investor requests are email-only, while updates use email and inbox", async () => {
+  for (const purpose of ["request", "remind_sign", "remind_fund", "update"]) {
+    const response = await request("admin/communications", manager(), "POST", {
+      subject: `Delivery ${purpose}`,
+      body: "Demo message",
+      investor_ids: [2],
+      purpose,
+      delivery_channels: ["inbox"],
+      routing: "direct",
+    });
+    assert.equal(response.status, 200);
+    const communication = (await response.json()).communication;
+    const emailOnly = purpose !== "update";
+    assert.deepEqual(communication.delivery_channels, emailOnly ? ["email"] : ["email", "inbox"]);
+    const recipient = db.communicationRecipients.find(
+      (r) => r.communication_id === communication.id,
+    );
+    assert.equal(recipient.email_status, "pending_integration");
+    assert.equal(Boolean(recipient.delivered_at), !emailOnly);
+    const messages = (await (await request("messages", investor())).json()).messages;
+    assert.equal(
+      messages.some((m) => m.id === communication.id),
+      !emailOnly,
+    );
+    assert.equal(
+      (await request(`messages/${communication.id}/read`, investor(), "POST")).status,
+      emailOnly ? 404 : 200,
+    );
+  }
+});
+
+test("restoring an existing demo adds the Investment Team without resetting client data", () => {
+  const saved = db.exportDemoState();
+  saved.arrays.users = saved.arrays.users.filter((u) => u.role !== "investment_team");
+  saved.arrays.users.find((u) => u.id === 2).email = "preserved@example.com";
+  db.restoreDemoState(saved);
+  assert.equal(db.users.find((u) => u.id === 2).email, "preserved@example.com");
+  assert.equal(db.users.filter((u) => u.role === "investment_team").length, 1);
 });

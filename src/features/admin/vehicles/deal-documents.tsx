@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileTextIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/auth-context";
 import { DEAL_DOCUMENT_KINDS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
 import type { AdminDocument } from "../types";
@@ -21,6 +22,7 @@ const kindLabel = (kind: string) =>
 
 /** Add and remove the company materials investors and advisers see for this deal. */
 export default function DealDocuments({ fund }: { fund: Fund }) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [kind, setKind] = useState(DEAL_DOCUMENT_KINDS[0].value);
   const [error, setError] = useState<string | null>(null);
@@ -164,16 +166,18 @@ export default function DealDocuments({ fund }: { fund: Fund }) {
                   View
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-destructive"
-                aria-label={`Delete ${doc.name}`}
-                onClick={() => setPendingDelete(doc)}
-              >
-                <Trash2Icon className="size-4" />
-                Delete
-              </Button>
+              {user?.role !== "investment_team" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Delete ${doc.name}`}
+                  onClick={() => setPendingDelete(doc)}
+                >
+                  <Trash2Icon className="size-4" />
+                  Delete
+                </Button>
+              )}
             </li>
           ))}
         </ul>

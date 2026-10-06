@@ -1,3 +1,4 @@
+import PartnerBook from "./partner-book";
 import FundingShortfall from "@/components/funding-shortfall";
 import InvestorSegmentControl from "@/components/investor-segment-control";
 import {
@@ -473,12 +474,9 @@ export function ServiceDesk() {
 function Cases({ data: d }: { data: WorkflowView }) {
   const staff = ["luca", "ops", "rm"].includes(d.actor.role) || d.actor.role === "eam";
   const isRm = d.actor.role === "rm";
+  const investorSupport = !staff;
   const [clientSearch, setClientSearch] = useState("");
-  const clients = isRm
-    ? d.clients.filter(
-        (client) => client.type === "individual" && client.name !== "Newly Registered",
-      )
-    : d.clients;
+  const clients = d.clients.filter((client) => client.name !== "Newly Registered");
   const selectedClient = clients.find(
     (client) => client.name.toLowerCase() === clientSearch.trim().toLowerCase(),
   );
@@ -565,14 +563,18 @@ function Cases({ data: d }: { data: WorkflowView }) {
           <Choice
             label="Route to"
             name="status"
-            items={[
-              { id: "ops", name: "Akula Ops · processing" },
-              { id: "luca", name: "LUCA · fund manager" },
-              ...(!isRm ? [{ id: "rm", name: "Assigned LUCA RM" }] : []),
-              ...(!isRm || selectedClient?.eamFirm
-                ? [{ id: "eam", name: "Assigned external institution" }]
-                : []),
-            ]}
+            items={
+              investorSupport
+                ? [{ id: "rm", name: "Assigned LUCA RM" }]
+                : [
+                    { id: "ops", name: "Akula Ops · processing" },
+                    { id: "luca", name: "LUCA · fund manager" },
+                    ...(!isRm ? [{ id: "rm", name: "Assigned LUCA RM" }] : []),
+                    ...(!isRm || selectedClient?.eamFirm
+                      ? [{ id: "eam", name: "Assigned external institution" }]
+                      : []),
+                  ]
+            }
           />
           {!isRm && (
             <Choice
@@ -1428,6 +1430,7 @@ function WorkflowPageContent({
   const [sid, setSid] = useState("");
   const [preview, setPreview] = useState<number | null>(null);
   const [documentSearch, setDocumentSearch] = useState("");
+  const [documentHistory, setDocumentHistory] = useState(false);
   const [opsArchive, setOpsArchive] = useState(false);
   const [relationshipSearch, setRelationshipSearch] = useState("");
   const [relationshipView, setRelationshipView] = useState("clients");
@@ -1460,9 +1463,10 @@ function WorkflowPageContent({
     );
   const manager = d.actor.role === "luca",
     ops = d.actor.role === "ops",
-    rm = d.actor.role === "rm",
+    team = d.actor.role === "investment_team",
+    rm = d.actor.role === "rm" || manager,
     staff = manager || ops || rm,
-    privileged = manager || ops;
+    privileged = manager || ops || team;
   const sub =
     d.subscriptions.find(
       (s) => String(s.id) === sid && (!ops || archivedInvestment(s) === opsArchive),
@@ -1472,6 +1476,11 @@ function WorkflowPageContent({
   const returns = d.returns.filter((r) => r.subscriptionId === sub?.id);
   const visibleVersions = d.versions
     .filter((version) => {
+      if (
+        !documentHistory &&
+        d.versions.some((other) => other.fundId === version.fundId && other.number > version.number)
+      )
+        return false;
       const query = documentSearch.trim().toLowerCase();
       const title =
         `${version.snapshot.codename} ${version.snapshot.name} ${version.status} ${version.number}`.toLowerCase();
@@ -1481,7 +1490,7 @@ function WorkflowPageContent({
   const visibleClients = d.clients
     .filter(
       (client) =>
-        (!rm || (client.type === "individual" && client.name !== "Newly Registered")) &&
+        client.name !== "Newly Registered" &&
         (relationshipView !== "tasks" ||
           d.subscriptions.some(
             (subscription) =>
@@ -1496,20 +1505,52 @@ function WorkflowPageContent({
         .includes(relationshipSearch.trim().toLowerCase()),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
-  const tabs = rm
-    ? ["Overview", "Reports", "Opportunities", "Documents", "Relationships", "Support"]
-    : ops
-      ? ["Overview", "Investments", "Documents", "Publication", "Demand", "Reporting", "Support"]
-      : [
+  const tabs = team
+    ? ["Publication", "Documents"]
+    : manager
+      ? [
           "Overview",
           "Investments",
+          "Opportunities",
           "Documents",
-          "Support",
-          ...(privileged ? ["Publication", "Demand"] : []),
-          ...(manager ? ["Relationships"] : []),
+          "Publication",
+          "Demand",
+          "Relationships",
+          "Partners",
+          "Reports",
           "Reporting",
-          ...(!staff ? ["Company requests"] : []),
-        ];
+          "Support",
+        ]
+      : rm
+        ? [
+            "Overview",
+            "Reports",
+            "Opportunities",
+            "Documents",
+            "Relationships",
+            "Partners",
+            "Support",
+          ]
+        : ops
+          ? [
+              "Overview",
+              "Investments",
+              "Documents",
+              "Publication",
+              "Demand",
+              "Reporting",
+              "Support",
+            ]
+          : [
+              "Overview",
+              "Investments",
+              "Documents",
+              "Support",
+              ...(privileged ? ["Publication", "Demand"] : []),
+              ...(manager ? ["Relationships"] : []),
+              "Reporting",
+              ...(!staff ? ["Company requests"] : []),
+            ];
   const home = manager ? "/luca" : d.actor.role === "eam" ? "/eam" : "/portfolio";
   return (
     <div className={`${compact ? "wf-embed" : "wf-shell"} ${rm || ops ? "rm-shell" : ""}`}>
@@ -2153,12 +2194,15 @@ function WorkflowPageContent({
             )}
           </>
         )}
+        {tab === "Partners" && rm && (
+          <PartnerBook data={d} onClients={() => chooseTab("Relationships")} />
+        )}
         {tab === "Support" && <Cases data={d} />}
         {tab === "Documents" && (
           <Panel title="Versioned investment documents">
             <p>
               Search published offering versions and the signed copies linked to your client
-              investments. Each version stays available after a later revision.
+              investments. Latest versions appear first; turn on history to see earlier revisions.
             </p>
             <div className="wf-toolbar">
               <label className="wf-field">
@@ -2169,9 +2213,15 @@ function WorkflowPageContent({
                   placeholder="Company, version or status"
                 />
               </label>
-              <span className="wf-result-count">
-                {visibleVersions.length} of {d.versions.length} versions
-              </span>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={documentHistory}
+                  onChange={(event) => setDocumentHistory(event.target.checked)}
+                />
+                Show version history
+              </label>
+              <span className="wf-result-count">{visibleVersions.length} documents</span>
             </div>
             {!visibleVersions.length ? (
               <p className="wf-empty">No documents match these filters.</p>
@@ -2185,14 +2235,29 @@ function WorkflowPageContent({
                       </h3>
                       <p>
                         {v.status} · {date(v.at)}
-                        {d.signatures
-                          .filter((signature) => signature.versionId === v.id)
-                          .map(
-                            (signature) =>
-                              ` · Signed for investment #${signature.subscriptionId} by ${signature.name}`,
-                          )
-                          .join("")}
                       </p>
+                      {d.signatures.some((signature) => signature.versionId === v.id) && (
+                        <details className="mt-2 text-sm">
+                          <summary className="cursor-pointer text-muted-foreground">
+                            Signed copies (
+                            {
+                              d.signatures.filter((signature) => signature.versionId === v.id)
+                                .length
+                            }
+                            )
+                          </summary>
+                          <ul className="mt-2 space-y-1 text-muted-foreground">
+                            {d.signatures
+                              .filter((signature) => signature.versionId === v.id)
+                              .map((signature) => (
+                                <li key={signature.id}>
+                                  Investment #{signature.subscriptionId} · {signature.name} ·{" "}
+                                  {date(signature.at)}
+                                </li>
+                              ))}
+                          </ul>
+                        </details>
+                      )}
                     </div>
                     <div className="wf-doc-actions">
                       <Button
@@ -2234,8 +2299,8 @@ function WorkflowPageContent({
           <>
             <Panel title="Offering preparation">
               <p>
-                Edit the shared deal overview, then prepare a version. LUCA reviews and approves the
-                exact version; Akula Ops publishes it.
+                The Investment Team prepares and submits the offering. The Fund Manager approves the
+                exact version; the Investment Team then publishes the approved content.
               </p>
               <div className="wf-publication-grid">
                 {d.funds.map((fund) => (
@@ -2265,7 +2330,7 @@ function WorkflowPageContent({
                       {v.snapshot.codename} · version {v.number}
                     </h3>
                     <p>{v.status}</p>
-                    {ops && v.status === "draft" && (
+                    {(team || manager || ops) && v.status === "draft" && (
                       <Action
                         label="Submit for LUCA review"
                         command={{ type: "review", id: v.id }}
@@ -2277,7 +2342,7 @@ function WorkflowPageContent({
                         command={{ type: "approve", id: v.id }}
                       />
                     )}
-                    {ops && v.status === "approved" && (
+                    {(team || manager || ops) && v.status === "approved" && (
                       <Action
                         label="Publish approved version"
                         command={{ type: "publish", id: v.id }}
@@ -2579,7 +2644,13 @@ function WorkflowPageContent({
         )}
         {(tab === "Reporting" || (rm && tab === "Reports")) && (
           <>
-            <Panel title={rm ? "Client holdings & reported values" : "Holdings & sourced reports"}>
+            <Panel
+              title={
+                tab === "Reports"
+                  ? "Client holdings & reported values"
+                  : "Holdings & sourced reports"
+              }
+            >
               <p>
                 {rm
                   ? "This is a read-only view of investments held by your assigned clients and their latest reported values. It helps you prepare client conversations; only LUCA publishes sourced valuations."
@@ -2591,7 +2662,7 @@ function WorkflowPageContent({
                   issuance, its reported value will appear here.
                 </p>
               )}
-              {rm ? (
+              {tab === "Reports" ? (
                 <RMReports data={d} />
               ) : ops ? (
                 d.funds

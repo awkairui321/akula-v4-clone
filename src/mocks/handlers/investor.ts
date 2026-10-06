@@ -112,11 +112,11 @@ export const investorHandlers = [
       funds: funds
         .filter(
           (f) =>
-            (user.role === "luca" || user.role === "ops" || f.state !== "draft") &&
+            (["luca", "ops", "investment_team"].includes(user.role) || f.state !== "draft") &&
             mayDiscover(user, f.id),
         )
         .map((f) =>
-          user.role === "luca" || user.role === "ops"
+          ["luca", "ops", "investment_team"].includes(user.role)
             ? f
             : investorAudience(user)
               ? fundForSegment(
@@ -144,7 +144,7 @@ export const investorHandlers = [
       !subscriptions.some((s) => s.investor_id === user.id && s.fund_id === fund.id)
     )
       return HttpResponse.json({ error: "Disclosure access required" }, { status: 403 });
-    if (fund.state === "draft" && !["luca", "ops"].includes(user.role))
+    if (fund.state === "draft" && !["luca", "ops", "investment_team"].includes(user.role))
       return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
     if (!mayDiscover(user, fund.id) && !hasInvestmentHistory(user, fund.id))
       return HttpResponse.json(
@@ -152,7 +152,7 @@ export const investorHandlers = [
         { status: 403 },
       );
     return HttpResponse.json({
-      fund: ["luca", "ops"].includes(user.role)
+      fund: ["luca", "ops", "investment_team"].includes(user.role)
         ? fund
         : investorAudience(user)
           ? fundForSegment(

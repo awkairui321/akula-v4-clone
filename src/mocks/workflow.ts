@@ -42,6 +42,7 @@ export function staff(user: db.MockUser) {
   return ["luca", "ops", "rm"].includes(user.role);
 }
 export function clientsFor(user: db.MockUser): number[] {
+  if (user.role === "investment_team") return [];
   if (user.role === "luca" || user.role === "ops")
     return [
       ...new Set([
@@ -353,7 +354,8 @@ export function portfolioHistory(user: db.MockUser) {
 
 export function view(user: db.MockUser): WorkflowView {
   const ids = clientsFor(user),
-    privileged = user.role === "luca" || user.role === "ops";
+    privileged = user.role === "luca" || user.role === "ops",
+    publisher = privileged || user.role === "investment_team";
   const subs = db.subscriptions
     .filter((s) => ids.includes(s.investor_id))
     .sort(
@@ -371,7 +373,7 @@ export function view(user: db.MockUser): WorkflowView {
   );
   const versions = workflow.versions.filter(
     (v) =>
-      privileged ||
+      publisher ||
       ((staff(user) || user.has_eam_profile || disclosureAccess(user)) &&
         v.status === "published" &&
         mayDiscover(user, v.fundId)) ||
@@ -408,7 +410,7 @@ export function view(user: db.MockUser): WorkflowView {
     funds: db.funds
       .filter(
         (f) =>
-          (privileged || f.state !== "draft") &&
+          (publisher || f.state !== "draft") &&
           (mayDiscover(user, f.id) || hasInvestmentHistory(user, f.id)),
       )
       .map((f) => ({
@@ -433,15 +435,18 @@ export function view(user: db.MockUser): WorkflowView {
       (h) =>
         ids.includes(h.investorId) &&
         mayDiscover(user, workflow.versions.find((v) => v.id === h.versionId)?.fundId || 0) &&
-        workflow.assignments.some(
-          (a) => a.investorId === h.investorId && a.staffId === h.staffId,
-        ) &&
+        (db.findUserById(h.staffId)?.role === "luca" ||
+          workflow.assignments.some(
+            (a) => a.investorId === h.investorId && a.staffId === h.staffId,
+          )) &&
         currentVersion(workflow.versions.find((v) => v.id === h.versionId)?.fundId || 0)?.id ===
           h.versionId &&
         db.findFundById(workflow.versions.find((v) => v.id === h.versionId)?.fundId || 0)?.state ===
           "open",
     ),
-    notes: user.role === "rm" ? workflow.notes.filter((n) => ids.includes(n.investorId)) : [],
+    notes: ["rm", "luca"].includes(user.role)
+      ? workflow.notes.filter((n) => ids.includes(n.investorId))
+      : [],
     cases,
     requests: workflow.requests.filter((r) => privileged || r.investorId === user.id),
     valuations: workflow.valuations.filter((v) => hid.has(v.holdingId)),
@@ -556,6 +561,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       if (c.status === "information_requested") {
         s.information_request_note = text();
         s.information_requested_at = now();
+        s.information_request_delivery = "email_pending_integration";
         s.information_response_note = null;
         s.information_responded_at = null;
       }
@@ -746,7 +752,12 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
     case "case": {
       const iid = staff(user) || user.has_eam_profile ? c.target : user.id;
       requireValue(iid && clientsFor(user).includes(iid), "Client not found.");
-      const owner = (c.status || "ops") as StaffRole | "eam";
+      const investorInitiated = !staff(user) && !user.has_eam_profile;
+      requireValue(
+        !investorInitiated || !c.status || c.status === "rm",
+        "Investor support goes to the assigned LUCA RM.",
+      );
+      const owner = (investorInitiated ? "rm" : c.status || "luca") as StaffRole | "eam";
       requireValue(["luca", "ops", "rm", "eam"].includes(owner), "Choose a case owner.");
       if (owner === "rm")
         requireValue(
@@ -828,7 +839,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       break;
     }
     case "highlight": {
-      role("rm");
+      role("rm", "luca");
       requireValue(clientsFor(user).includes(c.id!), "Client not assigned.");
       const targetInvestor = db.findUserById(c.id!);
       requireValue(
@@ -857,7 +868,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       break;
     }
     case "note": {
-      role("rm");
+      role("rm", "luca");
       requireValue(clientsFor(user).includes(c.id!), "Client not assigned.");
       requireValue(!c.due || /^\d{4}-\d{2}-\d{2}$/.test(c.due), "Use a valid follow-up date.");
       workflow.notes.push({
@@ -872,7 +883,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       break;
     }
     case "complete-note": {
-      role("rm");
+      role("rm", "luca");
       const n = workflow.notes.find(
         (n) => n.id === c.id && clientsFor(user).includes(n.investorId),
       );
@@ -939,7 +950,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       break;
     }
     case "prepare": {
-      role("ops", "luca");
+      role("ops", "luca", "investment_team");
       const fund = db.findFundById(c.id!);
       requireValue(fund, "Offering not found.");
       requireValue(
@@ -963,7 +974,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
     case "review":
     case "approve":
     case "publish": {
-      role(...(c.type === "approve" ? ["luca"] : ["ops"]));
+      role(...(c.type === "approve" ? ["luca"] : ["ops", "luca", "investment_team"]));
       const v = workflow.versions.find((v) => v.id === c.id);
       requireValue(v, "Version not found.");
       const expected = { review: "draft", approve: "review", publish: "approved" };

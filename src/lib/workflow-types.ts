@@ -1,7 +1,7 @@
 import type { CommercialTerms } from "./investor-access";
 import type { Fund, SubscriptionStatus } from "./types";
 
-export type StaffRole = "luca" | "ops" | "rm";
+export type StaffRole = "luca" | "investment_team" | "ops" | "rm";
 export type Receipt = {
   id: number;
   subscriptionId: number;

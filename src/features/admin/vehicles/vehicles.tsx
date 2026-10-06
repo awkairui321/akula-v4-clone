@@ -28,7 +28,7 @@ function lastRoundValuation(fund: Fund): string {
 }
 
 /** Whole card is the link: click anywhere to open the deal. */
-function VehicleCard({ fund, tagCount }: { fund: Fund; tagCount: number }) {
+function VehicleCard({ fund }: { fund: Fund }) {
   const days = daysUntil(fund.closes_at);
   const { allocated, total, pct } = allocationOf(fund);
 
@@ -60,9 +60,6 @@ function VehicleCard({ fund, tagCount }: { fund: Fund; tagCount: number }) {
             </Badge>
             <Badge variant="outline" className="text-[10px]">
               {fund.deal_type === "primary" ? "Primary" : "Secondary"}
-            </Badge>
-            <Badge variant="outline" className="text-[10px]">
-              {tagCount} tag{tagCount === 1 ? "" : "s"}
             </Badge>
           </div>
 
@@ -408,7 +405,7 @@ export default function AdminVehiclesPage() {
       {filtered.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((fund) => (
-            <VehicleCard key={fund.id} fund={fund} tagCount={fund.tags.length} />
+            <VehicleCard key={fund.id} fund={fund} />
           ))}
         </div>
       )}
