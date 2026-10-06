@@ -1,0 +1,103 @@
+%%{init: {"theme":"base","flowchart":{"nodeSpacing":30,"rankSpacing":50,"curve":"basis","htmlLabels":true},"themeVariables":{"fontFamily":"Arial","fontSize":"16px","primaryTextColor":"#193b4b","lineColor":"#78909c"}}}%%
+flowchart LR
+subgraph GROUP2["GROUP 2 · C4 ALIGNED DEMO · 04–06"]
+direction LR
+subgraph FUNDING["04 · CASH RECEIPT AND MATCHING"]
+direction TB
+ F01["04-A · INVESTOR PORTAL: Checkout Funding<br/>View instructions and total including saved fee"]
+ F02["04-B · INVESTOR PORTAL: Declare transfer<br/>Payment declaration; not a bank receipt"]
+ F03["04-C · SHARED: Ops Investments<br/>Record fictional receipt<br/>Amount, currency and unique reference"]
+ F04["04-D · SHARED: Ops Investments<br/>Select receipt for this subscription<br/>Manual reference check; currency validated by command"]
+ F05{"04-E · Matching allowed?<br/>Valid unsuperseded receipt and currency<br/>Subscription at an allowed processing stage"}
+ F06["04-F · SHARED: Correct erroneous receipt<br/>Append correction to unmatched receipt<br/>Original stays in history"]
+ F07["04-G · SHARED: Match receipt<br/>Matched cash increases<br/>Active funding status becomes reconciliation<br/>Even if cash is still insufficient"]
+ F08{"04-H · AUTO CHECK AT ALLOCATION<br/>Full requested principal plus saved fee matched?<br/>All unsuperseded receipts resolved?"}
+ F09["04-I · Insufficient funding / unresolved receipt<br/>Allocation command is blocked<br/>Investor sees confirmed shortfall and declares additional transfer<br/>Ops still records and matches actual cash"]
+ F10["04-J · Cash requirements met<br/>LUCA can attempt allocation<br/>Subject to other investment checks"]
+ F11["04-K · AUTO: Late receipt matching<br/>If allocated or closed, reassess returns<br/>This branch occurs when receipt is matched"]
+ F01 --> F02
+ F02 -.->|Ops separately records cash; no bank integration| F03
+ F03 --> F04 --> F05
+ F05 -->|Receipt correction needed| F06 --> F04
+ F05 -->|Active funding record| F07 --> F08
+ F05 -->|Allocated or closed record| F11
+ F08 -->|Fail| F09
+ F09 -.->|Ops records additional cash if received| F03
+ F09 -.->|Resolve receipt error| F06
+ F08 -->|Pass| F10
+end
+subgraph ALLOCATION["05 · ALLOCATION AND ISSUANCE"]
+direction TB
+ A01["05-A · SHARED: LUCA allocation checks<br/>Active, not on hold, not cancelled<br/>No required-version acknowledgement outstanding<br/>Funding and receipt requirements met"]
+ A02{"05-B · Checks pass?"}
+ A03["05-C · Readiness list explains each blocker<br/>Command also validates the same rules"]
+ A04["05-D · SHARED: LUCA Investments<br/>Saved commercial terms shown for new records<br/>Priority is consideration; no automatic award"]
+ A05["05-E · Approve allocation<br/>Enter principal and illustrative class unit price<br/>Cannot exceed requested principal"]
+ A06{"05-F · Recorded principal"}
+ A07["05-G · Full allocation<br/>Principal and applicable fee recorded"]
+ A08["05-H · Partial allocation<br/>Fee retained proportionally"]
+ A09["05-I · Zero allocation<br/>Status not allocated; no holding issuable"]
+ A10["05-J · AUTO: Return obligation<br/>Matched cash less allocation and retained fee<br/>Create only if positive balance is owed"]
+ A11["05-K · SHARED: Ops issuance checks<br/>Positive allocation, active record<br/>No unresolved receipts or version acknowledgement"]
+ A12{"05-L · Checks pass?"}
+ A13["05-M · Issuance blocked<br/>Readiness list explains blocker; allocation remains recorded"]
+ A14["05-N · Confirm simulated registry issuance<br/>Creates holding; repeat does not duplicate<br/>Units displayed rounded to 2 decimals"]
+ A15["05-O · AUTO: Update linked records<br/>Holding ID saved; issuance task complete<br/>Return obligation remains independent"]
+ A01 --> A02
+ A02 -->|Fail| A03 -.->|Resolve and retry| A01
+ A02 -->|Pass| A04 --> A05 --> A06
+ A06 -->|Full| A07
+ A06 -->|Partial| A08
+ A06 -->|Zero| A09
+ A07 --> A11
+ A08 --> A11
+ A07 -.->|Any excess cash| A10
+ A08 -->|Unused cash| A10
+ A09 -->|Matched cash to return| A10
+ A11 --> A12
+ A12 -->|Fail| A13 -.->|Resolve and retry| A11
+ A12 -->|Pass| A14 --> A15
+end
+subgraph PORTFOLIO["06 · PORTFOLIO AND SERVICING"]
+direction TB
+ P01["06-A · AUTO: Issued holding<br/>Fund, company, units and allocated cost<br/>Initial current NAV equals allocated principal"]
+ P02["06-B · INVESTOR PORTAL: Portfolio<br/>Holdings, active subscriptions and outcomes<br/>Comparison Investments is a record view, not this portfolio"]
+ P03["06-C · SHARED: LUCA Reporting<br/>Append sourced valuation<br/>Value, source and as-of date"]
+ P04["06-D · AUTO: Update holding NAV<br/>Append dated valuation history<br/>Newest as-of date determines current NAV<br/>No publication approval queue"]
+ P05["06-E · INVESTOR PORTAL: Portfolio chart<br/>Recorded acquisition cost and dated reported values<br/>Date filters and actual time axis; no fabricated historical curve"]
+ P06["06-F · RM Reports / EAM Reports<br/>Client holdings grouped by company<br/>Also read-only shared Reporting views"]
+ P07["06-G · SHARED: Ops Reporting<br/>Company holdings and investor rows<br/>Units, cost, NAV and date<br/>No explicit legal vehicle-owner field"]
+ P08["06-H · INVESTOR PORTAL<br/>Investment updates, Documents and subscription activity<br/>Questions via Support; profile settings via Account"]
+ P09["06-I · SHARED: LUCA Reporting<br/>Append illustrative observation<br/>Offering-level price, source and currency"]
+ P10["06-J · SHARED: Reporting<br/>Experimental observations displayed separately<br/>No integration into investor portfolio NAV"]
+ P11["06-K · FUTURE ONLY<br/>Potential Zanbato data source<br/>No connected live feed"]
+ P01 --> P02 --> P05
+ P01 --> P03 --> P04
+ P04 -.->|Investor portfolio polls updated holding values| P02
+ P01 --> P06
+ P01 --> P07
+ P04 -.->|Shared views poll; normal reports refresh through query| P06
+ P04 -.->|Updated report data| P07
+ P02 --> P08
+ P09 --> P10
+ P11 -.->|Potential design only| P10
+end
+ F10 --> A01
+ A03 -.->|Funding blocker| F09
+ F11 -.->|Reassess return balance| A10
+ A15 --> P01
+end
+classDef portal fill:#eaf2f7,stroke:#7498aa,color:#193b4b;
+classDef shared fill:#eaf1e7,stroke:#849d79,color:#29442b;
+classDef model fill:#fff5e3,stroke:#b9a16e,color:#594820;
+classDef gap fill:#f9ece8,stroke:#c29586,color:#70483d;
+classDef future fill:#f0ebf6,stroke:#a08bb5,color:#513e65,stroke-dasharray:5 5;
+class F01,F02,P02,P05,P06,P08 portal;
+class F03,F04,F06,A04,A05,A14,P03,P07,P09,P10 shared;
+class F05,F07,F08,F10,F11,A01,A02,A06,A07,A08,A09,A10,A11,A12,A15,P01,P04 model;
+class F09,A03,A13 gap;
+class P11 future;
+style GROUP2 fill:#edf5fc,stroke:#568ab5,stroke-width:3px
+style FUNDING fill:#ffffff,stroke:#b7c9d1
+style ALLOCATION fill:#ffffff,stroke:#b7c9d1
+style PORTFOLIO fill:#ffffff,stroke:#b7c9d1

@@ -1,0 +1,59 @@
+%%{init: {"theme":"base","flowchart":{"nodeSpacing":25,"rankSpacing":35,"htmlLabels":true}}}%%
+flowchart TB
+subgraph GROUP4["GROUP 4 · DEMAND, CLIENT SERVICING AND DEMO CONTROLS"]
+direction TB
+subgraph DEMAND["10 · COMPANY DEMAND AND SOURCING"]
+direction LR
+ A["10-A · Investor requests another company<br/>Enter company and optional indicative amount"]
+ B["10-B · Save nonbinding interest<br/>Same investor cannot duplicate the same company request"]
+ C["10-C · Ops and LUCA inspect demand by company<br/>Investor counts and indicative amounts<br/>Demo includes fictional sample demand"]
+ D["10-D · Ops marks Shared with LUCA<br/>Record a sourcing handoff event"]
+ E["10-E · Ops or LUCA updates company status<br/>Under review or Not currently available<br/>All requests for that company update together"]
+ F{"10-F · Is a matching company offering<br/>published and open on the platform?"}
+ G["10-G · Link offering and mark Opportunity available<br/>Investor can open the linked deal<br/>Normal access and application checks still apply"]
+ H["10-H · Demand remains a sourcing request<br/>No guaranteed supply, reservation or investment"]
+ A --> B --> C --> D --> E --> F
+ F -->|Yes| G
+ F -->|No| H
+ H -.->|Staff checks again later| E
+end
+subgraph RELATIONSHIPS["11 · CLIENT FOLLOW-UPS AND EAM REVENUE"]
+direction LR
+ I["11-A · LUCA assigns an RM to an investor<br/>RM searches the assigned client book"]
+ J["11-B · RM expands a client task list<br/>See client actions across their investment applications"]
+ K["11-C · RM saves a private follow-up<br/>Note and optional due date"]
+ L["11-D · RM marks private follow-up complete<br/>Does not complete the investor investment action"]
+ M["11-E · RM sends one client reminder<br/>Creates a tracked client case<br/>Can cover several deals; not an email broadcast"]
+ N["11-F · EAM opens Revenue<br/>Use that firm client holdings and allocated applications<br/>Do not count an issued application again as a holding"]
+ O["11-G · Calculate illustrative EAM share<br/>Investment amount x firm client-fee percentage<br/>x firm revenue-share percentage"]
+ P["11-H · Show revenue rows and totals<br/>Paid, Accrued and Pending labels are simulated<br/>No payout approval or money transfer workflow"]
+ I --> J
+ J --> K --> L
+ J --> M
+ N --> O --> P
+end
+subgraph SUPPORT["12 · TRACKED SUPPORT AND DEMO CONTROLS"]
+direction LR
+ Q["12-A · Investor, RM, EAM or staff raises a case<br/>Choose client where applicable<br/>Optionally link investment or holding; write question"]
+ R["12-B · Save case and route to responsible team<br/>Case reference, owner and message history<br/>Only permitted client records can be selected"]
+ S["12-C · Participants open the case and reply<br/>Replies remain in the shared case history"]
+ T["12-D · Responsible team marks case resolved"]
+ U["12-E · A later reply reopens the case<br/>Keep earlier messages and resolution history"]
+ V["12-F · Open Compare roles live<br/>Four panes in a 2 x 2 layout<br/>Select a persona and surface independently in each pane"]
+ W["12-G · Perform a permitted demo action<br/>Other panes refresh the same shared records<br/>Selected workflow surfaces, not every full portal screen"]
+ X["12-H · Optional Reset demo<br/>Click Reset demo, then confirm Reset all<br/>Clear saved workflow demo state and reload"]
+ Q --> R --> S --> T
+ T -->|New reply| U --> S
+ V --> W
+ W -.->|Start the demo again| X
+end
+ M -->|Client reminder becomes a case| R
+end
+classDef action fill:#eaf2f7,stroke:#7498aa,color:#193b4b;
+classDef record fill:#fff5e3,stroke:#b9a16e,color:#594820;
+class A,C,D,E,I,J,K,L,M,N,Q,S,T,V,W,X action;
+class B,F,G,H,O,P,R,U record;
+style GROUP4 fill:#edf5fc,stroke:#568ab5,stroke-width:3px
+style DEMAND fill:#ffffff,stroke:#b7c9d1
+style RELATIONSHIPS fill:#ffffff,stroke:#b7c9d1
+style SUPPORT fill:#ffffff,stroke:#b7c9d1

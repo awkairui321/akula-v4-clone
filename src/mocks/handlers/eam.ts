@@ -1,4 +1,6 @@
 import { workflow } from "../workflow";
+import { mayDiscover } from "../investor-access";
+import { findUserById } from "../db";
 import { clientCode } from "@/lib/client-code";
 import { http, HttpResponse } from "msw";
 import {
@@ -66,6 +68,9 @@ function clientSubscriptions(investorId: number) {
       amount: s.amount,
       status: s.status,
       subscription_fee: s.subscription_fee,
+      holding_id: s._convertedToHoldingId,
+      on_hold: s.on_hold,
+      information_request_note: s.information_request_note,
       reserved_at: s.reserved_at,
       confirmed_at: s.confirmed_at,
     }));
@@ -468,6 +473,12 @@ export const eamHandlers = [
     if (!client || client.eam_user_id !== user.id || !fund || fund.state !== "open") {
       return HttpResponse.json({ error: "Client and fund are required" }, { status: 422 });
     }
+    const recipient = findUserById(client.investor_id);
+    if (!recipient || !mayDiscover(recipient, fund.id))
+      return HttpResponse.json(
+        { error: "This deal is unavailable under the client's investor profile." },
+        { status: 422 },
+      );
     const highlight = {
       id: nextHighlightId(),
       adviser_client_id: client.id,

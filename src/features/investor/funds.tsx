@@ -1,3 +1,4 @@
+import InvestorSegmentControl from "@/components/investor-segment-control";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -211,11 +212,12 @@ export default function FundsPage() {
 
   return (
     <div className="opportunities-view flex flex-col gap-4">
+      <InvestorSegmentControl />
       <div className="space-y-1">
         <p className="opportunities-eyebrow">YOUR INVESTMENT WORKSPACE</p>
         <h1 className="text-4xl font-medium tracking-tight">Find your next opportunity.</h1>
         <p className="max-w-2xl text-muted-foreground">
-          The full published LUCA shelf, with terms and source-backed company information for every
+          Your available LUCA shelf, with terms and source-backed company information for each
           available deal.
         </p>
       </div>

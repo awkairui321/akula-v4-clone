@@ -31,8 +31,8 @@ export default function LandingPage() {
             <span className="front-door-serif">A more considered view.</span>
           </h1>
           <p className="max-w-xl text-lg leading-8 text-[#587180]">
-            Explore the full published LUCA opportunity shelf, understand the terms and follow a
-            simulated investment from request through portfolio reporting.
+            Explore the LUCA opportunities available to your investor profile, understand the terms
+            and follow a simulated investment from request through portfolio reporting.
           </p>
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <Link to="/login">

@@ -35,7 +35,7 @@ const OVERDUE_DAYS = 5;
 const DAY = 24 * 60 * 60 * 1000;
 
 /** Open subscriptions only: finished and closed ones live on the History page. */
-const isActive = (s: AdminSubscription) => stageOfStatus(s.status) !== undefined;
+const isActive = (s: AdminSubscription) => !s.holding_id && stageOfStatus(s.status) !== undefined;
 
 /** When the subscription entered its current stage, for "waiting" ages. */
 function stageSince(s: AdminSubscription): string | null {
@@ -238,7 +238,7 @@ function DecisionDialog({
   );
 }
 
-/* ─── The subscriptions page: four stages, worked from the top ─── */
+/* ─── The subscriptions page: active stages, worked from the top ─── */
 
 // Fixed last column keeps every row's columns aligned whatever buttons it carries.
 const GRID =
@@ -379,7 +379,7 @@ export default function AdminSubscriptionsPage() {
         </div>
       </div>
 
-      {/* The four stages of a subscription */}
+      {/* Active stages of a subscription */}
       <div
         role="tablist"
         aria-label="Subscription stage"

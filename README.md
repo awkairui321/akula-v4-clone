@@ -2,7 +2,7 @@
 
 The existing v4 application now connects investors, LUCA fund managers, Akula Ops, relationship managers and external institutions through shared browser-local records.
 
-See [integration and demo accounts](docs/INTEGRATION.md) and [verification results](docs/VERIFICATION.md).
+See [integration and demo accounts](docs/INTEGRATION.md), [C4 guide alignment](docs/C4_GUIDE_ALIGNMENT.md), and [verification results](docs/VERIFICATION.md).
 
 ## Run locally
 

@@ -451,6 +451,15 @@ export function SubscriptionDialog({
             <p className="text-muted-foreground">{STAGE_GUIDANCE[subscription.status]}</p>
           </div>
 
+          {subscription.information_response_note && (
+            <div className="border-y py-3 text-sm">
+              <p className="font-medium">Response received</p>
+              <p>{subscription.information_response_note}</p>
+              <p className="text-xs text-muted-foreground">
+                {subscription.information_responded_at}
+              </p>
+            </div>
+          )}
           {subscription.information_request_note && (
             <div className="rounded-lg border border-dashed p-3 text-sm">
               <p className="font-medium">Information requested</p>
@@ -606,7 +615,7 @@ export function SubscriptionDialog({
           )}
         </div>
 
-        {!isClosed && (
+        {!isClosed && !subscription.holding_id && (
           <button
             onClick={() => hold.mutate(!subscription.on_hold)}
             disabled={hold.isPending}

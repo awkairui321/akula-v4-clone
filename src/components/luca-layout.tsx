@@ -25,15 +25,38 @@ import {
 const NAV_ITEMS = [
   { to: "/luca", label: "Dashboard", icon: LayoutDashboard },
   { to: "/luca/deals", label: "Deals", icon: TrendingUp },
+  { to: "/luca/publication", label: "Publication", icon: ShieldCheckIcon },
   { to: "/luca/onboarding", label: "Onboarding", icon: UserCheckIcon },
   { to: "/luca/subscriptions", label: "Subscriptions", icon: CreditCard },
-  { to: "/luca/partners", label: "Partners", icon: Building2Icon },
+  { to: "/luca/clients", label: "Clients and follow ups", icon: UserCheckIcon },
+  { to: "/luca/opportunities", label: "Opportunities", icon: TrendingUp },
+  { to: "/luca/partners", label: "Partner client book", icon: Building2Icon },
+  { to: "/luca/reports", label: "Client reports", icon: TrendingUp },
+  { to: "/luca/client-documents", label: "Client documents", icon: ShieldCheckIcon },
+  { to: "/luca/support", label: "Support", icon: MailIcon },
   { to: "/luca/compliance", label: "Compliance", icon: ShieldCheckIcon },
   { to: "/luca/communications", label: "Communications", icon: MailIcon },
 ];
 
 export default function LucaLayout() {
   const { logout, user } = useAuth();
+  const isRm = user?.role === "rm";
+  const isTeam = user?.role === "investment_team";
+  const home = isRm ? "/rm" : isTeam ? "/luca/deals" : "/luca";
+  const roleLabel = isRm ? "LUCA · RM" : isTeam ? "LUCA · Investment Team" : "LUCA · Fund Manager";
+  const navItems = isRm
+    ? [
+        { to: "/rm", label: "Overview", icon: LayoutDashboard },
+        { to: "/rm/clients", label: "Clients and follow ups", icon: UserCheckIcon },
+        { to: "/rm/opportunities", label: "Opportunities", icon: TrendingUp },
+        { to: "/rm/partners", label: "Partner client book", icon: Building2Icon },
+        { to: "/rm/documents", label: "Documents", icon: ShieldCheckIcon },
+        { to: "/rm/reports", label: "Reports", icon: TrendingUp },
+        { to: "/rm/support", label: "Support", icon: MailIcon },
+      ]
+    : isTeam
+      ? NAV_ITEMS.filter((item) => ["/luca/deals", "/luca/publication"].includes(item.to))
+      : NAV_ITEMS;
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
@@ -47,11 +70,11 @@ export default function LucaLayout() {
   }, []);
 
   const activeItem =
-    NAV_ITEMS.find(
+    navItems.find(
       (item) =>
         location.pathname === item.to ||
-        (item.to !== "/luca" && location.pathname.startsWith(`${item.to}/`)),
-    ) ?? (location.pathname === "/luca" ? NAV_ITEMS[0] : undefined);
+        (item.to !== home && location.pathname.startsWith(`${item.to}/`)),
+    ) ?? (location.pathname === home ? navItems[0] : undefined);
 
   const initials = user?.email ? user.email[0].toUpperCase() : "~";
 
@@ -60,18 +83,18 @@ export default function LucaLayout() {
       <aside
         className={`akula-sidebar ${collapsed ? "w-16" : "w-40 md:w-56"} flex shrink-0 flex-col border-r transition-all`}
       >
-        <Link to="/luca" className="mt-1 px-3 py-4">
+        <Link to={home} className="mt-1 px-3 py-4">
           <div className={`flex flex-row ${collapsed ? "justify-center" : ""}`}>
             <Circle className={collapsed ? "" : "mx-2"} />
             {!collapsed && (
               <div className="text-[11px] font-semibold tracking-[0.16em] uppercase">
-                LUCA · FUND MANAGER
+                {roleLabel}
               </div>
             )}
           </div>
         </Link>
         <nav className="flex flex-col gap-1 px-3 py-4">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <Link key={item.to} to={item.to}>
               <Button
                 variant={activeItem?.to === item.to ? "secondary" : "ghost"}
@@ -88,10 +111,10 @@ export default function LucaLayout() {
         <div className="mt-auto border">
           <div
             className={`flex flex-row items-center px-3 py-4 ${collapsed ? "justify-center" : ""}`}
-            title={collapsed ? "LUCA SGP" : undefined}
+            title={collapsed ? roleLabel : undefined}
           >
             <span className={`h-2 w-2 rounded-full bg-blue-500 ${collapsed ? "" : "mr-2"}`} />
-            {!collapsed && "LUCA SGP · Fund Manager"}
+            {!collapsed && roleLabel}
           </div>
         </div>
       </aside>
@@ -124,9 +147,6 @@ export default function LucaLayout() {
               />
               <DropdownMenuContent>
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => navigate("/luca")}>
-                    Command Dashboard
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>

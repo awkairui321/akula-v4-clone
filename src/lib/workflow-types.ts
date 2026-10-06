@@ -1,6 +1,7 @@
+import type { CommercialTerms } from "./investor-access";
 import type { Fund, SubscriptionStatus } from "./types";
 
-export type StaffRole = "luca" | "ops" | "rm";
+export type StaffRole = "luca" | "investment_team" | "ops" | "rm";
 export type Receipt = {
   id: number;
   subscriptionId: number;
@@ -134,6 +135,7 @@ export type WorkflowView = WorkflowState & {
     eamFirm?: string | null;
   }[];
   subscriptions: {
+    commercial_terms?: CommercialTerms;
     id: number;
     investor_id: number;
     investor_name: string;
@@ -141,9 +143,18 @@ export type WorkflowView = WorkflowState & {
     asset_name: string;
     amount: string;
     subscription_fee: string;
+    payment_reference: string;
     currency: string;
     status: SubscriptionStatus;
     needsReview?: number;
+    allocationBlockers: string[];
+    issuanceBlockers: string[];
+    on_hold: boolean;
+    information_request_note: string | null;
+    information_response_note?: string | null;
+    information_responded_at?: string | null;
+    topup_declared_at?: string | null;
+    topup_matched_amount?: number;
     holdingId: number | null;
   }[];
   holdings: {

@@ -103,7 +103,13 @@ function OverviewTab({ detail, highlights }: { detail: ClientDetail; highlights:
                   {formatPrice(
                     detail.holdings.reduce((sum, h) => sum + parseFloat(h.committed_amount), 0) +
                       detail.subscriptions
-                        .filter((s) => s.status !== "cancelled")
+                        .filter(
+                          (s) =>
+                            !s.holding_id &&
+                            !["cancelled", "rejected", "funds_returned", "not_allocated"].includes(
+                              s.status,
+                            ),
+                        )
                         .reduce((sum, s) => sum + parseFloat(s.amount), 0),
                   )}
                 </dd>
@@ -274,7 +280,47 @@ function OverviewTab({ detail, highlights }: { detail: ClientDetail; highlights:
   );
 }
 
+function InstitutionResponse({ subscription }: { subscription: ClientSubscription }) {
+  const [text, setText] = useState("");
+  const qc = useQueryClient();
+  const response = useMutation({
+    mutationFn: () =>
+      api("/api/v1/workflows", {
+        method: "POST",
+        body: { type: "respond-information", id: subscription.id, text },
+      }),
+    onSuccess: () => {
+      setText("");
+      qc.invalidateQueries();
+    },
+  });
+  return (
+    <div className="mt-2 space-y-2">
+      <p className="text-xs">{subscription.information_request_note}</p>
+      <Textarea
+        aria-label="Response to LUCA"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <Button
+        size="sm"
+        disabled={!text.trim() || response.isPending || subscription.on_hold}
+        onClick={() => response.mutate()}
+      >
+        Submit response to LUCA
+      </Button>
+      {response.isError && <p role="alert">{response.error.message}</p>}
+    </div>
+  );
+}
+
 function HoldingsTab({ detail }: { detail: ClientDetail }) {
+  const queryClient = useQueryClient();
+  const review = useMutation({
+    mutationFn: (id: number) =>
+      api("/api/v1/workflows", { method: "POST", body: { type: "institution-review", id } }),
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
   const holdings = detail.holdings;
   const subscriptions = detail.subscriptions;
 
@@ -282,7 +328,11 @@ function HoldingsTab({ detail }: { detail: ClientDetail }) {
   const nav = holdings.reduce((sum, h) => sum + parseFloat(h.current_nav), 0);
   const distributions = holdings.reduce((sum, h) => sum + parseFloat(h.distributions), 0);
   const activeSubs = subscriptions
-    .filter((s) => s.status !== "cancelled")
+    .filter(
+      (s) =>
+        !s.holding_id &&
+        !["cancelled", "rejected", "funds_returned", "not_allocated"].includes(s.status),
+    )
     .reduce((sum, s) => sum + parseFloat(s.amount), 0);
 
   return (
@@ -333,7 +383,16 @@ function HoldingsTab({ detail }: { detail: ClientDetail }) {
       <Separator />
 
       <div>
-        <h3 className="mb-3 text-base font-semibold">Subscriptions</h3>
+        <h3 className="mb-3 text-base font-semibold">Subscriptions & institution review</h3>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Review your client's signed application before sending it to LUCA. LUCA makes the
+          subscription decision; Akula Ops handles cash and issuance.
+        </p>
+        {review.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {review.error.message}
+          </p>
+        )}
         {subscriptions.length === 0 ? (
           <p className="text-sm text-muted-foreground">No subscriptions yet.</p>
         ) : (
@@ -359,6 +418,18 @@ function HoldingsTab({ detail }: { detail: ClientDetail }) {
                   <Badge variant="secondary" className="text-[10px]">
                     {s.status}
                   </Badge>
+                  {s.status === "institution_review" && (
+                    <Button
+                      size="sm"
+                      className="mt-2"
+                      disabled={review.isPending || s.on_hold}
+                      onClick={() => review.mutate(s.id)}
+                    >
+                      Complete institution review
+                    </Button>
+                  )}
+                  {s.on_hold && <p className="text-xs">On hold by LUCA</p>}
+                  {s.status === "information_requested" && <InstitutionResponse subscription={s} />}
                 </span>
               </div>
             ))}
@@ -660,6 +731,7 @@ export default function ClientDetailPage() {
 
   const { data: detail, isLoading } = useQuery({
     queryKey: ["eamClient", id],
+    refetchInterval: 2000,
     queryFn: () => api<ClientDetail>(`/api/v1/eam/clients/${id}`),
     enabled: !!id,
   });

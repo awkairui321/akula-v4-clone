@@ -118,6 +118,9 @@ export type EamReportRow = ClientHolding & {
 };
 
 export type ClientSubscription = {
+  holding_id: number | null;
+  on_hold: boolean;
+  information_request_note: string | null;
   id: number;
   fund_id: number;
   fund_name: string;

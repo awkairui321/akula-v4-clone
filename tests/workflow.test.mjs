@@ -7,6 +7,9 @@ import ts from "typescript";
 const out = path.resolve(".test-runtime");
 for (const file of [
   "src/lib/types.ts",
+  "src/lib/permissions.ts",
+  "src/lib/investor-access.ts",
+  "src/mocks/investor-access.ts",
   "src/lib/client-code.ts",
   "src/mocks/db.ts",
   "src/mocks/workflow.ts",
@@ -50,6 +53,71 @@ const manager = () => db.users.find((u) => u.role === "luca"),
   rm = () => db.users.find((u) => u.id === 6),
   investor = () => db.users.find((u) => u.id === 2);
 const funded = () => db.subscriptions.find((s) => s.status === "allocation_pending");
+test("commercial profiles filter discovery and new subscriptions, preserving historic access and fees", async () => {
+  const user = investor();
+  const base = Number(w.currentVersion(1).snapshot.subscription_fee_pct);
+  assert.equal(
+    (await request("demo/investor-segment", user, "PATCH", { segment: "independent" })).status,
+    200,
+  );
+  const shelf = await (await request("funds", user)).json();
+  assert.deepEqual(
+    shelf.funds.map((f) => f.id),
+    [1, 3, 4],
+  );
+  assert.equal(Number(shelf.funds[0].subscription_fee_pct), base + 1);
+  assert.equal(
+    (await request("subscriptions", user, "POST", { fund_id: 2, amount: "25000" })).status,
+    403,
+  );
+  const historical = await (await request("funds/2", user)).json();
+  assert.equal(historical.fund.investor_access.canSubscribe, false);
+  const created = await (
+    await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" })
+  ).json();
+  assert.equal(Number(created.subscription.subscription_fee), (25000 * (base + 1)) / 100);
+  await request("demo/investor-segment", user, "PATCH", { segment: "partner_referred" });
+  const expanded = await (await request("funds", user)).json();
+  assert.deepEqual(
+    expanded.funds.map((f) => f.id),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  );
+  assert.equal(Number(expanded.funds[0].subscription_fee_pct), base);
+  const saved = await (await request(`subscriptions/${created.subscription.id}`, user)).json();
+  assert.equal(saved.subscription.commercial_terms.segment, "independent");
+  assert.equal(saved.subscription.subscription_fee, created.subscription.subscription_fee);
+  assert.equal(Number(w.currentVersion(1).snapshot.subscription_fee_pct), base);
+  const partner = await (
+    await request("subscriptions", user, "POST", { fund_id: 2, amount: "25000" })
+  ).json();
+  assert.equal(partner.subscription.commercial_terms.allocationPriority, "partner_priority");
+});
+test("profile change cannot bypass KYC or client scope; onboarding channel controls profile", async () => {
+  const user = investor();
+  await request("demo/investor-segment", user, "PATCH", { segment: "partner_referred" });
+  await request("investor_profile", user, "PATCH", { investor_profile: { channel: "direct" } });
+  assert.equal(
+    (await (await request("demo/investor-segment", user)).json()).segment,
+    "independent",
+  );
+  await request("investor_profile", user, "PATCH", {
+    investor_profile: { channel: "eam_referred", referral_code: "MERIDIAN" },
+  });
+  assert.equal(
+    (await (await request("demo/investor-segment", user)).json()).segment,
+    "partner_referred",
+  );
+  const before = w.clientsFor(user);
+  await request("demo/investor-segment", user, "PATCH", { segment: "independent" });
+  assert.deepEqual(w.clientsFor(user), before);
+  user.kyc_status = "not_started";
+  await request("demo/investor-segment", user, "PATCH", { segment: "partner_referred" });
+  assert.equal((await request("funds", user)).status, 403);
+  assert.equal(
+    (await request("subscriptions", user, "POST", { fund_id: 2, amount: "25000" })).status,
+    422,
+  );
+});
 async function request(route, user, method = "GET", body) {
   const request = new Request("http://localhost:3000/api/v1/" + route, {
     method,
@@ -202,11 +270,12 @@ test("refund API creates a cancellation/obligation without claiming money return
   assert.equal(s.status, "cancelled");
 });
 test("support persists a scoped reference and actual staff reply", () => {
-  w.command(investor(), { type: "case", text: "Where is my issuance?", status: "ops" });
+  w.command(investor(), { type: "case", text: "Where is my issuance?" });
   const c = w.workflow.cases.at(-1);
   assert.ok(c.id);
-  assert.equal(w.view(ops()).cases.at(-1).id, c.id);
-  w.command(ops(), { type: "reply", id: c.id, text: "We are checking registry evidence." });
+  assert.equal(c.owner, "rm");
+  assert.equal(w.view(rm()).cases.at(-1).id, c.id);
+  w.command(rm(), { type: "reply", id: c.id, text: "We are checking registry evidence." });
   assert.equal(w.view(investor()).cases.at(-1).messages.length, 2);
   assert.equal(w.view(db.users.find((u) => u.id === 3)).cases.length, 0);
 });
@@ -288,7 +357,9 @@ test("revised published version gates allocation until exact investor acknowledg
 
 test("new identities cannot read published documents before disclosure access", () => {
   const fresh = db.users.find((u) => u.id === 3);
+  fresh.investor_segment = "partner_referred";
   assert.equal(w.view(fresh).versions.length, 0);
+  investor().investor_segment = "partner_referred";
   assert.equal(
     w.view(investor()).versions.length,
     db.funds.filter((f) => f.state !== "draft").length,
@@ -328,6 +399,7 @@ test("legacy EAM discussions and shared cases exchange the same messages", async
 });
 
 test("drafts stay hidden, require manager approval, and appear only after Ops publication", async () => {
+  investor().investor_segment = "partner_referred";
   const res = await request("funds", manager(), "POST", {
     fund: { company_name: "Canva", codename: "Canva Demo", target_amount: 100000 },
   });
@@ -427,4 +499,440 @@ test("adviser cases may link an owned holding but reject another client's holdin
       }),
     /Holding not found/,
   );
+});
+
+test("institution review and information-response loop respect client ownership and holds", async () => {
+  const adviser = db.users.find((u) => u.id === 4);
+  const sub = db.subscriptions.find(
+    (s) =>
+      s.status === "institution_review" &&
+      db.adviserClients.some(
+        (c) => c.investor_id === s.investor_id && c.eam_user_id === adviser.id,
+      ),
+  );
+  assert.ok(sub);
+  assert.throws(() => w.command(rm(), { type: "institution-review", id: sub.id }), /institution/);
+  db.findSubscriptionById(sub.id).on_hold = true;
+  assert.throws(
+    () => w.command(adviser, { type: "institution-review", id: sub.id }),
+    /not available/,
+  );
+  db.findSubscriptionById(sub.id).on_hold = false;
+  w.command(adviser, { type: "institution-review", id: sub.id });
+  assert.equal(db.findSubscriptionById(sub.id).status, "under_luca_review");
+  w.command(manager(), {
+    type: "subscription-decision",
+    id: sub.id,
+    status: "information_requested",
+    text: "Please explain the source of funds",
+  });
+  assert.throws(
+    () =>
+      w.command(investor(), { type: "respond-information", id: sub.id, text: "Wrong investor" }),
+    /not found|Assigned|Investor/,
+  );
+  assert.throws(
+    () => w.command(adviser, { type: "respond-information", id: sub.id, text: " " }),
+    /description/,
+  );
+  // Failed commands restore records; reload the object reference.
+  const current = db.findSubscriptionById(sub.id);
+  const owner = { ...investor(), id: current.investor_id, email: current.investor_email };
+  db.users.push(owner);
+  const result = await request(`subscriptions/${current.id}/information_response`, owner, "POST", {
+    text: "Proceeds from employment savings",
+  });
+  assert.equal(result.status, 200);
+  const updated = db.findSubscriptionById(current.id);
+  assert.equal(updated.status, "under_luca_review");
+  assert.equal(updated.information_response_note, "Proceeds from employment savings");
+  assert.ok(updated.information_responded_at);
+  assert.equal(
+    (
+      await request(`subscriptions/${updated.id}/information_response`, owner, "POST", {
+        text: "Duplicate",
+      })
+    ).status,
+    422,
+  );
+  w.command(manager(), { type: "subscription-decision", id: updated.id, status: "approved" });
+  assert.equal(db.findSubscriptionById(updated.id).status, "approved");
+});
+
+test("validated referral binds new client to the matching institution without granting eligibility", async () => {
+  const fresh = db.users.find((u) => u.id === 3);
+  const invalid = await request("investor_profile", fresh, "PATCH", {
+    investor_profile: { channel: "eam_referred", referral_code: "INVALID" },
+  });
+  assert.equal(invalid.status, 422);
+  assert.ok(!db.adviserClients.some((c) => c.investor_id === fresh.id));
+  const valid = await request("investor_profile", fresh, "PATCH", {
+    investor_profile: { channel: "eam_referred", referral_code: "meridian" },
+  });
+  assert.equal(valid.status, 200);
+  assert.equal(db.findInvestorProfileByUserId(fresh.id).eam_firm, "Meridian Capital Advisors");
+  assert.ok(db.adviserClients.some((c) => c.investor_id === fresh.id && c.eam_user_id === 4));
+  assert.equal(fresh.kyc_status, "not_started");
+  assert.equal((await request("funds", fresh)).status, 403);
+  assert.equal(
+    (
+      await request("investor_profile", fresh, "PATCH", {
+        investor_profile: { referral_code: "STRAITS-FO" },
+      })
+    ).status,
+    422,
+  );
+});
+
+test("reported NAV history is investor scoped and backdated observations do not replace newer values", async () => {
+  const h = db.holdings.find((h) => h.investor_id === investor().id && h.state !== "realized");
+  const old = Number(h.current_nav);
+  w.command(manager(), {
+    type: "valuation",
+    id: h.id,
+    amount: old + 1000,
+    text: "Latest report",
+    due: new Date().toISOString(),
+  });
+  w.command(manager(), {
+    type: "valuation",
+    id: h.id,
+    amount: old - 1000,
+    text: "Earlier report",
+    due: "2025-12-01T00:00:00.000Z",
+  });
+  assert.equal(Number(db.holdings.find((row) => row.id === h.id).current_nav), old + 1000);
+  const result = await (await request("portfolio/history", investor())).json();
+  const latest = result.history.at(-1);
+  assert.equal(
+    latest.nav,
+    db.holdings
+      .filter((row) => row.investor_id === investor().id && row.state !== "realized")
+      .reduce((sum, row) => sum + Number(row.current_nav), 0),
+  );
+  const foreign = db.users.find((u) => u.id === 3);
+  assert.equal((await (await request("portfolio/history", foreign)).json()).history.at(-1).nav, 0);
+});
+
+test("readiness blockers are exposed and hold prevents approval or allocation", () => {
+  const s = funded();
+  w.command(manager(), { type: "subscription-hold", id: s.id, status: "held" });
+  assert.ok(
+    w
+      .view(manager())
+      .subscriptions.find((row) => row.id === s.id)
+      .allocationBlockers.some((text) => text.includes("hold")),
+  );
+  assert.throws(
+    () =>
+      w.command(manager(), { type: "allocate", id: s.id, amount: Number(s.amount), price: 100 }),
+    /hold/,
+  );
+  w.command(manager(), { type: "subscription-hold", id: s.id, status: "released" });
+  assert.equal(w.investmentBlockers(db.findSubscriptionById(s.id)).length, 0);
+});
+
+test("funding top-up declaration requires confirmed shortfall and does not create cash", () => {
+  const sub = db.subscriptions.find(
+    (s) => s.investor_id === investor().id && s.status === "awaiting_funds",
+  );
+  const reference = `partial-${sub.id}`;
+  w.command(ops(), { type: "receipt", id: sub.id, amount: 1000, currency: "USD", text: reference });
+  const receipt = w.workflow.receipts.find((r) => r.reference === reference);
+  w.command(ops(), { type: "match", id: sub.id, target: receipt.id });
+  const count = w.workflow.receipts.length;
+  w.command(investor(), { type: "declare-topup", id: sub.id });
+  assert.equal(w.workflow.receipts.length, count);
+  assert.equal(w.matched(sub.id), 1000);
+  assert.ok(db.findSubscriptionById(sub.id).topup_declared_at);
+  assert.throws(
+    () => w.command(investor(), { type: "declare-topup", id: sub.id }),
+    /already awaiting/,
+  );
+});
+
+test("onboarding document submission preserves bytes, reaches LUCA and grants no eligibility", async () => {
+  const user = db.users.find((u) => u.id === 3);
+  const content = "data:application/pdf;base64,JVBERi0xLjQ=";
+  const uploaded = await request("onboarding/documents", user, "POST", {
+    name: "fictional-identity.pdf",
+    kind: "passport",
+    file_data_url: content,
+  });
+  assert.equal(uploaded.status, 200);
+  const id = (await uploaded.json()).document.id;
+  assert.equal(db.documents.find((doc) => doc.id === id).file_data_url, content);
+  assert.ok(db.verificationDocumentsByInvestor[user.id].some((doc) => doc.id === id));
+  assert.equal(user.kyc_status, "not_started");
+  const luca = await (await request(`admin/investors/${user.id}`, manager())).json();
+  assert.ok(luca.verification_documents.some((doc) => doc.id === id));
+  const foreign = await (await request("onboarding/documents", investor())).json();
+  assert.ok(!foreign.documents.some((doc) => doc.id === id));
+  assert.equal(
+    (
+      await request("onboarding/documents", user, "POST", {
+        name: "bad",
+        kind: "passport",
+        file_data_url: "invalid",
+      })
+    ).status,
+    422,
+  );
+});
+
+test("custom commercial fee is displayed, saved and retained through allocation and returns", async () => {
+  const user = investor();
+  db.investorPricing.push({
+    id: 999,
+    fund_id: 1,
+    investor_id: user.id,
+    price: "80",
+    subscription_fee_pct: "2.5",
+    management_fee_pct: null,
+    carried_interest_pct: null,
+    implied_valuation: null,
+    note: "Fictional custom terms",
+    updated_at: new Date().toISOString(),
+  });
+  await request("demo/investor-segment", user, "PATCH", { segment: "independent" });
+  const displayed = (await (await request("funds/1", user)).json()).fund;
+  assert.equal(Number(displayed.subscription_fee_pct), 3.5);
+  const response = await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" });
+  assert.equal(response.status, 200);
+  const created = (await response.json()).subscription;
+  assert.equal(Number(created.subscription_fee), 875);
+  assert.equal(Number(created.effective_terms.price), 80);
+  assert.equal(created.commercial_terms.subscriptionFeePct, displayed.subscription_fee_pct);
+  db.investorPricing.find((p) => p.id === 999).subscription_fee_pct = "1";
+  await request("demo/investor-segment", user, "PATCH", { segment: "partner_referred" });
+  const saved = (await (await request(`subscriptions/${created.id}`, user)).json()).subscription;
+  assert.equal(Number(saved.effective_terms.subscription_fee_pct), 3.5);
+  assert.equal(Number(saved.subscription_fee), 875);
+  const sub = db.findSubscriptionById(created.id);
+  w.recordSignature(sub, "Fictional investor signature");
+  sub.status = "awaiting_funds";
+  w.command(ops(), { type: "receipt", id: sub.id, amount: 25875, text: "CUSTOM-FEE-RECEIPT" });
+  const receipt = w.workflow.receipts.find((r) => r.reference === "CUSTOM-FEE-RECEIPT");
+  w.command(ops(), { type: "match", id: sub.id, target: receipt.id });
+  w.command(manager(), { type: "allocate", id: sub.id, amount: 12500, price: 100 });
+  const allocation = w.workflow.allocations.find((a) => a.subscriptionId === sub.id);
+  assert.equal(allocation.fee, 437.5);
+  assert.equal(w.workflow.returns.find((r) => r.subscriptionId === sub.id).amount, 12937.5);
+  w.command(ops(), { type: "issue", id: sub.id });
+  assert.equal(
+    db.holdings.find((h) => h.id === db.findSubscriptionById(sub.id)._convertedToHoldingId).units,
+    "125.00",
+  );
+});
+
+test("allocation and issuance recheck eligibility, signatures and insufficient confirmed cash", () => {
+  const sub = funded();
+  let user = db.findUserById(sub.investor_id);
+  user.kyc_status = "pending";
+  assert.throws(
+    () => w.command(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 }),
+    /eligibility/,
+  );
+  user = db.findUserById(sub.investor_id);
+  user.kyc_status = "approved";
+  const signature = w.workflow.signatures.find((row) => row.subscriptionId === sub.id);
+  w.workflow.signatures = w.workflow.signatures.filter((row) => row.subscriptionId !== sub.id);
+  assert.throws(
+    () => w.command(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 }),
+    /signature/,
+  );
+  w.workflow.signatures.push(signature);
+  w.command(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 });
+  assert.equal(db.toAdminSubscription(db.findSubscriptionById(sub.id)).holding_id, null);
+  user = db.findUserById(sub.investor_id);
+  user.kyc_status = "pending";
+  assert.throws(() => w.command(ops(), { type: "issue", id: sub.id }), /eligibility/);
+  user = db.findUserById(sub.investor_id);
+  user.kyc_status = "approved";
+  const receipt = w.workflow.receipts.find((row) => row.subscriptionId === sub.id && row.matched);
+  // Simulate an inconsistent restored funding record; issuance must still fail closed.
+  receipt.amount = 100;
+  assert.throws(() => w.command(ops(), { type: "issue", id: sub.id }), /Confirmed funding/);
+  assert.equal(db.findSubscriptionById(sub.id)._convertedToHoldingId, null);
+});
+
+test("communications stay unread until an actual direct recipient reads; scheduled messages cannot be read", async () => {
+  const response = await request("admin/communications", manager(), "POST", {
+    subject: "Fictional update",
+    body: "Audit test",
+    investor_ids: [2, 3],
+    routing: "direct",
+  });
+  assert.equal(response.status, 200);
+  const id = (await response.json()).communication.id;
+  const recipients = db.communicationRecipients.filter((r) => r.communication_id === id);
+  assert.equal(recipients.length, 2);
+  assert.ok(recipients.every((r) => r.delivered_at && r.opened_at === null));
+  assert.ok(
+    (await (await request("messages", investor())).json()).messages.some(
+      (m) => m.id === id && !m.read,
+    ),
+  );
+  assert.equal((await request(`messages/${id}/read`, investor(), "POST")).status, 200);
+  const readAt = recipients.find((r) => r.investor_id === 2).opened_at;
+  assert.ok(readAt);
+  await request(`messages/${id}/read`, investor(), "POST");
+  assert.equal(recipients.find((r) => r.investor_id === 2).opened_at, readAt);
+  assert.equal(recipients.find((r) => r.investor_id === 3).opened_at, null);
+  const scheduled = (
+    await (
+      await request("admin/communications", manager(), "POST", {
+        subject: "Future fictional update",
+        body: "Scheduled only",
+        investor_ids: [2],
+        routing: "direct",
+        send_at: new Date(Date.now() + 86400000).toISOString(),
+      })
+    ).json()
+  ).communication;
+  assert.equal((await request(`messages/${scheduled.id}/read`, investor(), "POST")).status, 404);
+});
+
+test("LUCA can hold an allocated unissued subscription and release it without changing allocation", async () => {
+  const sub = funded();
+  w.command(manager(), { type: "allocate", id: sub.id, amount: Number(sub.amount), price: 100 });
+  assert.equal(
+    (await request(`admin/subscriptions/${sub.id}/hold`, manager(), "PATCH", { on_hold: true }))
+      .status,
+    200,
+  );
+  assert.equal(db.findSubscriptionById(sub.id).status, "allocated");
+  assert.throws(() => w.command(ops(), { type: "issue", id: sub.id }), /hold/);
+  assert.equal(
+    (await request(`admin/subscriptions/${sub.id}/hold`, manager(), "PATCH", { on_hold: false }))
+      .status,
+    200,
+  );
+  w.command(ops(), { type: "issue", id: sub.id });
+  assert.ok(db.findSubscriptionById(sub.id)._convertedToHoldingId);
+  assert.equal(
+    (await request(`admin/subscriptions/${sub.id}/hold`, manager(), "PATCH", { on_hold: true }))
+      .status,
+    422,
+  );
+  assert.equal(db.findSubscriptionById(sub.id).on_hold, false);
+});
+
+test("existing declaration API supports a confirmed shortfall without recording cash", async () => {
+  const sub = db.subscriptions.find((s) => s.investor_id === 2 && s.status === "awaiting_funds");
+  w.command(ops(), { type: "receipt", id: sub.id, amount: 100, text: "API-TOPUP-RECEIPT" });
+  w.command(ops(), {
+    type: "match",
+    id: sub.id,
+    target: w.workflow.receipts.find((r) => r.reference === "API-TOPUP-RECEIPT").id,
+  });
+  const count = w.workflow.receipts.length;
+  assert.equal(
+    (await request(`subscriptions/${sub.id}`, investor(), "PATCH", { payment_declared: true }))
+      .status,
+    200,
+  );
+  assert.equal(w.workflow.receipts.length, count);
+  assert.equal(w.matched(sub.id), 100);
+  assert.equal(
+    (await request(`subscriptions/${sub.id}`, investor(), "PATCH", { payment_declared: true }))
+      .status,
+    422,
+  );
+});
+
+test("Investment Team publishes only after Fund Manager approval and cannot access client records", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  assert.deepEqual(w.clientsFor(team), []);
+  assert.equal(w.view(team).subscriptions.length, 0);
+  assert.equal(w.view(team).notes.length, 0);
+  assert.equal(
+    (await request("funds/1", team, "PATCH", { fund: { state: "closed" } })).status,
+    403,
+  );
+  w.command(team, { type: "prepare", id: 1 });
+  const version = w.workflow.versions.at(-1);
+  w.command(team, { type: "review", id: version.id });
+  assert.throws(() => w.command(team, { type: "approve", id: version.id }));
+  assert.throws(() => w.command(team, { type: "publish", id: version.id }));
+  assert.throws(() =>
+    w.command(team, { type: "allocate", id: funded().id, amount: 100, price: 100 }),
+  );
+  assert.equal((await request("admin/investors", team)).status, 403);
+  w.command(manager(), { type: "approve", id: version.id });
+  w.command(team, { type: "publish", id: version.id });
+  assert.equal(w.currentVersion(1).id, version.id);
+});
+
+test("Fund Manager has RM recommendations and private follow-ups", () => {
+  w.command(manager(), { type: "note", id: 2, text: "Call about the offering", due: "2026-10-10" });
+  assert.equal(w.view(manager()).notes.at(-1).text, "Call about the offering");
+  assert.equal(w.view(investor()).notes.length, 0);
+  w.command(manager(), {
+    type: "highlight",
+    id: 2,
+    target: 1,
+    text: "Consider this published offering",
+  });
+  const recommendation = w.view(investor()).highlights.at(-1);
+  assert.equal(recommendation.staffId, manager().id);
+  w.command(investor(), { type: "open-highlight", id: recommendation.id });
+  assert.ok(w.view(manager()).highlights.find((h) => h.id === recommendation.id).openedAt);
+});
+
+test("Investor support rejects alternate routing and missing RM assignments without creating cases", () => {
+  const count = w.workflow.cases.length;
+  for (const status of ["luca", "ops", "eam"]) {
+    assert.throws(
+      () => w.command(investor(), { type: "case", text: "Investment question", status }),
+      /assigned LUCA RM/,
+    );
+  }
+  assert.equal(w.workflow.cases.length, count);
+  w.workflow.assignments = w.workflow.assignments.filter((a) => a.investorId !== investor().id);
+  assert.throws(
+    () => w.command(investor(), { type: "case", text: "Investment question" }),
+    /No RM assigned/,
+  );
+  assert.equal(w.workflow.cases.length, count);
+});
+
+test("LUCA investor requests are email-only, while updates use email and inbox", async () => {
+  for (const purpose of ["request", "remind_sign", "remind_fund", "update"]) {
+    const response = await request("admin/communications", manager(), "POST", {
+      subject: `Delivery ${purpose}`,
+      body: "Demo message",
+      investor_ids: [2],
+      purpose,
+      delivery_channels: ["inbox"],
+      routing: "direct",
+    });
+    assert.equal(response.status, 200);
+    const communication = (await response.json()).communication;
+    const emailOnly = purpose !== "update";
+    assert.deepEqual(communication.delivery_channels, emailOnly ? ["email"] : ["email", "inbox"]);
+    const recipient = db.communicationRecipients.find(
+      (r) => r.communication_id === communication.id,
+    );
+    assert.equal(recipient.email_status, "pending_integration");
+    assert.equal(Boolean(recipient.delivered_at), !emailOnly);
+    const messages = (await (await request("messages", investor())).json()).messages;
+    assert.equal(
+      messages.some((m) => m.id === communication.id),
+      !emailOnly,
+    );
+    assert.equal(
+      (await request(`messages/${communication.id}/read`, investor(), "POST")).status,
+      emailOnly ? 404 : 200,
+    );
+  }
+});
+
+test("restoring an existing demo adds the Investment Team without resetting client data", () => {
+  const saved = db.exportDemoState();
+  saved.arrays.users = saved.arrays.users.filter((u) => u.role !== "investment_team");
+  saved.arrays.users.find((u) => u.id === 2).email = "preserved@example.com";
+  db.restoreDemoState(saved);
+  assert.equal(db.users.find((u) => u.id === 2).email, "preserved@example.com");
+  assert.equal(db.users.filter((u) => u.role === "investment_team").length, 1);
 });

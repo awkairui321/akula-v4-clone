@@ -1,3 +1,4 @@
+import type { CommercialTerms } from "@/lib/investor-access";
 import type { Holding } from "@/lib/types";
 
 // Canonical source of truth: src/lib/types.ts (shared with the investor-facing
@@ -13,6 +14,8 @@ export {
 import type { SubscriptionStatus, SubscriptionOwner } from "@/lib/types";
 
 export type AdminSubscription = {
+  commercial_terms?: CommercialTerms;
+  holding_id?: number | null;
   id: number;
   fund_id: number;
   fund_name: string;
@@ -33,6 +36,8 @@ export type AdminSubscription = {
   on_hold: boolean;
   information_request_note: string | null;
   information_requested_at: string | null;
+  information_response_note?: string | null;
+  information_responded_at?: string | null;
   rejection_reason: string | null;
   rejection_note: string | null;
   available_transitions: SubscriptionStatus[];
@@ -207,6 +212,7 @@ export type CommunicationRouting = "direct" | "through_rm";
 export type CommunicationStatus = "draft" | "scheduled" | "sent";
 
 export type CommunicationRecipient = {
+  email_status?: "pending_integration" | "scheduled";
   id: number;
   investor_id: number;
   investor_name: string;
@@ -219,6 +225,8 @@ export type CommunicationRecipient = {
 };
 
 export type Communication = {
+  delivery_channels?: ("email" | "inbox")[];
+  purpose?: string;
   id: number;
   subject: string;
   body: string;

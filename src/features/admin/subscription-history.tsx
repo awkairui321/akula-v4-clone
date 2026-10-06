@@ -38,10 +38,13 @@ export default function AdminSubscriptionHistoryPage() {
     queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
   });
   const finished = useMemo(
-    () => (data?.subscriptions ?? []).filter((s) => stageOfStatus(s.status) === undefined),
+    () =>
+      (data?.subscriptions ?? []).filter(
+        (s) => !!s.holding_id || stageOfStatus(s.status) === undefined,
+      ),
     [data],
   );
-  const isIssued = (s: AdminSubscription) => s.status === "allocated";
+  const isIssued = (s: AdminSubscription) => !!s.holding_id;
   const counts = {
     issued: finished.filter(isIssued).length,
     closed: finished.filter((s) => !isIssued(s)).length,

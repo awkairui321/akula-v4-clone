@@ -52,7 +52,7 @@ export default function AdminPartnersPage() {
         const clients = investors.filter((i) => i.eam_firm === partner.firm_name);
         const clientIds = new Set(clients.map((c) => c.id));
         const firmSubs = subs.filter((s) => s.eam_firm === partner.firm_name);
-        const open = firmSubs.filter((s) => stageOfStatus(s.status) !== undefined);
+        const open = firmSubs.filter((s) => !s.holding_id && stageOfStatus(s.status) !== undefined);
         const waitingOnAdviser = open.filter((s) => s.owner === "eam");
         const now = Date.now();
         return {

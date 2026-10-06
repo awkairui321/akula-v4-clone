@@ -317,13 +317,13 @@ function Sidebar({
 const CHANNEL_OPTIONS: { value: InvestmentChannel; title: string; body: string }[] = [
   {
     value: "direct",
-    title: "Investing directly",
-    body: "You're setting up your account on your own, without an adviser.",
+    title: "Independent investor",
+    body: "Demo: standard deal access and published subscription fees plus 1 percentage point.",
   },
   {
     value: "eam_referred",
-    title: "Referred by an adviser",
-    body: "You were introduced by an external asset manager (EAM) or private bank RM.",
+    title: "Partner-referred investor",
+    body: "Introduced by an EAM, MFO or private bank. Demo: expanded deal access, published fees and priority allocation consideration; allocation is not guaranteed.",
   },
 ];
 
@@ -367,13 +367,14 @@ function ChannelSection({
       {channel === "eam_referred" && (
         <div className="mt-4 space-y-2">
           <Label htmlFor="referral-code">
-            Referral code <span className="text-muted-foreground">(optional)</span>
+            Referral code{" "}
+            <span className="text-muted-foreground">(required to link your institution)</span>
           </Label>
           <Input
             id="referral-code"
             value={referralCode}
             onChange={(e) => setReferralCode(e.target.value)}
-            placeholder="Provided by your adviser"
+            placeholder="Demo: MERIDIAN or STRAITS-FO"
           />
         </div>
       )}
@@ -1142,6 +1143,79 @@ type PersonaConfig = {
   inquiry_id: string | null;
 };
 
+function VerificationDocuments() {
+  const [kind, setKind] = useState("passport");
+  const [file, setFile] = useState<File | null>(null);
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["onboardingDocuments"],
+    queryFn: () =>
+      api<{
+        documents: { id: number; document_type: string; notes: string | null; status: string }[];
+      }>("/api/v1/onboarding/documents"),
+  });
+  const upload = useMutation({
+    mutationFn: async () => {
+      if (!file || file.size > 2 * 1024 * 1024) throw new Error("Choose a file up to 2 MB.");
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Unable to read this file."));
+        reader.readAsDataURL(file);
+      });
+      return api("/api/v1/onboarding/documents", {
+        method: "POST",
+        body: { name: file.name, kind, file_data_url: content },
+      });
+    },
+    onSuccess: () => {
+      setFile(null);
+      qc.invalidateQueries();
+    },
+  });
+  return (
+    <div className="mx-auto my-4 max-w-md space-y-3 rounded-lg border p-4 text-left">
+      <h3 className="font-semibold">Supporting verification documents</h3>
+      <p className="text-xs text-muted-foreground">
+        Demo submission: stored in this browser and visible to LUCA for review. Uploading does not
+        approve your account.
+      </p>
+      <label className="block text-sm">
+        Document type
+        <select
+          className="ml-2 rounded border p-1"
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+        >
+          <option value="passport">Identity document</option>
+          <option value="accreditation_letter">Accreditation evidence</option>
+        </select>
+      </label>
+      <input
+        aria-label="Verification document file"
+        type="file"
+        accept="application/pdf,image/png,image/jpeg"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      />
+      <Button disabled={!file || upload.isPending} onClick={() => upload.mutate()}>
+        Submit document to LUCA
+      </Button>
+      {upload.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {upload.error.message}
+        </p>
+      )}
+      <ul className="text-xs">
+        {data?.documents.map((doc) => (
+          <li key={doc.id}>
+            {doc.notes || doc.document_type} - {doc.status}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function KycSection({
   kycStatus,
   onComplete,
@@ -1243,9 +1317,10 @@ function KycSection({
           <ClockIcon className="size-6 text-amber-600" />
         </div>
         <h2 className="text-xl font-semibold">Verification in progress</h2>
+        {isMocking && <VerificationDocuments />}
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-          We're reviewing your identity documents. This usually takes a few minutes. We'll email you
-          as soon as it's done, and you can then come back to sign the NDA.
+          LUCA reviews your submitted verification details. After approval, continue to sign the
+          NDA. This demo does not send verification emails.
         </p>
       </div>
     );
@@ -1272,6 +1347,7 @@ function KycSection({
     return (
       <div className="py-12 text-center">
         <h2 className="text-xl font-semibold">Identity Verification</h2>
+        <VerificationDocuments />
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
           No live KYC provider is connected in this environment. Simulate verification to continue.
         </p>
@@ -1292,6 +1368,7 @@ function KycSection({
     <>
       <div className="mb-6">
         <h2 className="text-xl font-semibold">Identity Verification</h2>
+        <VerificationDocuments />
         <p className="text-sm text-muted-foreground">
           Verify your identity to complete account setup.
         </p>

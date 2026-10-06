@@ -13,7 +13,9 @@ type UserLike =
 export function landingPathForRole(user: UserLike, activeProfile?: ActiveProfileType): string {
   if (!user) return "/onboarding";
 
-  if (["ops", "rm"].includes(user.role)) return "/workflows";
+  if (user.role === "investment_team") return "/luca/deals";
+  if (user.role === "rm") return "/rm";
+  if (user.role === "ops") return "/workflows";
 
   if (user.role === "luca") return "/luca";
 
