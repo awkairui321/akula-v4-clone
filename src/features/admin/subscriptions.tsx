@@ -615,7 +615,7 @@ export function SubscriptionDialog({
           )}
         </div>
 
-        {!isClosed && (
+        {!isClosed && !subscription.holding_id && (
           <button
             onClick={() => hold.mutate(!subscription.on_hold)}
             disabled={hold.isPending}

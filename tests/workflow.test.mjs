@@ -794,12 +794,26 @@ test("communications stay unread until an actual direct recipient reads; schedul
 test("LUCA can hold an allocated unissued subscription and release it without changing allocation", async () => {
   const sub = funded();
   w.command(manager(), { type: "allocate", id: sub.id, amount: Number(sub.amount), price: 100 });
-  w.command(manager(), { type: "subscription-hold", id: sub.id, status: "held" });
+  assert.equal(
+    (await request(`admin/subscriptions/${sub.id}/hold`, manager(), "PATCH", { on_hold: true }))
+      .status,
+    200,
+  );
   assert.equal(db.findSubscriptionById(sub.id).status, "allocated");
   assert.throws(() => w.command(ops(), { type: "issue", id: sub.id }), /hold/);
-  w.command(manager(), { type: "subscription-hold", id: sub.id, status: "released" });
+  assert.equal(
+    (await request(`admin/subscriptions/${sub.id}/hold`, manager(), "PATCH", { on_hold: false }))
+      .status,
+    200,
+  );
   w.command(ops(), { type: "issue", id: sub.id });
   assert.ok(db.findSubscriptionById(sub.id)._convertedToHoldingId);
+  assert.equal(
+    (await request(`admin/subscriptions/${sub.id}/hold`, manager(), "PATCH", { on_hold: true }))
+      .status,
+    422,
+  );
+  assert.equal(db.findSubscriptionById(sub.id).on_hold, false);
 });
 
 test("existing declaration API supports a confirmed shortfall without recording cash", async () => {

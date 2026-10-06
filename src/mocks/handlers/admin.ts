@@ -351,8 +351,21 @@ export const adminHandlers = [
     const sub = findSubscriptionById(Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     const body = (await request.json()) as { on_hold?: boolean };
-    sub.on_hold = Boolean(body.on_hold);
-    return HttpResponse.json({ subscription: toAdminSubscription(sub) });
+    try {
+      command(user, {
+        type: "subscription-hold",
+        id: sub.id,
+        status: body.on_hold ? "held" : "released",
+      });
+      return HttpResponse.json({
+        subscription: toAdminSubscription(findSubscriptionById(sub.id)!),
+      });
+    } catch (error) {
+      return HttpResponse.json(
+        { error: error instanceof Error ? error.message : "Hold update failed" },
+        { status: 422 },
+      );
+    }
   }),
 
   // POST /api/v1/admin/subscriptions/bulk_transition
