@@ -76,7 +76,10 @@ export default function CommunicationDetailPage() {
           <div className="whitespace-pre-line">{communication.body}</div>
           <Separator />
           <div className="flex flex-wrap gap-x-8 gap-y-1 text-muted-foreground">
-            <span>Routing: {communication.routing === "direct" ? "Direct" : "Through RM"}</span>
+            <span>Delivery: {(communication.delivery_channels ?? ["inbox"]).join(" and ")}</span>
+            {communication.delivery_channels?.includes("email") && (
+              <span>Email integration pending</span>
+            )}
             <span>
               {communication.status === "sent"
                 ? `Sent ${formatDate(communication.sent_at)}`
@@ -116,7 +119,9 @@ export default function CommunicationDetailPage() {
                     {r.routed_via === "eam" ? (r.eam_firm ?? "RM") : "Direct"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {formatDate(r.delivered_at)}
+                    {r.email_status === "pending_integration" && !r.delivered_at
+                      ? "Email pending integration"
+                      : formatDate(r.delivered_at)}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(r.opened_at)}</TableCell>
                   <TableCell className="text-right">{r.downloaded_document_ids.length}</TableCell>

@@ -1,3 +1,4 @@
+import { canManageOfferingRequest } from "@/lib/permissions";
 import { workflow, command } from "../workflow";
 import { http, HttpResponse } from "msw";
 import {
@@ -53,7 +54,12 @@ function unauthorized() {
 
 function requireAdmin(request: Request): MockUser | null {
   const user = currentUser(request);
-  if (!user || user.role !== "luca") return null;
+  if (
+    !user ||
+    (user.role !== "luca" &&
+      !(user.role === "investment_team" && canManageOfferingRequest(request)))
+  )
+    return null;
   return user;
 }
 
@@ -141,6 +147,7 @@ function applyTransition(
     sub.information_responded_at = null;
     sub.information_request_note = extras.informationRequestNote!.trim();
     sub.information_requested_at = now;
+    sub.information_request_delivery = "email_pending_integration";
   }
   if (to === "under_luca_review") {
     // Coming back from an answered information request — clear the old note.
@@ -529,7 +536,10 @@ export const adminHandlers = [
     const user = requireAdmin(request);
     if (!user) return unauthorized();
     const url = new URL(request.url);
-    let list = documents;
+    let list =
+      user.role === "investment_team"
+        ? documents.filter((d) => d.subscription_id === null && d.owner_name === "LUCA SGP")
+        : documents;
 
     const reviewState = url.searchParams.get("review_state");
     if (reviewState) {
@@ -549,7 +559,7 @@ export const adminHandlers = [
     return HttpResponse.json({
       documents: list,
       meta: paginationMeta(list.length),
-      summary: documentsSummary(),
+      summary: user.role === "investment_team" ? { total: list.length } : documentsSummary(),
     });
   }),
 
@@ -1021,15 +1031,33 @@ export const adminHandlers = [
   // PATCH /api/v1/funds/:id
   http.patch("*/api/v1/funds/:id", async ({ request, params }) => {
     const user = currentUser(request);
-    if (!user || !["luca", "ops"].includes(user.role)) return unauthorized();
+    if (!user || !["luca", "ops", "investment_team"].includes(user.role)) return unauthorized();
     const fund = findFundById(Number(params.id));
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
 
     const body = (await request.json()) as { fund?: Record<string, unknown> };
     const patch = body.fund ?? {};
+    if (user.role === "investment_team" && patch.state && patch.state !== fund.state)
+      return HttpResponse.json(
+        {
+          error:
+            "Submit an offering version for Fund Manager approval before changing its publication state.",
+        },
+        { status: 403 },
+      );
+    for (const key of ["subscription_fee_pct", "management_fee_pct", "carried_interest_pct"]) {
+      if (
+        patch[key] !== undefined &&
+        (!Number.isFinite(Number(patch[key])) || Number(patch[key]) < 0 || Number(patch[key]) > 100)
+      )
+        return HttpResponse.json(
+          { error: "Fees must be between 0 and 100 percent." },
+          { status: 422 },
+        );
+    }
     if (patch.state === "open" && fund.state !== "open")
       return HttpResponse.json(
-        { error: "Use exact-version approval and Ops publication in Workflows." },
+        { error: "Use exact-version Fund Manager approval and publication in Workflows." },
         { status: 422 },
       );
     if (
@@ -1121,6 +1149,8 @@ export const adminHandlers = [
       audience_description?: string;
       fund_id?: number | null;
       routing?: CommunicationRouting;
+      purpose?: string;
+      delivery_channels?: ("email" | "inbox")[];
       attachment_document_ids?: number[];
       send_at?: string | null;
       investor_ids?: number[];
@@ -1136,13 +1166,15 @@ export const adminHandlers = [
     const sendAt = body.send_at ? new Date(body.send_at) : now;
     const status: CommunicationStatus = sendAt.getTime() > now.getTime() ? "scheduled" : "sent";
     const commId = nextCommunicationId();
+    const emailOnly = ["request", "remind_sign", "remind_fund"].includes(body.purpose ?? "");
+    const channels: ("email" | "inbox")[] = emailOnly ? ["email"] : ["email", "inbox"];
 
     body.investor_ids.forEach((investorId) => {
       const investor = adminInvestors().find((inv) => inv.id === investorId);
       if (!investor) return;
       const routedVia: "investor" | "eam" =
         body.routing === "through_rm" && investor.eam_firm ? "eam" : "investor";
-      const delivered = status === "sent";
+      const delivered = status === "sent" && channels.includes("inbox");
       communicationRecipients.push({
         id: nextCommunicationRecipientId(),
         communication_id: commId,
@@ -1150,7 +1182,8 @@ export const adminHandlers = [
         investor_name: investor.full_name,
         investor_email: investor.email,
         eam_firm: investor.eam_firm,
-        routed_via: routedVia,
+        routed_via: emailOnly ? routedVia : "investor",
+        email_status: status === "scheduled" ? "scheduled" : "pending_integration",
         delivered_at: delivered ? now.toISOString() : null,
         opened_at: null,
         downloaded_document_ids: [],
@@ -1160,6 +1193,8 @@ export const adminHandlers = [
     const communication = {
       id: commId,
       subject: body.subject.trim(),
+      purpose: body.purpose,
+      delivery_channels: channels,
       body: body.body,
       audience_type: body.audience_type ?? ("filtered_group" as CommunicationAudienceType),
       audience_description:

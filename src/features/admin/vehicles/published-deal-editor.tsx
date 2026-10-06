@@ -1,3 +1,4 @@
+import { useAuth } from "@/contexts/auth-context";
 import { useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -486,9 +487,6 @@ function payloadFrom(draft: Draft): Record<string, unknown> {
       holding_period_note: orNull(draft.holding_period_note),
       implied_valuation: orNull(draft.implied_valuation),
       subscription_increment: draft.subscription_increment,
-      subscription_fee_pct: draft.subscription_fee_pct,
-      management_fee_pct: draft.management_fee_pct,
-      carried_interest_pct: draft.carried_interest_pct,
       closes_at: closesAtFrom(draft.closes_in_days),
       comparable_basis: draft.comparable_basis.trim(),
       entry_multiple: draft.entry_multiple.trim(),
@@ -825,6 +823,7 @@ export default function PublishedDealEditor({
   onOpenChange: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [draft, setDraft] = useState(() => draftFrom(fund));
 
   const { data: managersData } = useQuery({
@@ -838,7 +837,7 @@ export default function PublishedDealEditor({
   const { data: subsData } = useQuery({
     queryKey: ["admin", "subscriptions", "all"],
     queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
-    enabled: open,
+    enabled: open && user?.role === "luca",
   });
   const activeSubscriptionCount = (subsData?.subscriptions ?? []).filter(
     (s: AdminSubscription) =>
@@ -899,7 +898,11 @@ export default function PublishedDealEditor({
                 hint="Protected so subscriptions, documents and audit records keep the same immutable vehicle identity."
               />
               <Field label="Status">
-                <Select value={draft.state} onValueChange={(v) => set("state", v as FundStatus)}>
+                <Select
+                  disabled={user?.role === "investment_team"}
+                  value={draft.state}
+                  onValueChange={(v) => set("state", v as FundStatus)}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue>{FUND_STATUS_LABELS[draft.state]}</SelectValue>
                   </SelectTrigger>
@@ -1094,24 +1097,6 @@ export default function PublishedDealEditor({
                   </SelectContent>
                 </Select>
               </Field>
-              <TextField
-                label="Upfront fee %"
-                type="number"
-                value={draft.subscription_fee_pct}
-                onChange={(v) => set("subscription_fee_pct", v)}
-              />
-              <TextField
-                label="Management fee %"
-                type="number"
-                value={draft.management_fee_pct}
-                onChange={(v) => set("management_fee_pct", v)}
-              />
-              <TextField
-                label="Carry %"
-                type="number"
-                value={draft.carried_interest_pct}
-                onChange={(v) => set("carried_interest_pct", v)}
-              />
             </div>
           </EditorSection>
 

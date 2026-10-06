@@ -138,9 +138,6 @@ export default function EamLayout() {
               />
               <DropdownMenuContent>
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => navigate("/eam/profile")}>
-                    Profile
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>

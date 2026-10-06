@@ -53,9 +53,9 @@ function sectionsFor(_fund: Fund): { id: SectionId; nav: string }[] {
     { id: "market", nav: "Market & competitive" },
     { id: "business", nav: "Business model" },
     { id: "financials", nav: "Financials" },
-    { id: "risks", nav: "Risks" },
     { id: "recording", nav: "Recordings" },
     { id: "documents", nav: "Documents" },
+    { id: "risks", nav: "Risks" },
   ];
 }
 
@@ -772,11 +772,11 @@ function DocumentsSection({
 
 /* ─── Terms panel + subscribe (investor) / edit callout (luca) ─── */
 
-function TermsPanel({ fund }: { fund: Fund }) {
+function TermsPanel({ fund, showFees = true }: { fund: Fund; showFees?: boolean }) {
   return (
     <div className="space-y-3 rounded-lg border bg-card p-4 text-sm">
       <div className="flex items-baseline justify-between">
-        <strong>Price &amp; fees</strong>
+        <strong>{showFees ? "Price & fees" : "Investment terms"}</strong>
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
@@ -794,21 +794,25 @@ function TermsPanel({ fund }: { fund: Fund }) {
           <p className="font-semibold">{formatPricePrecise(fund.price)}</p>
         </div>
       </div>
-      <Separator />
-      <div className="space-y-1.5">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Subscription fee</span>
-          <span>{fund.subscription_fee_pct}%</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Management fee</span>
-          <span>{fund.management_fee_pct}% p.a.</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Carried interest</span>
-          <span>{fund.carried_interest_pct}%</span>
-        </div>
-      </div>
+      {showFees && (
+        <>
+          <Separator />
+          <div className="space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Subscription fee</span>
+              <span>{fund.subscription_fee_pct}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Management fee</span>
+              <span>{fund.management_fee_pct}% p.a.</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Carried interest</span>
+              <span>{fund.carried_interest_pct}%</span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -957,7 +961,7 @@ export default function DealOverviewPage({
             <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
               <OverviewSection asset={asset} />
               <div className="space-y-4 lg:sticky lg:top-8 lg:self-start">
-                <TermsPanel fund={fund} />
+                <TermsPanel fund={fund} showFees={viewer !== "luca" && viewer !== "ops"} />
                 {viewer === "investor" && !preview ? (
                   <SubscribeCalculator fund={fund} />
                 ) : preview ? (
@@ -1015,16 +1019,6 @@ export default function DealOverviewPage({
             </SectionShell>
           )}
 
-          {sections.some((s) => s.id === "risks") && (
-            <SectionShell
-              id="risks"
-              title="Risks and considerations"
-              standfirst="Business-specific questions to prioritise in diligence, plus the general risks that apply to all private-market investments."
-            >
-              <RisksSection asset={asset} />
-            </SectionShell>
-          )}
-
           <SectionShell
             id="recording"
             title="Recorded overview"
@@ -1040,6 +1034,16 @@ export default function DealOverviewPage({
           >
             <DocumentsSection fund={fund} viewer={viewer} />
           </SectionShell>
+
+          {sections.some((s) => s.id === "risks") && (
+            <SectionShell
+              id="risks"
+              title="Risks and considerations"
+              standfirst="Business-specific questions to prioritise in diligence, plus the general risks that apply to all private-market investments."
+            >
+              <RisksSection asset={asset} />
+            </SectionShell>
+          )}
         </div>
       </div>
 

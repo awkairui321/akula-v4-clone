@@ -64,7 +64,7 @@ export type MockUser = {
   id: number;
   email: string;
   password: string;
-  role: "luca" | "ops" | "rm" | "investor" | "eam";
+  role: "luca" | "investment_team" | "ops" | "rm" | "investor" | "eam";
   verified: boolean;
   two_factor_enabled: boolean;
   otp_secret: string | null;
@@ -160,8 +160,11 @@ users.push(
     { id: 6, email: "rm@akula.vc", role: "rm" as const },
     { id: 7, email: "ops@akula.vc", role: "ops" as const },
     { id: 8, email: "rm2@akula.vc", role: "rm" as const },
+    { id: 9000, email: "investment@akula.vc", role: "investment_team" as const },
   ].map((u) => ({ ...users[0], ...u })),
 );
+
+const investmentTeamSeed = structuredClone(users.find((user) => user.role === "investment_team")!);
 
 export function findUserByEmail(email: string): MockUser | undefined {
   return users.find((u) => u.email.toLowerCase() === email.toLowerCase());
@@ -2473,6 +2476,7 @@ export type MockSubscription = {
   eam_firm: string | null;
   eam_name: string | null;
   on_hold: boolean;
+  information_request_delivery?: "email_pending_integration";
   information_request_note: string | null;
   information_requested_at: string | null;
   information_response_note?: string | null;
@@ -4737,6 +4741,8 @@ export type CommunicationRouting = "direct" | "through_rm";
 export type CommunicationStatus = "draft" | "scheduled" | "sent";
 
 export type MockCommunication = {
+  delivery_channels?: ("email" | "inbox")[];
+  purpose?: string;
   id: number;
   subject: string;
   body: string;
@@ -4752,6 +4758,7 @@ export type MockCommunication = {
 };
 
 export type MockCommunicationRecipient = {
+  email_status?: "pending_integration" | "scheduled";
   id: number;
   communication_id: number;
   investor_id: number;
@@ -5092,6 +5099,8 @@ export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
     const target = demoArrays[key] as unknown[];
     target.splice(0, target.length, ...structuredClone(savedRows));
   }
+  if (!users.some((user) => user.role === "investment_team"))
+    users.push(structuredClone(investmentTeamSeed));
   consentGrants.clear();
   for (const [key, value] of saved.consents) consentGrants.set(key, value);
   for (const key of Object.keys(verificationDocumentsByInvestor))
