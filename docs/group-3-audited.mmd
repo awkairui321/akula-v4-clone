@@ -1,0 +1,75 @@
+%%{init: {"theme":"base","flowchart":{"nodeSpacing":30,"rankSpacing":45,"htmlLabels":true},"themeVariables":{"fontFamily":"Arial","fontSize":"16px","lineColor":"#78909c"}}}%%
+flowchart LR
+subgraph GROUP3["GROUP 3 · C4 ALIGNED DEMO · 07–09"]
+direction LR
+subgraph RETURNS["07 · RETURN OF UNUSED CASH"]
+direction TB
+ R1["07-A · Calculate cash owed back<br/>Matched cash minus active allocation and retained fee"]
+ R2{"07-B · Additional amount owed?<br/>Subtract obligations already recorded"}
+ R3["07-C · No additional return required<br/>Keep existing record and history"]
+ R4["07-D · Record return obligation<br/>Amount, subscription and status: Required"]
+ R5["07-E · AKULA OPS: Investments<br/>Find subscription in task list or completed archive<br/>Open Independent return obligations"]
+ R6["07-F · OPS: Update return<br/>Choose Processing / retry"]
+ R7{"07-G · OPS records settlement outcome<br/>Simulated status; no bank transfer integration"}
+ R8["07-H · Failed<br/>Obligation remains outstanding"]
+ R9["07-I · Confirmed<br/>Retain settlement history<br/>Does not itself change subscription to Funds returned"]
+ R10["07-J · Separate from holding issuance<br/>Partial allocation can create a holding<br/>while unused cash still awaits return"]
+ R1 --> R2
+ R2 -->|No| R3
+ R2 -->|Yes| R4 --> R5 --> R6 --> R7
+ R7 -->|Failed| R8 -->|Retry| R6
+ R7 -->|Confirmed| R9
+ R4 -.->|Return does not prevent issuance by itself| R10
+end
+subgraph DOCUMENTS["08 · DOCUMENT INTAKE AND ACCESS"]
+direction TB
+ D1["08-A · INVESTOR: Onboarding<br/>Upload supporting verification file<br/>PDF or image; saved in local demo"]
+ D2["08-B · Document received<br/>Owner linked; status: Received"]
+ D3["08-C · LUCA: Compliance<br/>Search client or document; track requests and expiry<br/>Choose an intake document"]
+ D4{"08-D · LUCA chooses next step"}
+ D5["08-E · On hold<br/>Document waiting; not a subscription hold"]
+ D6["08-F · Reviewing<br/>Operator reviews document"]
+ D7["08-G · Mark reviewed · Filed<br/>Stored status: Filed"]
+ D8["08-H · Searchable archive<br/>Open Filed and search completed records"]
+ D9["08-I · Published offering versions<br/>Immutable version snapshots and signature links<br/>Separate from intake document states"]
+ D10["08-J · SHARED: Documents<br/>Search versions, preview and download<br/>Investor / adviser sees permitted records"]
+ D11["08-K · INVESTOR: Documents<br/>Review required revised version<br/>Acknowledge that exact version"]
+ D12["08-L · Clear version acknowledgement requirement<br/>Other investment checks still apply"]
+ D1 --> D2 --> D3 --> D4
+ D4 -->|Start review| D6
+ D4 -->|Wait| D5
+ D5 -->|Resume review| D6
+ D5 -->|Return to arrivals| D2
+ D6 -->|Pause review| D5
+ D6 -->|Completed| D7 --> D8
+ D9 --> D10
+ D9 -.->|Revision requires acknowledgement| D11 --> D12
+end
+subgraph COMMUNICATIONS["09 · LUCA COMMUNICATIONS"]
+direction TB
+ C1["09-A · LUCA: Communications<br/>Compose subject and message"]
+ C2["09-B · Resolve investor audience<br/>Individual, fund participants or filtered group<br/>Search and EAM-firm filter"]
+ C3["09-C · Choose shareable deal attachments<br/>Filter by deal and search documents<br/>Private KYC and individual agreements excluded"]
+ C4["09-D · Choose routing<br/>Direct to investor or Through RM where applicable<br/>Current mock marks firm-associated recipient as EAM"]
+ C5["09-E · Review message and recipients<br/>Choose Send now or Schedule"]
+ C6{"09-F · Requested time in future?"}
+ C7["09-G · Scheduled record<br/>No automatic scheduled-send worker implemented"]
+ C8["09-H · Sent record<br/>Simulated delivery into direct investor inbox<br/>Opening records actual demo read timestamp"]
+ C9["09-I · LUCA: Communication detail<br/>Recipient rows, routing and actual demo read metrics"]
+ C10["09-J · Investor Messages<br/>Read sent messages and linked document requests<br/>EAM inbox and automatic valuation updates remain unconnected"]
+ C1 --> C2 --> C3 --> C4 --> C5 --> C6
+ C6 -->|Yes| C7 --> C9
+ C6 -->|No| C8 --> C9
+ C9 -.->|Do not interpret metrics as live receipt| C10
+end
+end
+classDef action fill:#eaf2f7,stroke:#7498aa,color:#193b4b;
+classDef record fill:#fff5e3,stroke:#b9a16e,color:#594820;
+classDef limit fill:#f9ece8,stroke:#c29586,color:#70483d;
+class R5,R6,R7,D1,D3,D4,D6,D7,D8,D10,D11,C1,C2,C3,C4,C5,C9 action;
+class R1,R2,R3,R4,R8,R9,R10,D2,D5,D9,D12,C6 record;
+class C7,C8,C10 limit;
+style GROUP3 fill:#edf5fc,stroke:#568ab5,stroke-width:3px
+style RETURNS fill:#ffffff,stroke:#b7c9d1
+style DOCUMENTS fill:#ffffff,stroke:#b7c9d1
+style COMMUNICATIONS fill:#ffffff,stroke:#b7c9d1

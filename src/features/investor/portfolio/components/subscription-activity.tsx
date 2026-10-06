@@ -24,11 +24,15 @@ const SUBSCRIPTION_STEPS = [
   { key: "holding", label: HOLDING_ISSUED_LABEL },
 ];
 
-function stepStateFor(status: SubscriptionStatus): (stepKey: string) => StepState {
-  const current = status === "allocated" ? SUBSCRIPTION_STEPS.length : (stageIndexOf(status) ?? -1);
+function stepStateFor(subscription: Subscription): (stepKey: string) => StepState {
+  const current = subscription.holding_id
+    ? SUBSCRIPTION_STEPS.length
+    : subscription.status === "allocated"
+      ? SUBSCRIPTION_STEPS.length - 1
+      : (stageIndexOf(subscription.status) ?? -1);
   return (stepKey) => {
     const index = SUBSCRIPTION_STEPS.findIndex((step) => step.key === stepKey);
-    // A fully allocated subscription has completed every step, including the holding.
+    // Allocation completes its stage; only registry issuance completes the holding.
     return index < current ? "done" : index === current ? "active" : "upcoming";
   };
 }
@@ -96,7 +100,7 @@ function SubscriptionRow({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [uploadOpen, setUploadOpen] = useState(false);
-  const getState = stepStateFor(subscription.status);
+  const getState = stepStateFor(subscription);
   const isClosed = CLOSED_SUBSCRIPTION_STATUSES.includes(subscription.status);
 
   const refundMutation = useMutation({
@@ -106,7 +110,7 @@ function SubscriptionRow({
         { method: "POST" },
       ),
     onSuccess: () => {
-      toast.success("Refund requested. Funds will be returned within 5 business days.");
+      toast.success("Application cancelled. Akula Ops will process any confirmed funds due back.");
       queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -115,7 +119,7 @@ function SubscriptionRow({
   const runAction = () => {
     if (!action) return;
     if (action.kind === "proof") setUploadOpen(true);
-    else navigate(`/checkout/${subscription.fund_id}`);
+    else navigate(`/checkout/${subscription.fund_id}?subscription_id=${subscription.id}`);
   };
 
   return (
@@ -161,7 +165,9 @@ function SubscriptionRow({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate(`/checkout/${subscription.fund_id}`)}
+            onClick={() =>
+              navigate(`/checkout/${subscription.fund_id}?subscription_id=${subscription.id}`)
+            }
           >
             View funding instructions
           </Button>
@@ -171,7 +177,7 @@ function SubscriptionRow({
             onClick={() => refundMutation.mutate()}
             disabled={refundMutation.isPending}
           >
-            {refundMutation.isPending ? "Requesting refund..." : "Request refund"}
+            {refundMutation.isPending ? "Cancelling..." : "Cancel unissued application"}
           </Button>
         </div>
       )}
@@ -185,6 +191,18 @@ function SubscriptionRow({
             queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
           }}
         />
+      )}
+
+      {!isClosed && !action && subscription.status !== "awaiting_funds" && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            navigate(`/checkout/${subscription.fund_id}?subscription_id=${subscription.id}`)
+          }
+        >
+          View application
+        </Button>
       )}
     </li>
   );
@@ -272,7 +290,7 @@ export default function SubscriptionActivity() {
   }
 
   const isDone = (s: Subscription) =>
-    s.status === "allocated" || CLOSED_SUBSCRIPTION_STATUSES.includes(s.status);
+    !!s.holding_id || CLOSED_SUBSCRIPTION_STATUSES.includes(s.status);
   const actionRequired = subscriptions.filter((s) => !isDone(s) && REQUIRED_ACTIONS[s.status]);
   const inProgress = subscriptions.filter((s) => !isDone(s) && !REQUIRED_ACTIONS[s.status]);
   const completed = subscriptions.filter(isDone);
@@ -281,7 +299,7 @@ export default function SubscriptionActivity() {
     <div className="flex flex-col gap-8 py-2">
       <p className="text-sm text-muted-foreground">
         Track each subscription from signature to holding issuance. A subscription moves to Holdings
-        once fund verification is complete.
+        once Akula Ops has issued the registry holding.
       </p>
 
       {actionRequired.length > 0 ? (

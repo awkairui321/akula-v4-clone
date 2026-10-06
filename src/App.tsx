@@ -195,6 +195,10 @@ function App() {
                   <Route element={<LucaRoute />}>
                     <Route element={<LucaLayout />}>
                       <Route path="/luca" element={<AdminDashboard />} />
+                      <Route
+                        path="/luca/publication"
+                        element={<WorkflowPage surface="Publication" />}
+                      />
                       <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />
                       <Route
                         path="/luca/subscriptions/history"

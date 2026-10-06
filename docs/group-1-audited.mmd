@@ -1,0 +1,96 @@
+%%{init: {"theme":"base","flowchart":{"nodeSpacing":30,"rankSpacing":50,"curve":"basis","htmlLabels":true},"themeVariables":{"fontFamily":"Arial","fontSize":"16px","primaryTextColor":"#193b4b","lineColor":"#78909c"}}}%%
+flowchart LR
+subgraph GROUP1["GROUP 1 · C4 ALIGNED DEMO · 01–03"]
+direction LR
+subgraph ONBOARD["01 · ACCOUNT AND ONBOARDING"]
+direction TB
+ O01["01-A · PORTAL: Sign up<br/>Create investor account and profile"]
+ O02["01-B · PORTAL: Onboarding<br/>Choose route, confirm eligibility<br/>Complete personal information"]
+ O03["01-C · AUTO / DEMO CONTROL<br/>Direct or adviser route determines commercial profile<br/>Demo switch can override commercial profile only"]
+ O09["01-I · EXISTING RELATIONSHIP RECORDS<br/>Client code is generated from investor ID<br/>Valid demo referral code links the matching institution<br/>LUCA can assign RM in shared Relationships view"]
+ O04["01-D · PORTAL: Simulate verification<br/>KYC status becomes pending<br/>Supporting identity and accreditation file submission<br/>Documents reach LUCA review; upload alone does not approve"]
+ O05["01-E · LUCA PORTAL: Onboarding review<br/>Record identity and accreditation decisions<br/>SHARED Relationships: simplified eligibility decision"]
+ O06{"01-F · AUTO: Eligibility result"}
+ O07["01-G · Pending or failed<br/>New investor access remains restricted"]
+ O10["01-J · INVESTOR PORTAL<br/>Complete simulated NDA and grant required consents<br/>These follow approved KYC in onboarding"]
+ O08["01-H · AUTO: Access requirements met<br/>Completed investor setup, approved KYC<br/>Signed NDA and required consents"]
+ O01 --> O02 --> O04 --> O05 --> O06
+ O02 -.->|Commercial route recorded| O03
+ O02 -.->|Validated referral links institution| O09
+ O06 -->|Pending or failed| O07
+ O06 -->|Approved| O10 --> O08
+end
+subgraph DISCOVERY["02 · PUBLICATION AND DISCOVERY"]
+direction TB
+ P01["02-A · PORTAL: Edit published deal<br/>LUCA Deals or Ops publication editor<br/>Save changes the working deal<br/>Save working revision; open Publication for reviewed release"]
+ P02["02-B · LUCA PORTAL / SHARED: Publication<br/>Prepare draft version"]
+ P03["02-C · SHARED: Ops Publication<br/>Submit for LUCA review<br/>Captures working content into reviewed snapshot"]
+ P04["02-D · LUCA PORTAL / SHARED: Publication<br/>Approve exact version"]
+ P05["02-E · SHARED: Ops Publication<br/>Publish approved version<br/>Updates published snapshot and review requirements"]
+ P06{"02-F · AUTO: Investor discovery rules<br/>Disclosure access and commercial segment"}
+ P07["02-G · INVESTOR PORTAL<br/>Independent shelf: Helios, Orbis, Ledger<br/>Effective published/custom fee plus 1 percentage point<br/>Closed deals may be visible but cannot be subscribed"]
+ P08["02-H · INVESTOR PORTAL<br/>Partner-referred shelf: all published deals (nine in current seed)<br/>Effective published/custom fee; opening rules still apply"]
+ P09["02-I · INVESTOR PORTAL: Invest<br/>Search and filter shelf<br/>Open full deal overview and materials<br/>Comparison Opportunities also supports application creation"]
+ P10["02-J · RM / EAM PORTALS<br/>Highlight an eligible deal to associated client<br/>RM also has shared Opportunities / Relationships<br/>RM and EAM comparison panes both have Opportunities"]
+ P11["02-K · INVESTOR PORTAL<br/>Review highlighted deal and materials<br/>Highlight does not reserve an allocation"]
+ P12["02-L · INVESTOR PORTAL / SHARED: Documents<br/>Investor acknowledges required revised version<br/>Earlier signed version remains recorded"]
+ P13["02-M · INVESTOR PORTAL<br/>Discover companies and indicate demand<br/>Also available through shared Company requests"]
+ P01 --> P02 --> P03 --> P04 --> P05 --> P06
+ P06 -->|Independent| P07 --> P09
+ P06 -->|Partner-referred| P08 --> P09
+ P05 -.->|Published open deal can be highlighted| P10 --> P11
+ P09 --> P11
+ P09 -->|Another company sought| P13
+ P05 -.->|Revised version flags existing active records| P12
+end
+subgraph SUBSCRIPTIONS["03 · SUBSCRIPTION AND REVIEW"]
+direction TB
+ S01["03-A · INVESTOR PORTAL: Deal / checkout<br/>Choose amount and review fee"]
+ S02{"03-B · AUTO: New application checks<br/>KYC, NDA, required consents, segment access<br/>Open offering and allowed amount"}
+ S03["03-C · Failed checks<br/>Show error; no subscription created"]
+ S04["03-D · AUTO: Create subscription<br/>Save requested amount, fee, commercial terms<br/>Link published document version<br/>Origin uses stored firm association, not demo segment"]
+ S05["03-E · INVESTOR PORTAL: Checkout Terms<br/>Accept required acknowledgements"]
+ S06["03-F · INVESTOR PORTAL: Checkout Sign<br/>Simulated signing and completion polling<br/>Save signature and document version<br/>Comparison Investments supports acknowledgements and signing"]
+ S07{"03-G · AUTO: Origin routing<br/>Associated-firm origin or self-serve origin?"}
+ S08["03-H · EAM PORTAL / SHARED Investments<br/>Select institution-review subscription<br/>Complete institution review<br/>Regular Clients - Holdings has the same guarded action"]
+ S09["03-I · LUCA PORTAL: Subscriptions<br/>Open subscription to review<br/>Comparison Investments also has approval, request and hold controls"]
+ S10{"03-J · LUCA PORTAL decision"}
+ S11["03-K · LUCA PORTAL: Request missing information<br/>Investor checkout displays request note<br/>Investor checkout or assigned EAM can submit a written response"]
+ S12["03-L · AUTO: Response submitted<br/>Save response and submission time<br/>Return to LUCA review without granting approval"]
+ S13["03-M · LUCA PORTAL<br/>Approve subscription"]
+ S14["03-N · LUCA PORTAL<br/>Decline application; retain decision"]
+ S15["03-O · INVESTOR PORTAL: Checkout Review<br/>Continue to funding<br/>Status becomes awaiting funds"]
+ S16["03-P · LUCA PORTAL<br/>Put on hold / release hold<br/>Separate from subscription lifecycle status"]
+ S17["03-Q · LUCA PORTAL or SHARED Investments<br/>Cancel unissued subscription where allowed<br/>SHARED cancellation records any return obligation"]
+ S01 --> S02
+ S02 -->|Fail| S03
+ S02 -->|Pass| S04 --> S05 --> S06 --> S07
+ S07 -->|Firm-associated origin| S08 --> S09
+ S07 -->|Self-serve origin| S09
+ S09 --> S10
+ S10 -->|More information| S11
+ S11 -->|Investor or assigned EAM submits response| S12 --> S09
+ S10 -->|Approve| S13 --> S15
+ S10 -->|Decline| S14
+ S09 -.->|Independent hold control| S16
+ S09 -.->|Allowed cancellation| S17
+end
+ O03 -.->|Commercial access and fee| P06
+ O08 -->|Disclosure access enabled| P06
+ O08 -.->|Checked again for new application| S02
+ O09 -.->|Relationship needed for recommendation| P10
+ P11 -->|Choose to apply| S01
+ P05 -.->|Published version used| S04
+end
+classDef portal fill:#eaf2f7,stroke:#7498aa,color:#193b4b;
+classDef shared fill:#eaf1e7,stroke:#849d79,color:#29442b;
+classDef model fill:#fff5e3,stroke:#b9a16e,color:#594820;
+classDef gap fill:#f9ece8,stroke:#c29586,color:#70483d;
+class O01,O02,O04,O05,O10,P01,P07,P08,P09,P10,P11,P13,S01,S05,S06,S09,S10,S12,S13,S14,S15,S16 portal;
+class P02,P03,P04,P05,P12 shared;
+class O03,O06,O07,O08,O09,P06,S02,S03,S04,S07,S17 model;
+class S08,S11 portal;
+style GROUP1 fill:#edf5fc,stroke:#568ab5,stroke-width:3px
+style ONBOARD fill:#ffffff,stroke:#b7c9d1
+style DISCOVERY fill:#ffffff,stroke:#b7c9d1
+style SUBSCRIPTIONS fill:#ffffff,stroke:#b7c9d1

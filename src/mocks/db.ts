@@ -1,3 +1,4 @@
+import type { InvestorSegment, CommercialTerms } from "../lib/investor-access";
 // ---------------------------------------------------------------------------
 // In-memory mock database for the MSW mock API layer.
 //
@@ -59,6 +60,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 export type MockUser = {
+  investor_segment?: InvestorSegment;
   id: number;
   email: string;
   password: string;
@@ -2447,6 +2449,8 @@ function acceptedAcknowledgements(): AcknowledgementTerm[] {
 }
 
 export type MockSubscription = {
+  commercial_terms?: CommercialTerms;
+  effective_terms?: Fund;
   allocated_principal?: number;
   document_version_id?: number;
   needs_review_version_id?: number;
@@ -2471,6 +2475,11 @@ export type MockSubscription = {
   on_hold: boolean;
   information_request_note: string | null;
   information_requested_at: string | null;
+  information_response_note?: string | null;
+  information_responded_at?: string | null;
+  topup_declared_at?: string | null;
+  topup_matched_amount?: number;
+  holding_id?: number | null;
   rejection_reason: string | null;
   rejection_note: string | null;
   payment_claimed: boolean;
@@ -2854,10 +2863,17 @@ export function toSubscription(sub: MockSubscription): Subscription {
     owner: sub.owner,
     next_action: sub.next_action,
     subscription_fee: sub.subscription_fee,
+    commercial_terms: sub.commercial_terms,
+    effective_terms: sub.effective_terms,
     payment_reference: sub.payment_reference,
     on_hold: sub.on_hold,
     information_request_note: sub.information_request_note,
     information_requested_at: sub.information_requested_at,
+    information_response_note: sub.information_response_note,
+    information_responded_at: sub.information_responded_at,
+    topup_declared_at: sub.topup_declared_at,
+    topup_matched_amount: sub.topup_matched_amount,
+    holding_id: sub._convertedToHoldingId,
     reserved_at: sub.reserved_at,
     confirmed_at: sub.confirmed_at,
     institution_reviewed_at: sub.institution_reviewed_at,
@@ -2884,6 +2900,8 @@ export function toAdminSubscription(sub: MockSubscription) {
     next_action: sub.next_action,
     origin: sub.origin,
     subscription_fee: sub.subscription_fee,
+    commercial_terms: sub.commercial_terms,
+    effective_terms: sub.effective_terms,
     payment_reference: sub.payment_reference,
     investor_id: sub.investor_id,
     investor_name: sub.investor_name,
@@ -2893,6 +2911,11 @@ export function toAdminSubscription(sub: MockSubscription) {
     on_hold: sub.on_hold,
     information_request_note: sub.information_request_note,
     information_requested_at: sub.information_requested_at,
+    information_response_note: sub.information_response_note,
+    information_responded_at: sub.information_responded_at,
+    topup_declared_at: sub.topup_declared_at,
+    topup_matched_amount: sub.topup_matched_amount,
+    holding_id: sub._convertedToHoldingId,
     rejection_reason: sub.rejection_reason,
     rejection_note: sub.rejection_note,
     available_transitions: TRANSITIONS[sub.status].filter(
@@ -3943,7 +3966,8 @@ function openSubscriptionsFor(investorId: number): number {
   return subscriptions.filter(
     (s) =>
       s.investor_id === investorId &&
-      !["cancelled", "not_allocated", "funds_returned", "allocated"].includes(s.status),
+      !s._convertedToHoldingId &&
+      !["cancelled", "rejected", "not_allocated", "funds_returned"].includes(s.status),
   ).length;
 }
 
@@ -5070,7 +5094,9 @@ export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
   }
   consentGrants.clear();
   for (const [key, value] of saved.consents) consentGrants.set(key, value);
-  Object.assign(verificationDocumentsByInvestor, saved.verification);
+  for (const key of Object.keys(verificationDocumentsByInvestor))
+    delete verificationDocumentsByInvestor[Number(key)];
+  Object.assign(verificationDocumentsByInvestor, structuredClone(saved.verification));
   const high =
     Math.max(
       10000,

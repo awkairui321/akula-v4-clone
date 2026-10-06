@@ -19,8 +19,8 @@ export default function DealSubscriptions({ fund }: { fund: Fund }) {
   });
 
   const subs = (data?.subscriptions ?? []).filter((s) => s.fund_id === fund.id);
-  const open = subs.filter((s) => stageOfStatus(s.status) !== undefined);
-  const issued = subs.filter((s) => s.status === "allocated");
+  const open = subs.filter((s) => !s.holding_id && stageOfStatus(s.status) !== undefined);
+  const issued = subs.filter((s) => !!s.holding_id);
   const customFor = new Set(
     (pricing?.overrides ?? []).filter((o) => o.fund_id === fund.id).map((o) => o.investor_id),
   );

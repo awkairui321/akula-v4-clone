@@ -22,22 +22,23 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
   const [range, setRange] = useState("All");
   const rangeDays: Record<string, number> = { "1M": 30, "3M": 90, "6M": 180, "1Y": 365, All: 730 };
   const today = new Date();
-  const history = Array.from({ length: 731 }, (_, index) => {
-    const progress = index / 730;
-    const date = new Date(today);
-    date.setDate(today.getDate() - (730 - index));
-    const trend = 0.16 + progress * 0.84;
-    const movement =
-      1 + Math.sin(progress * Math.PI * 9) * 0.025 + Math.sin(progress * Math.PI * 23) * 0.012;
-    return {
-      date,
-      nav: Math.max(0, nav * Math.min(1, trend * movement)),
-      invested: Math.max(0, invested * progress),
-    };
+  const { data } = useQuery({
+    queryKey: ["portfolioHistory"],
+    queryFn: () =>
+      api<{ history: { at: string; nav: number; invested: number }[] }>(
+        "/api/v1/portfolio/history",
+      ),
+    refetchInterval: 2000,
   });
-  const visible = history.filter(
-    (point) => today.getTime() - point.date.getTime() <= rangeDays[range] * 86400000,
-  );
+  const history = (data?.history ?? []).map((p) => ({ ...p, date: new Date(p.at) }));
+  const start = new Date(today.getTime() - rangeDays[range] * 86400000);
+  const previous = history.filter((p) => p.date < start).at(-1);
+  const within = history.filter((p) => p.date >= start);
+  const visible =
+    range === "All"
+      ? history
+      : [{ date: start, nav: previous?.nav ?? 0, invested: previous?.invested ?? 0 }, ...within];
+  if (!visible.length) visible.push({ date: today, nav, invested });
   const width = 820;
   const height = 300;
   const left = 68;
@@ -46,7 +47,7 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
   const bottom = 48;
   const plotWidth = width - left - right;
   const plotHeight = height - top - bottom;
-  const maxValue = Math.max(1, nav, invested);
+  const maxValue = Math.max(1, nav, invested, ...visible.flatMap((p) => [p.nav, p.invested]));
   const tickStep =
     Math.pow(10, Math.floor(Math.log10(maxValue / 4))) *
     (maxValue / 4 / Math.pow(10, Math.floor(Math.log10(maxValue / 4))) > 5
@@ -55,7 +56,11 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
         ? 5
         : 2);
   const axisMax = Math.ceil(maxValue / tickStep) * tickStep;
-  const x = (index: number) => left + (index / Math.max(1, visible.length - 1)) * plotWidth;
+  const x = (index: number) =>
+    left +
+    ((visible[index].date.getTime() - visible[0].date.getTime()) /
+      Math.max(1, visible.at(-1)!.date.getTime() - visible[0].date.getTime())) *
+      plotWidth;
   const y = (value: number) => top + plotHeight - (value / axisMax) * plotHeight;
   const navPath = visible
     .map((point, index) => `${index ? "L" : "M"}${x(index).toFixed(1)},${y(point.nav).toFixed(1)}`)
@@ -75,13 +80,11 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
       ? `$${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}m`
       : `$${Math.round(value / 1000)}k`;
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 rounded-lg border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-medium">Portfolio value over time</p>
-          <p className="text-xs text-muted-foreground">
-            Illustrative NAV · latest {formatPrice(nav)}
-          </p>
+          <p className="text-sm font-semibold">Portfolio Value Over Time</p>
+          <p className="text-xs text-muted-foreground">Reported NAV · latest {formatPrice(nav)}</p>
         </div>
         <div className="flex gap-1" aria-label="Chart date range">
           {Object.keys(rangeDays).map((item) => (
@@ -153,7 +156,7 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
             key={index}
             x={x(index)}
             y={height - 18}
-            textAnchor={index === visible.length - 1 ? "end" : "middle"}
+            textAnchor="middle"
             className="fill-muted-foreground"
             fontSize="10"
           >
@@ -161,17 +164,17 @@ function NavTrend({ nav, invested }: { nav: number; invested: number }) {
           </text>
         ))}
       </svg>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-2">
           <i className="size-2 rounded-full bg-foreground" />
-          Estimated portfolio value
+          Estimated Portfolio Value
         </span>
         <span className="flex items-center gap-2">
           <i className="w-4 border-t-2 border-dashed border-muted-foreground/60" />
-          Invested capital
+          Invested Capital
         </span>
         <span className="ml-auto text-[10px]">
-          Illustrative history · no live pricing feed connected
+          Recorded holding values · no live pricing feed connected
         </span>
       </div>
     </div>

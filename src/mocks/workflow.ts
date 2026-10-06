@@ -1,3 +1,4 @@
+import { mayDiscover, hasInvestmentHistory } from "./investor-access";
 import * as db from "./db";
 import { clientCode } from "../lib/client-code";
 import type {
@@ -279,10 +280,87 @@ export function resetDemo() {
   localStorage.removeItem(KEY);
   location.reload();
 }
+export function investmentBlockers(s: db.MockSubscription, issuance = false): string[] {
+  const blockers: string[] = [];
+  const investor = db.findUserById(s.investor_id);
+  if (!investor || !disclosureAccess(investor))
+    blockers.push("Investor eligibility, NDA and required consents must remain approved.");
+  if (!workflow.signatures.some((signature) => signature.subscriptionId === s.id))
+    blockers.push("Investor must complete the subscription signature first.");
+  if (s.on_hold) blockers.push("LUCA has placed this subscription on hold.");
+  if (
+    ["cancelled", "rejected", "funds_returned"].includes(s.status) ||
+    db.findFundById(s.fund_id)?.state === "cancelled"
+  )
+    blockers.push("Cancelled or terminal investment.");
+  if (s.needs_review_version_id)
+    blockers.push(
+      `Investor must review and acknowledge document version #${s.needs_review_version_id}.`,
+    );
+  if (workflow.receipts.some((r) => r.subscriptionId === s.id && !r.matched && !r.supersededBy))
+    blockers.push("Resolve unmatched receipts: Ops must match or correct outstanding receipts.");
+  const allocation = workflow.allocations.find((a) => a.subscriptionId === s.id && !a.voided);
+  if (issuance) {
+    if (!allocation || allocation.principal <= 0)
+      blockers.push("LUCA must record a positive allocation first.");
+    if (allocation && matched(s.id) < round(allocation.principal + allocation.fee))
+      blockers.push(
+        "Confirmed funding must cover the recorded allocation and its fee before issuance.",
+      );
+  } else {
+    if (!["allocation_pending", "reconciliation"].includes(s.status))
+      blockers.push("Complete signing, reviews and cash matching first.");
+    if (allocation) blockers.push("Allocation is already recorded.");
+    const required = round(Number(s.amount) + Number(s.subscription_fee));
+    if (matched(s.id) < required)
+      blockers.push(
+        `Match full requested funding first: ${required.toFixed(2)} ${s.currency} required; ${matched(s.id).toFixed(2)} matched.`,
+      );
+  }
+  return blockers;
+}
+
+export function portfolioHistory(user: db.MockUser) {
+  const positions = db.holdings.filter((h) => h.investor_id === user.id && h.state !== "realized");
+  const observations = positions.map((h) => {
+    const entries = workflow.valuations
+      .filter((v) => v.holdingId === h.id)
+      .map((v) => ({ at: v.at, amount: v.amount }));
+    if (!entries.length && h.nav_as_of)
+      entries.push({ at: h.nav_as_of, amount: Number(h.current_nav) });
+    entries.unshift({
+      at: h.subscribed_at || h.nav_as_of || now(),
+      amount: Number(h.committed_amount),
+    });
+    return { h, entries: entries.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)) };
+  });
+  const dates = [
+    ...new Set([...observations.flatMap((p) => p.entries.map((v) => v.at)), now()]),
+  ].sort((a, b) => Date.parse(a) - Date.parse(b));
+  return dates.map((at) => {
+    let nav = 0,
+      invested = 0;
+    for (const { h, entries } of observations) {
+      const eligible = entries.filter((v) => Date.parse(v.at) <= Date.parse(at));
+      if (eligible.length) {
+        nav += eligible.at(-1)!.amount;
+        invested += Number(h.committed_amount);
+      }
+    }
+    return { at, nav: round(nav), invested: round(invested) };
+  });
+}
+
 export function view(user: db.MockUser): WorkflowView {
   const ids = clientsFor(user),
     privileged = user.role === "luca" || user.role === "ops";
-  const subs = db.subscriptions.filter((s) => ids.includes(s.investor_id));
+  const subs = db.subscriptions
+    .filter((s) => ids.includes(s.investor_id))
+    .sort(
+      (a, b) =>
+        Number(b.commercial_terms?.allocationPriority === "partner_priority") -
+        Number(a.commercial_terms?.allocationPriority === "partner_priority"),
+    );
   const sid = new Set(subs.map((s) => s.id));
   const holdings = db.holdings.filter((h) => ids.includes(h.investor_id));
   const hid = new Set(holdings.map((h) => h.id));
@@ -295,7 +373,8 @@ export function view(user: db.MockUser): WorkflowView {
     (v) =>
       privileged ||
       ((staff(user) || user.has_eam_profile || disclosureAccess(user)) &&
-        v.status === "published") ||
+        v.status === "published" &&
+        mayDiscover(user, v.fundId)) ||
       workflow.signatures.some((s) => sid.has(s.subscriptionId) && s.versionId === v.id) ||
       subs.some(
         (s) => s.reviewed_version_ids?.includes(v.id) || s.needs_review_version_id === v.id,
@@ -322,10 +401,16 @@ export function view(user: db.MockUser): WorkflowView {
       holdingId: s._convertedToHoldingId,
       currency: s.currency,
       needsReview: s.needs_review_version_id,
+      allocationBlockers: investmentBlockers(s),
+      issuanceBlockers: investmentBlockers(s, true),
     })),
     holdings,
     funds: db.funds
-      .filter((f) => privileged || f.state !== "draft")
+      .filter(
+        (f) =>
+          (privileged || f.state !== "draft") &&
+          (mayDiscover(user, f.id) || hasInvestmentHistory(user, f.id)),
+      )
       .map((f) => ({
         id: f.id,
         name: f.codename || f.name,
@@ -347,6 +432,7 @@ export function view(user: db.MockUser): WorkflowView {
     highlights: workflow.highlights.filter(
       (h) =>
         ids.includes(h.investorId) &&
+        mayDiscover(user, workflow.versions.find((v) => v.id === h.versionId)?.fundId || 0) &&
         workflow.assignments.some(
           (a) => a.investorId === h.investorId && a.staffId === h.staffId,
         ) &&
@@ -409,6 +495,92 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       "Cancelled or terminal investment.",
     );
   switch (c.type) {
+    case "declare-topup": {
+      const s = sub();
+      requireValue(user.id === s.investor_id, "Only the investor can declare a transfer.");
+      active(s);
+      requireValue(
+        s.status === "reconciliation",
+        "Additional funding is not available at this stage.",
+      );
+      requireValue(
+        matched(s.id) > 0 && matched(s.id) < round(Number(s.amount) + Number(s.subscription_fee)),
+        "No confirmed funding shortfall.",
+      );
+      requireValue(
+        !workflow.receipts.some((r) => r.subscriptionId === s.id && !r.matched && !r.supersededBy),
+        "Ops must resolve outstanding receipts first.",
+      );
+      requireValue(
+        !s.topup_declared_at || s.topup_matched_amount !== matched(s.id),
+        "Your additional transfer is already awaiting matching.",
+      );
+      s.topup_declared_at = now();
+      s.topup_matched_amount = matched(s.id);
+      s.payment_claimed = true;
+      s.payment_declared_at = now();
+      s.owner = "akula_ops";
+      s.next_action = "match_payment";
+      break;
+    }
+    case "respond-information": {
+      const s = sub();
+      requireValue(
+        user.id === s.investor_id ||
+          (user.has_eam_profile &&
+            db.adviserClients.some(
+              (client) => client.investor_id === s.investor_id && client.eam_user_id === user.id,
+            )),
+        "Investor or assigned institution required.",
+      );
+      requireValue(
+        s.status === "information_requested" && !s.on_hold,
+        "Information response is not available.",
+      );
+      s.information_response_note = text();
+      s.information_responded_at = now();
+      s.status = "under_luca_review";
+      s.owner = "luca";
+      s.next_action = "luca_to_review";
+      break;
+    }
+    case "subscription-decision": {
+      role("luca");
+      const s = sub();
+      active(s);
+      requireValue(s.status === "under_luca_review", "Subscription must be awaiting LUCA review.");
+      requireValue(
+        ["approved", "information_requested", "rejected"].includes(c.status ?? ""),
+        "Choose a review decision.",
+      );
+      if (c.status === "information_requested") {
+        s.information_request_note = text();
+        s.information_requested_at = now();
+        s.information_response_note = null;
+        s.information_responded_at = null;
+      }
+      if (c.status === "rejected") {
+        s.rejection_note = text();
+        s.rejection_reason = "other";
+        s.rejected_at = now();
+      }
+      if (c.status === "approved") s.approved_at = now();
+      s.status = c.status as typeof s.status;
+      s.owner = db.ownerFor(s.status, s.origin);
+      s.next_action = db.nextActionFor(s.status);
+      break;
+    }
+    case "subscription-hold": {
+      role("luca");
+      const s = sub();
+      requireValue(
+        !s._convertedToHoldingId &&
+          !["not_allocated", "cancelled", "rejected", "funds_returned"].includes(s.status),
+        "Cannot hold a closed subscription.",
+      );
+      s.on_hold = c.status === "held";
+      break;
+    }
     case "institution-review": {
       requireValue(user.has_eam_profile, "External institution profile required.");
       const s = sub();
@@ -500,20 +672,8 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
     case "allocate": {
       role("luca");
       const s = sub();
-      active(s);
-      requireValue(!s.needs_review_version_id, "Investor must review the revised version first.");
-      requireValue(
-        ["allocation_pending", "reconciliation"].includes(s.status),
-        "Reconciled funding is required.",
-      );
-      requireValue(
-        !workflow.allocations.some((a) => a.subscriptionId === s.id && !a.voided),
-        "Allocation already recorded.",
-      );
-      requireValue(
-        !workflow.receipts.some((r) => r.subscriptionId === s.id && !r.matched && !r.supersededBy),
-        "Resolve unmatched receipts first.",
-      );
+      const blockers = investmentBlockers(s);
+      requireValue(!blockers.length, blockers.join(" "));
       const capital = amount();
       requireValue(capital <= Number(s.amount), "Allocation cannot exceed requested principal.");
       requireValue(
@@ -546,14 +706,9 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       role("ops");
       const s = sub();
       if (s._convertedToHoldingId) return;
-      active(s);
-      requireValue(!s.needs_review_version_id, "Investor must review the revised version first.");
-      const a = workflow.allocations.find((a) => a.subscriptionId === s.id && !a.voided);
-      requireValue(a && a.principal > 0, "Positive manager allocation required.");
-      requireValue(
-        !workflow.receipts.some((r) => r.subscriptionId === s.id && !r.matched && !r.supersededBy),
-        "Resolve receipt exceptions.",
-      );
+      const blockers = investmentBlockers(s, true);
+      requireValue(!blockers.length, blockers.join(" "));
+      const a = workflow.allocations.find((a) => a.subscriptionId === s.id && !a.voided)!;
       db.issueHolding(s, String(a.principal / a.price), String(a.price), a.principal);
       s.owner = "complete";
       s.next_action = "";
@@ -675,6 +830,11 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
     case "highlight": {
       role("rm");
       requireValue(clientsFor(user).includes(c.id!), "Client not assigned.");
+      const targetInvestor = db.findUserById(c.id!);
+      requireValue(
+        targetInvestor && mayDiscover(targetInvestor, c.target!),
+        "This deal is unavailable under the client's investor profile.",
+      );
       const v = currentVersion(c.target!);
       requireValue(
         v && db.findFundById(v.fundId)?.state === "open",
@@ -856,6 +1016,15 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       const value = amount();
       const source = text();
       requireValue(!c.due || Number.isFinite(Date.parse(c.due)), "Invalid report date.");
+      if (!workflow.valuations.some((v) => v.holdingId === h.id) && h.nav_as_of)
+        workflow.valuations.push({
+          id: id(),
+          holdingId: h.id,
+          amount: Number(h.current_nav),
+          currency: "USD",
+          source: "Previous reported holding value",
+          at: h.nav_as_of,
+        });
       workflow.valuations.push({
         id: id(),
         holdingId: h.id,
@@ -864,8 +1033,11 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         source,
         at: c.due ? new Date(c.due).toISOString() : now(),
       });
-      h.current_nav = value.toFixed(2);
-      h.nav_as_of = workflow.valuations.at(-1)!.at;
+      const latest = workflow.valuations
+        .filter((v) => v.holdingId === h.id)
+        .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id - a.id)[0];
+      h.current_nav = latest.amount.toFixed(2);
+      h.nav_as_of = latest.at;
       break;
     }
     case "secondary": {

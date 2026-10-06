@@ -1,4 +1,13 @@
-import { createContext, useContext, useEffect, useState, type ReactNode, type FormEvent } from "react";
+import FundingShortfall from "@/components/funding-shortfall";
+import InvestorSegmentControl from "@/components/investor-segment-control";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+  type FormEvent,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
@@ -47,7 +56,11 @@ const RM_TAB_ICONS: Record<string, typeof Circle> = {
 const date = (v: string) =>
   new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const DemoPersonaContext = createContext<number | undefined>(undefined);
-function personaApi<T>(personaId: number | undefined, path: string, options?: { method?: string; body?: Record<string, unknown> }) {
+function personaApi<T>(
+  personaId: number | undefined,
+  path: string,
+  options?: { method?: string; body?: Record<string, unknown> },
+) {
   return personaId === undefined ? api<T>(path, options) : apiAsDemo<T>(personaId, path, options);
 }
 function useWorkspace() {
@@ -60,6 +73,96 @@ function useWorkspace() {
     refetchInterval: demoPersonaId === undefined ? false : 1200,
   });
 }
+function InvestorSubscriptionActions({
+  subscriptionId,
+  status,
+}: {
+  subscriptionId: number;
+  status: string;
+}) {
+  const persona = useContext(DemoPersonaContext);
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["comparisonTerms", persona, subscriptionId],
+    queryFn: () =>
+      personaApi<{
+        acknowledgements: {
+          terms: { id: number; key: string; body: string; accepted: boolean }[];
+          complete: boolean;
+        };
+      }>(persona, `/api/v1/subscriptions/${subscriptionId}/acknowledgements`),
+    enabled: ["reserved", "documents_pending"].includes(status),
+  });
+  const action = useMutation({
+    mutationFn: async (operation: string) => {
+      if (operation.startsWith("accept:"))
+        return personaApi(persona, `/api/v1/subscriptions/${subscriptionId}/acknowledgements`, {
+          method: "POST",
+          body: { acknowledgement: { acknowledgement_term_id: Number(operation.split(":")[1]) } },
+        });
+      if (operation === "sign") {
+        await personaApi(persona, "/api/v1/signwell/sign_subscription", {
+          method: "POST",
+          body: { subscription_id: subscriptionId },
+        });
+        await personaApi(persona, "/api/v1/signwell/check_subscription", {
+          method: "POST",
+          body: { subscription_id: subscriptionId },
+        });
+        return personaApi(persona, "/api/v1/signwell/check_subscription", {
+          method: "POST",
+          body: { subscription_id: subscriptionId },
+        });
+      }
+      if (operation === "fund")
+        return personaApi(persona, `/api/v1/subscriptions/${subscriptionId}/proceed_to_funding`, {
+          method: "POST",
+        });
+      return personaApi(persona, `/api/v1/subscriptions/${subscriptionId}`, {
+        method: "PATCH",
+        body: { payment_declared: true },
+      });
+    },
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  return (
+    <div className="space-y-3">
+      {data?.acknowledgements.terms.map((term) => (
+        <details key={term.id}>
+          <summary>
+            {term.key.replaceAll("_", " ")} {term.accepted ? "— accepted" : ""}
+          </summary>
+          <p>{term.body}</p>
+          {!term.accepted && (
+            <Button disabled={action.isPending} onClick={() => action.mutate(`accept:${term.id}`)}>
+              Accept acknowledgement
+            </Button>
+          )}
+        </details>
+      ))}
+      {["reserved", "documents_pending"].includes(status) && (
+        <Button
+          disabled={!data?.acknowledgements.complete || action.isPending}
+          onClick={() => action.mutate("sign")}
+        >
+          Complete simulated signing
+        </Button>
+      )}
+      {status === "approved" && (
+        <Button disabled={action.isPending} onClick={() => action.mutate("fund")}>
+          Continue to funding
+        </Button>
+      )}
+      {["awaiting_funds", "payment_unmatched"].includes(status) && (
+        <Button disabled={action.isPending} onClick={() => action.mutate("declare")}>
+          Declare transfer sent
+        </Button>
+      )}
+      {action.isError && <p role="alert">{action.error.message}</p>}
+    </div>
+  );
+}
+
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="wf-panel">
@@ -125,20 +228,13 @@ function Action({
     </form>
   );
 }
-function DemandAnalytics({
-  d,
-  ops,
-  manager,
-}: {
-  d: WorkflowView;
-  ops: boolean;
-  manager: boolean;
-}) {
+function DemandAnalytics({ d, ops, manager }: { d: WorkflowView; ops: boolean; manager: boolean }) {
   const companies = Array.from(new Set(d.requests.map((request) => request.key)))
     .map((key) => {
       const rows = d.requests.filter((request) => request.key === key);
       const totals = rows.reduce<Record<string, number>>((result, row) => {
-        if (row.amount !== undefined) result[row.currency] = (result[row.currency] || 0) + row.amount;
+        if (row.amount !== undefined)
+          result[row.currency] = (result[row.currency] || 0) + row.amount;
         return result;
       }, {});
       return {
@@ -167,9 +263,18 @@ function DemandAnalytics({
         </div>
       )}
       <div className="wf-demand-stats">
-        <div><span>Companies requested</span><strong>{companies.length}</strong></div>
-        <div><span>Total indications</span><strong>{d.requests.length}</strong></div>
-        <div><span>Distinct investors</span><strong>{uniqueInvestors}</strong></div>
+        <div>
+          <span>Companies requested</span>
+          <strong>{companies.length}</strong>
+        </div>
+        <div>
+          <span>Total indications</span>
+          <strong>{d.requests.length}</strong>
+        </div>
+        <div>
+          <span>Distinct investors</span>
+          <strong>{uniqueInvestors}</strong>
+        </div>
         <div>
           <span>Indicative USD interest</span>
           <strong>{money(usdTotal)}</strong>
@@ -188,7 +293,9 @@ function DemandAnalytics({
               <summary>
                 <span className="wf-demand-company-name">
                   <strong>{request.company}</strong>
-                  <small>{total} indications · {investors} investors</small>
+                  <small>
+                    {total} indications · {investors} investors
+                  </small>
                 </span>
                 <span className="wf-demand-company-total">
                   <strong>{amountSummary || "Amount not stated"}</strong>
@@ -201,7 +308,11 @@ function DemandAnalytics({
                     <span>Ready for LUCA to assess sourcing capacity?</span>
                     <Action
                       label="Share sourcing brief with LUCA"
-                      command={{ type: "request-status", id: request.id, status: "Shared with LUCA" }}
+                      command={{
+                        type: "request-status",
+                        id: request.id,
+                        status: "Shared with LUCA",
+                      }}
                     />
                   </div>
                 )}
@@ -217,8 +328,15 @@ function DemandAnalytics({
                     const client = d.clients.find((item) => item.id === row.investorId);
                     return (
                       <div className="wf-demand-indication" key={row.id}>
-                        <span>{client?.name || `Investor #${row.investorId}`} <small>{client?.code}</small></span>
-                        <strong>{row.amount === undefined ? "Amount not stated" : money(row.amount, row.currency)}</strong>
+                        <span>
+                          {client?.name || `Investor #${row.investorId}`}{" "}
+                          <small>{client?.code}</small>
+                        </span>
+                        <strong>
+                          {row.amount === undefined
+                            ? "Amount not stated"
+                            : money(row.amount, row.currency)}
+                        </strong>
                         <small>{row.status}</small>
                       </div>
                     );
@@ -232,12 +350,19 @@ function DemandAnalytics({
                     <Choice
                       name="status"
                       label="Decision for all indications"
-                      items={["Under review", "Not currently available", "Opportunity available"].map((name) => ({ id: name, name }))}
+                      items={[
+                        "Under review",
+                        "Not currently available",
+                        "Opportunity available",
+                      ].map((name) => ({ id: name, name }))}
                     />
                     <Choice
                       name="target"
                       label="Published offering (when available)"
-                      items={[{ id: "", name: "Select an offering" }, ...d.funds.filter((fund) => fund.state === "open")]}
+                      items={[
+                        { id: "", name: "Select an offering" },
+                        ...d.funds.filter((fund) => fund.state === "open"),
+                      ]}
                     />
                   </Action>
                 )}
@@ -1287,7 +1412,15 @@ function OpsInvestmentQueue({
   );
 }
 
-function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { surface?: string; compact?: boolean; onSurfaceChange?: (surface: string) => void }) {
+function WorkflowPageContent({
+  surface,
+  compact = false,
+  onSurfaceChange,
+}: {
+  surface?: string;
+  compact?: boolean;
+  onSurfaceChange?: (surface: string) => void;
+}) {
   const q = useWorkspace(),
     { logout } = useAuth();
   const navigate = useNavigate();
@@ -1301,8 +1434,13 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
   const [reviewSignal, setReviewSignal] = useState(0);
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
   const demoPersonaId = useContext(DemoPersonaContext);
-  const chooseTab = (value: string) => { setTab(value); if (compact) onSurfaceChange?.(value); };
-  useEffect(() => { if (surface) setTab(surface); }, [surface]);
+  const chooseTab = (value: string) => {
+    setTab(value);
+    if (compact) onSurfaceChange?.(value);
+  };
+  useEffect(() => {
+    if (surface) setTab(surface);
+  }, [surface]);
   useEffect(() => {
     const screen = window.matchMedia("(max-width: 767px)");
     const collapse = () => {
@@ -1375,136 +1513,142 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
   const home = manager ? "/luca" : d.actor.role === "eam" ? "/eam" : "/portfolio";
   return (
     <div className={`${compact ? "wf-embed" : "wf-shell"} ${rm || ops ? "rm-shell" : ""}`}>
-      {!compact && <>
-      <aside
-        className={`wf-sidebar ${rm || ops ? `rm-sidebar ${collapsed ? "rm-sidebar-collapsed" : ""}` : ""}`}
-      >
-        {rm || ops ? (
-          <>
-            <Link to="/workflows" className={`rm-brand ${collapsed ? "justify-center" : ""}`}>
-              <Circle className="size-5 shrink-0" />
-              {!collapsed && (
-                <span>{ops ? "AKULA · OPERATIONS" : "LUCA · RELATIONSHIP MANAGER"}</span>
-              )}
-            </Link>
-            <nav aria-label={`${ops ? "Akula Ops" : "RM"} workspace navigation`}>
-              {tabs.map((t) => {
-                const TabIcon = RM_TAB_ICONS[t] ?? Circle;
-                return (
-                  <Button
-                    key={t}
-                    variant={tab === t ? "secondary" : "ghost"}
-                    size="lg"
-                    title={collapsed ? t : undefined}
-                    aria-label={t}
-                    aria-current={tab === t ? "page" : undefined}
-                    className={`rm-nav-item w-full ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
-                    onClick={() => chooseTab(t)}
-                  >
-                    <TabIcon className="size-4 shrink-0" />
-                    {!collapsed && t}
-                  </Button>
-                );
-              })}
-            </nav>
-            <div className="rm-sidebar-foot">
-              {collapsed
-                ? ops
-                  ? "OPS"
-                  : "RM"
-                : `${ops ? "Akula Ops" : "LUCA Beta"} · Simulated workspace`}
-            </div>
-          </>
-        ) : (
-          <>
-            <Link to={staff && !manager ? "/workflows" : home} className="wf-brand">
-              akula<span> / LUCA Beta</span>
-            </Link>
-            <p>
-              {manager
-                ? "LUCA fund manager"
-                : ops
-                  ? "Akula Operations"
-                  : "Investor & institution services"}
-            </p>
-            <nav aria-label="Workflow navigation">
-              {tabs.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => chooseTab(t)}
-                  aria-current={tab === t ? "page" : undefined}
-                >
-                  {t}
-                </button>
-              ))}
-            </nav>
-            {(!staff || manager) && <Link to={home}>← Existing portal</Link>}
-            <button onClick={logout}>Sign out</button>
-          </>
-        )}
-      </aside>
-      </>}
+      {d.actor.role === "investor" && <InvestorSegmentControl personaId={demoPersonaId} />}
+      {!compact && (
+        <>
+          <aside
+            className={`wf-sidebar ${rm || ops ? `rm-sidebar ${collapsed ? "rm-sidebar-collapsed" : ""}` : ""}`}
+          >
+            {rm || ops ? (
+              <>
+                <Link to="/workflows" className={`rm-brand ${collapsed ? "justify-center" : ""}`}>
+                  <Circle className="size-5 shrink-0" />
+                  {!collapsed && (
+                    <span>{ops ? "AKULA · OPERATIONS" : "LUCA · RELATIONSHIP MANAGER"}</span>
+                  )}
+                </Link>
+                <nav aria-label={`${ops ? "Akula Ops" : "RM"} workspace navigation`}>
+                  {tabs.map((t) => {
+                    const TabIcon = RM_TAB_ICONS[t] ?? Circle;
+                    return (
+                      <Button
+                        key={t}
+                        variant={tab === t ? "secondary" : "ghost"}
+                        size="lg"
+                        title={collapsed ? t : undefined}
+                        aria-label={t}
+                        aria-current={tab === t ? "page" : undefined}
+                        className={`rm-nav-item w-full ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
+                        onClick={() => chooseTab(t)}
+                      >
+                        <TabIcon className="size-4 shrink-0" />
+                        {!collapsed && t}
+                      </Button>
+                    );
+                  })}
+                </nav>
+                <div className="rm-sidebar-foot">
+                  {collapsed
+                    ? ops
+                      ? "OPS"
+                      : "RM"
+                    : `${ops ? "Akula Ops" : "LUCA Beta"} · Simulated workspace`}
+                </div>
+              </>
+            ) : (
+              <>
+                <Link to={staff && !manager ? "/workflows" : home} className="wf-brand">
+                  akula<span> / LUCA Beta</span>
+                </Link>
+                <p>
+                  {manager
+                    ? "LUCA fund manager"
+                    : ops
+                      ? "Akula Operations"
+                      : "Investor & institution services"}
+                </p>
+                <nav aria-label="Workflow navigation">
+                  {tabs.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => chooseTab(t)}
+                      aria-current={tab === t ? "page" : undefined}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </nav>
+                {(!staff || manager) && <Link to={home}>← Existing portal</Link>}
+                <button onClick={logout}>Sign out</button>
+              </>
+            )}
+          </aside>
+        </>
+      )}
       <main className={`wf-main ${rm || ops ? "rm-main" : ""}`}>
-        {!compact && <>
-        {rm || ops ? (
-          <header className="rm-header">
-            <div className="rm-header-title">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setCollapsed((value) => !value)}
-                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              >
-                <PanelLeft />
-              </Button>
-              <span>{tab}</span>
+        {!compact && (
+          <>
+            {rm || ops ? (
+              <header className="rm-header">
+                <div className="rm-header-title">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setCollapsed((value) => !value)}
+                    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  >
+                    <PanelLeft />
+                  </Button>
+                  <span>{tab}</span>
+                </div>
+                <div className="rm-header-tools">
+                  <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
+                    Compare roles live
+                  </Button>
+                  <DemoResetButton compact />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button variant="ghost" className="border-border">
+                          {d.actor.email[0]?.toUpperCase() ?? "R"}
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent>
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem onClick={() => chooseTab("Overview")}>
+                          {ops ? "Ops workspace" : "RM workspace"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </header>
+            ) : (
+              <header>
+                <div>
+                  <p className="wf-eyebrow">CONNECTED RECORDS</p>
+                  <h1>{tab}</h1>
+                </div>
+                <div className="wf-header-tools">
+                  <Link to="/live-demo">View roles live →</Link>
+                  <DemoResetButton compact />
+                  <span>{d.actor.email}</span>
+                </div>
+              </header>
+            )}
+            <div className={`wf-banner ${rm || ops ? "rm-banner" : ""}`}>
+              SIMULATION · Fictional processing · Browser-local records · No real money or
+              signatures
             </div>
-            <div className="rm-header-tools">
-              <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
-                Compare roles live
-              </Button>
-              <DemoResetButton compact />
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="ghost" className="border-border">
-                      {d.actor.email[0]?.toUpperCase() ?? "R"}
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent>
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={() => chooseTab("Overview")}>
-                      {ops ? "Ops workspace" : "RM workspace"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </header>
-        ) : (
-          <header>
-            <div>
-              <p className="wf-eyebrow">CONNECTED RECORDS</p>
-              <h1>{tab}</h1>
-            </div>
-            <div className="wf-header-tools">
-              <Link to="/live-demo">View roles live →</Link>
-              <DemoResetButton compact />
-              <span>{d.actor.email}</span>
-            </div>
-          </header>
+            {d.storageWarning && (
+              <p role="alert" className="wf-error">
+                {d.storageWarning}
+              </p>
+            )}
+          </>
         )}
-        <div className={`wf-banner ${rm || ops ? "rm-banner" : ""}`}>
-          SIMULATION · Fictional processing · Browser-local records · No real money or signatures
-        </div>
-        {d.storageWarning && (
-          <p role="alert" className="wf-error">
-            {d.storageWarning}
-          </p>
-        )}
-        </>}
         {tab === "Overview" &&
           (rm ? (
             <RMOverview
@@ -1625,7 +1769,11 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
                   onClick={async () =>
                     download(
                       "akula-v4-demo.json",
-                      JSON.stringify(await personaApi(demoPersonaId, "/api/v1/workflows/export"), null, 2),
+                      JSON.stringify(
+                        await personaApi(demoPersonaId, "/api/v1/workflows/export"),
+                        null,
+                        2,
+                      ),
                     )
                   }
                 >
@@ -1804,7 +1952,123 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
                     ))}
                   </Panel>
                 )}
+                {(manager || sub.investor_id === d.actor.id || d.actor.role === "eam") && (
+                  <Panel title="Subscription review & follow-up">
+                    <p>
+                      {sub.on_hold
+                        ? "On hold by LUCA"
+                        : `Current stage: ${sub.status.replaceAll("_", " ")}`}
+                    </p>
+                    {sub.information_request_note && (
+                      <p>
+                        <strong>Information requested:</strong> {sub.information_request_note}
+                      </p>
+                    )}
+                    {sub.information_response_note && (
+                      <p>
+                        <strong>Submitted response:</strong> {sub.information_response_note}
+                      </p>
+                    )}
+                    {manager && sub.status === "under_luca_review" && !sub.on_hold && (
+                      <>
+                        <Action
+                          label="Approve subscription"
+                          command={{
+                            type: "subscription-decision",
+                            id: sub.id,
+                            status: "approved",
+                          }}
+                        />
+                        <Action
+                          label="Request missing information"
+                          command={{
+                            type: "subscription-decision",
+                            id: sub.id,
+                            status: "information_requested",
+                          }}
+                        >
+                          <Field name="text" label="Information needed" />
+                        </Action>
+                        <Action
+                          label="Decline application"
+                          command={{
+                            type: "subscription-decision",
+                            id: sub.id,
+                            status: "rejected",
+                          }}
+                        >
+                          <Field name="text" label="Reason for declining" />
+                        </Action>
+                      </>
+                    )}
+                    {manager &&
+                      !sub.holdingId &&
+                      !["not_allocated", "cancelled", "rejected", "funds_returned"].includes(
+                        sub.status,
+                      ) && (
+                        <Action
+                          label={sub.on_hold ? "Release hold" : "Put on hold"}
+                          command={{
+                            type: "subscription-hold",
+                            id: sub.id,
+                            status: sub.on_hold ? "released" : "held",
+                          }}
+                        />
+                      )}
+                    {(sub.investor_id === d.actor.id || d.actor.role === "eam") &&
+                      sub.status === "information_requested" && (
+                        <Action
+                          label="Submit response to LUCA"
+                          disabled={sub.on_hold}
+                          command={{ type: "respond-information", id: sub.id }}
+                        >
+                          <Field name="text" label="Response to information request" />
+                        </Action>
+                      )}
+                    {sub.investor_id === d.actor.id && (
+                      <>
+                        {["awaiting_funds", "payment_unmatched", "reconciliation"].includes(
+                          sub.status,
+                        ) && (
+                          <div className="rounded border p-3 text-sm">
+                            <strong>Simulated funding instructions</strong>
+                            <p>
+                              Total including agreed fee:{" "}
+                              {money(
+                                Number(sub.amount) + Number(sub.subscription_fee),
+                                sub.currency,
+                              )}
+                            </p>
+                            <p>Beneficiary: Akula VCC - Client Money / Escrow Account</p>
+                            <p>Payment reference: {sub.payment_reference}</p>
+                            <p>
+                              Ops records and matches receipts; declaring a transfer does not
+                              confirm funds.
+                            </p>
+                          </div>
+                        )}
+                        <InvestorSubscriptionActions subscriptionId={sub.id} status={sub.status} />
+                        <FundingShortfall id={sub.id} personaId={demoPersonaId} />
+                      </>
+                    )}
+                  </Panel>
+                )}
                 <Panel title="Allocation & registry">
+                  {!sub.holdingId && (manager || ops) && (
+                    <div className="rounded border p-3">
+                      <strong>{ops ? "Issuance readiness" : "Allocation readiness"}</strong>
+                      {(ops ? sub.issuanceBlockers : sub.allocationBlockers).length ? (
+                        <ul>
+                          {(ops ? sub.issuanceBlockers : sub.allocationBlockers).map((blocker) => (
+                            <li key={blocker}>{blocker}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>Ready for {ops ? "Ops issuance" : "LUCA allocation decision"}.</p>
+                      )}
+                    </div>
+                  )}
+
                   {ops && (
                     <p>
                       {sub.holdingId
@@ -1824,7 +2088,11 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
                     !allocation &&
                     !sub.holdingId &&
                     ["allocation_pending", "reconciliation"].includes(sub.status) && (
-                      <Action label="Approve allocation" command={{ type: "allocate", id: sub.id }}>
+                      <Action
+                        label="Approve allocation"
+                        disabled={sub.allocationBlockers.length > 0}
+                        command={{ type: "allocate", id: sub.id }}
+                      >
                         <Field
                           name="amount"
                           type="number"
@@ -1841,6 +2109,7 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
                   {ops && !!allocation?.principal && !sub.holdingId && (
                     <Action
                       label="Confirm simulated registry issuance"
+                      disabled={sub.issuanceBlockers.length > 0}
                       command={{ type: "issue", id: sub.id }}
                     />
                   )}
@@ -2217,9 +2486,7 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
         )}
         {(tab === "Demand" || tab === "Company requests") && (
           <>
-            <Panel
-              title={privileged ? "Investor demand signals" : "Request another company"}
-            >
+            <Panel title={privileged ? "Investor demand signals" : "Request another company"}>
               <p>
                 {privileged
                   ? "Illustrative, nonbinding investor interest helps LUCA decide which companies to source. It is a demand signal, not an order book or allocation."
@@ -2238,71 +2505,75 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
                 </Action>
               )}
               {privileged && <DemandAnalytics d={d} ops={ops} manager={manager} />}
-              {!privileged && Array.from(new Set(d.requests.map((r) => r.key))).map((key) => {
-                const rows = d.requests.filter((r) => r.key === key),
-                  r = rows[0];
-                return (
-                  <article className="wf-record" key={key}>
-                    <h3>{r.company}</h3>
-                    <p>
-                      {new Set(rows.map((r) => r.investorId)).size} requesting investor(s) ·{" "}
-                      {r.status}
-                    </p>
-                    {privileged && (
+              {!privileged &&
+                Array.from(new Set(d.requests.map((r) => r.key))).map((key) => {
+                  const rows = d.requests.filter((r) => r.key === key),
+                    r = rows[0];
+                  return (
+                    <article className="wf-record" key={key}>
+                      <h3>{r.company}</h3>
                       <p>
-                        Illustrative demand:{" "}
-                        {rows.filter((x) => x.amount !== undefined && x.currency === "USD").length}{" "}
-                        USD indications totalling{" "}
-                        {money(
-                          rows
-                            .filter((x) => x.currency === "USD")
-                            .reduce((total, x) => total + (x.amount || 0), 0),
-                        )}
-                        . Nonbinding; not an order book.
+                        {new Set(rows.map((r) => r.investorId)).size} requesting investor(s) ·{" "}
+                        {r.status}
                       </p>
-                    )}
-                    {rows.map((x) => (
-                      <p key={x.id}>
-                        {privileged
-                          ? `${d.clients.find((client) => client.id === x.investorId)?.name || `Investor #${x.investorId}`} · ${d.clients.find((client) => client.id === x.investorId)?.code || ""}`
-                          : `Request #${x.id}`}
-                        :{" "}
-                        {x.amount === undefined
-                          ? "No amount indicated"
-                          : money(x.amount, x.currency)}
-                        {x.fundId && (
-                          <Link to={`/funds/${x.fundId}`}> · Opportunity available →</Link>
-                        )}
-                      </p>
-                    ))}
-                    {privileged && (
-                      <Action
-                        label="Update all requesters"
-                        command={{ type: "request-status", id: r.id }}
-                      >
-                        <Choice
-                          name="status"
-                          label="Sourcing status"
-                          items={[
-                            "Under review",
-                            "Shared with LUCA",
-                            "Not currently available",
-                            "Opportunity available",
-                          ].map((name) => ({ id: name, name }))}
-                        />
-                        <Choice
-                          name="target"
-                          label="Published offering (only when available)"
-                          items={[
-                            { id: "", name: "None" },
-                            ...d.funds.filter((f) => f.state === "open"),
-                          ]}
-                        />
-                      </Action>
-                    )}
-                  </article>
-                );
-              })}
+                      {privileged && (
+                        <p>
+                          Illustrative demand:{" "}
+                          {
+                            rows.filter((x) => x.amount !== undefined && x.currency === "USD")
+                              .length
+                          }{" "}
+                          USD indications totalling{" "}
+                          {money(
+                            rows
+                              .filter((x) => x.currency === "USD")
+                              .reduce((total, x) => total + (x.amount || 0), 0),
+                          )}
+                          . Nonbinding; not an order book.
+                        </p>
+                      )}
+                      {rows.map((x) => (
+                        <p key={x.id}>
+                          {privileged
+                            ? `${d.clients.find((client) => client.id === x.investorId)?.name || `Investor #${x.investorId}`} · ${d.clients.find((client) => client.id === x.investorId)?.code || ""}`
+                            : `Request #${x.id}`}
+                          :{" "}
+                          {x.amount === undefined
+                            ? "No amount indicated"
+                            : money(x.amount, x.currency)}
+                          {x.fundId && (
+                            <Link to={`/funds/${x.fundId}`}> · Opportunity available →</Link>
+                          )}
+                        </p>
+                      ))}
+                      {privileged && (
+                        <Action
+                          label="Update all requesters"
+                          command={{ type: "request-status", id: r.id }}
+                        >
+                          <Choice
+                            name="status"
+                            label="Sourcing status"
+                            items={[
+                              "Under review",
+                              "Shared with LUCA",
+                              "Not currently available",
+                              "Opportunity available",
+                            ].map((name) => ({ id: name, name }))}
+                          />
+                          <Choice
+                            name="target"
+                            label="Published offering (only when available)"
+                            items={[
+                              { id: "", name: "None" },
+                              ...d.funds.filter((f) => f.state === "open"),
+                            ]}
+                          />
+                        </Action>
+                      )}
+                    </article>
+                  );
+                })}
             </Panel>
           </>
         )}
@@ -2466,6 +2737,19 @@ function WorkflowPageContent({ surface, compact = false, onSurfaceChange }: { su
   );
 }
 
-export default function WorkflowPage(props: { demoPersonaId?: number; surface?: string; compact?: boolean; onSurfaceChange?: (surface: string) => void }) {
-  return <DemoPersonaContext.Provider value={props.demoPersonaId}><WorkflowPageContent surface={props.surface} compact={props.compact} onSurfaceChange={props.onSurfaceChange} /></DemoPersonaContext.Provider>;
+export default function WorkflowPage(props: {
+  demoPersonaId?: number;
+  surface?: string;
+  compact?: boolean;
+  onSurfaceChange?: (surface: string) => void;
+}) {
+  return (
+    <DemoPersonaContext.Provider value={props.demoPersonaId}>
+      <WorkflowPageContent
+        surface={props.surface}
+        compact={props.compact}
+        onSurfaceChange={props.onSurfaceChange}
+      />
+    </DemoPersonaContext.Provider>
+  );
 }

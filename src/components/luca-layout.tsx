@@ -25,6 +25,7 @@ import {
 const NAV_ITEMS = [
   { to: "/luca", label: "Dashboard", icon: LayoutDashboard },
   { to: "/luca/deals", label: "Deals", icon: TrendingUp },
+  { to: "/luca/publication", label: "Publication", icon: ShieldCheckIcon },
   { to: "/luca/onboarding", label: "Onboarding", icon: UserCheckIcon },
   { to: "/luca/subscriptions", label: "Subscriptions", icon: CreditCard },
   { to: "/luca/partners", label: "Partners", icon: Building2Icon },

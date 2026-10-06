@@ -142,7 +142,9 @@ export default function LiveComparePage() {
       ).map((pane) => {
         const controls = pane.querySelector<HTMLElement>(".live-pane-controls");
         const screen = pane.querySelector<HTMLElement>(".live-pane-screen");
-        return Math.ceil((controls?.getBoundingClientRect().height ?? 0) + (screen?.scrollHeight ?? 0) + 44);
+        return Math.ceil(
+          (controls?.getBoundingClientRect().height ?? 0) + (screen?.scrollHeight ?? 0) + 44,
+        );
       });
       const nextHeight = Math.max(620, ...requiredHeights);
       setPaneHeight((current) => (current === nextHeight ? current : nextHeight));
@@ -213,4 +215,3 @@ export default function LiveComparePage() {
     </div>
   );
 }
-

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import FundingShortfall from "@/components/funding-shortfall";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -360,7 +361,15 @@ function TermsStep({
             <span>{formatPricePrecise(numAmount)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Fee ({fund.subscription_fee_pct}%)</span>
+            <span className="text-muted-foreground">
+              Fee (
+              {subscription.commercial_terms?.subscriptionFeePct ??
+                (
+                  (Number(subscription.subscription_fee) / Number(subscription.amount)) *
+                  100
+                ).toFixed(2)}
+              %)
+            </span>
             <span>{formatPricePrecise(fee)}</span>
           </div>
           <div className="flex justify-between border-t pt-2 font-medium">
@@ -652,6 +661,21 @@ function ReviewStep({
   });
 
   const subscription = data.subscription;
+  const [responseText, setResponseText] = useState("");
+  const response = useMutation({
+    mutationFn: () =>
+      api<SubscriptionShowResponse>(
+        `/api/v1/subscriptions/${subscription.id}/information_response`,
+        { method: "POST", body: { text: responseText } },
+      ),
+    onSuccess: (res) => {
+      queryClient.setQueryData(["subscription", subscription.id], res);
+      queryClient.invalidateQueries();
+      setResponseText("");
+      toast.success("Response sent to LUCA for review.");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const proceedMutation = useMutation({
     mutationFn: () =>
@@ -721,6 +745,29 @@ function ReviewStep({
           <CardContent className="space-y-1 pt-6 text-sm">
             <p className="font-medium">More information needed</p>
             <p className="text-muted-foreground">{subscription.information_request_note}</p>
+            {subscription.status === "information_requested" && (
+              <div className="space-y-2 pt-3">
+                <label htmlFor="information-response">Your response</label>
+                <textarea
+                  id="information-response"
+                  className="w-full rounded border p-2"
+                  value={responseText}
+                  onChange={(e) => setResponseText(e.target.value)}
+                />
+                <Button
+                  disabled={!responseText.trim() || response.isPending || subscription.on_hold}
+                  onClick={() => response.mutate()}
+                >
+                  Submit response to LUCA
+                </Button>
+                {subscription.on_hold && <p>LUCA must release the hold before you can submit.</p>}
+              </div>
+            )}
+            {subscription.information_response_note && (
+              <p className="pt-2">
+                Your submitted response: {subscription.information_response_note}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -891,12 +938,17 @@ function AllocationStep({ subscription: initial }: { subscription: Subscription 
     },
     refetchInterval: (query) => {
       const status = query.state.data?.subscription.status;
-      return status && IN_FLIGHT_STATUSES.includes(status) ? 8000 : false;
+      return status &&
+        (IN_FLIGHT_STATUSES.includes(status) ||
+          (status === "allocated" && !query.state.data?.subscription.holding_id))
+        ? 8000
+        : false;
     },
   });
 
   const subscription = data.subscription;
   const isAllocated = subscription.status === "allocated";
+  const isIssued = !!subscription.holding_id;
   const isRejected =
     subscription.status === "not_allocated" || subscription.status === "funds_returned";
 
@@ -907,7 +959,7 @@ function AllocationStep({ subscription: initial }: { subscription: Subscription 
       }),
     onSuccess: (res) => {
       queryClient.setQueryData(["subscription", subscription.id], res);
-      toast.success("Refund requested. Funds will be returned within 5 business days.");
+      toast.success("Application cancelled. Akula Ops will process any confirmed funds due back.");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -937,10 +989,12 @@ function AllocationStep({ subscription: initial }: { subscription: Subscription 
       </h2>
       <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
         {isAllocated
-          ? "Your units have been allocated. This position will now appear in your portfolio."
+          ? isIssued
+            ? "Your holding has been issued and now appears in your portfolio."
+            : "LUCA has recorded your allocation. Akula Ops must issue the holding before it appears in your portfolio."
           : isRejected
             ? "This subscription did not complete. Any funds received will be returned to your account of origin."
-            : "We're watching for your transfer and will reconcile it against escrow automatically. This page updates as your subscription moves through review."}
+            : "Akula Ops records and matches your transfer. This page updates as cash is matched, LUCA records allocation and Ops issues the holding."}
       </p>
 
       <Card className="mx-auto mt-8 max-w-sm text-left">
@@ -964,6 +1018,7 @@ function AllocationStep({ subscription: initial }: { subscription: Subscription 
         </CardContent>
       </Card>
 
+      <FundingShortfall id={subscription.id} />
       {subscription.status === "awaiting_funds" && (
         <Button
           variant="outline"
@@ -971,9 +1026,7 @@ function AllocationStep({ subscription: initial }: { subscription: Subscription 
           onClick={() => refundMutation.mutate()}
           disabled={refundMutation.isPending}
         >
-          {refundMutation.isPending
-            ? "Requesting refund..."
-            : "Request refund (within 5 business days)"}
+          {refundMutation.isPending ? "Requesting refund..." : "Cancel unissued application"}
         </Button>
       )}
 
@@ -1043,7 +1096,17 @@ export default function CheckoutPage() {
       }>("/api/v1/investor_profile"),
   });
 
-  const fund = fundData?.fund;
+  const fund = useMemo(() => {
+    if (subscription?.effective_terms) return subscription.effective_terms;
+    if (subscription && fundData?.fund && Number(subscription.amount) > 0)
+      return {
+        ...fundData.fund,
+        subscription_fee_pct: String(
+          (Number(subscription.subscription_fee) / Number(subscription.amount)) * 100,
+        ),
+      };
+    return fundData?.fund;
+  }, [subscription, fundData?.fund]);
   const investorName = profileData?.investor_profile
     ? `${profileData.investor_profile.first_name} ${profileData.investor_profile.last_name}`
     : "Verified investor";

@@ -823,6 +823,15 @@ function SubscribeCalculator({ fund }: { fund: Fund }) {
   const fee = numAmount * (feePct / 100);
   const valid = numAmount >= minSub && (!maxSub || numAmount <= maxSub);
 
+  if (fund.investor_access && !fund.investor_access.canSubscribe) {
+    return (
+      <div className="rounded-lg border bg-card p-4 text-center text-sm text-muted-foreground">
+        This deal remains available for your investment history. Your current investor profile does
+        not provide access to new subscriptions in this deal.
+      </div>
+    );
+  }
+
   if (fund.state !== "open") {
     return (
       <div className="rounded-lg border bg-card p-4 text-center text-sm text-muted-foreground">
@@ -961,7 +970,7 @@ export default function DealOverviewPage({
                           : "Investor opportunity access"}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Read-only preview. No allocation, watchlist or subscription is created.
+                      Read-only preview. No allocation or subscription is created.
                     </p>
                   </div>
                 ) : (

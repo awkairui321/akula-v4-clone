@@ -1,3 +1,4 @@
+import type { InvestorAccess, CommercialTerms } from "./investor-access";
 export type Asset = {
   id: number;
   name: string;
@@ -80,6 +81,7 @@ export type FundStatus =
   | "cancelled";
 
 export type Fund = {
+  investor_access?: InvestorAccess;
   id: number;
   name: string;
   codename: string;
@@ -185,7 +187,7 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
 };
 
 /**
- * The subscription journey, in four stages. This one definition is shared by the
+ * The subscription journey, including allocation before registry issuance, is shared by the
  * investor, adviser (EAM) and LUCA views so everyone uses the same words.
  *
  * Statuses are the fine-grained backend states that decide who acts next; stages
@@ -195,9 +197,14 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
  *    (a decision is being made; a request for information pauses it)
  *  - transfer: approved + awaiting_funds + payment_unmatched (money is due)
  *  - verification: reconciliation + allocation_pending (money is being checked)
- * `allocated` is the outcome ("Holding issued"); everything else terminal is closed.
+ * `allocated` records LUCA's allocation. A separate holding_id confirms Ops issuance.
  */
-export type SubscriptionStageKey = "signature" | "approval" | "transfer" | "verification";
+export type SubscriptionStageKey =
+  | "signature"
+  | "approval"
+  | "transfer"
+  | "verification"
+  | "issuance";
 
 export const SUBSCRIPTION_STAGES: {
   key: SubscriptionStageKey;
@@ -237,24 +244,28 @@ export const SUBSCRIPTION_STAGES: {
     detail: "Akula Ops reconciles the funds; LUCA confirms the allocation.",
     statuses: ["reconciliation", "allocation_pending"],
   },
+  {
+    key: "issuance",
+    label: "Allocation recorded",
+    milestone: "Allocation",
+    detail: "LUCA has recorded allocation. Akula Ops must issue the registry holding separately.",
+    statuses: ["allocated"],
+  },
 ];
 
-/** The outcome after the four stages: units are allocated and a holding is issued. */
+/** Registry issuance is the outcome after allocation. */
 export const HOLDING_ISSUED_LABEL = "Holding issued";
 
 export function stageOfStatus(status: SubscriptionStatus) {
   return SUBSCRIPTION_STAGES.find((stage) => stage.statuses.includes(status));
 }
 
-/** Dashboard pipeline: the four active stages plus the issued-holding outcome. */
+/** Dashboard groups lifecycle statuses; allocated records may await registry issuance. */
 export const LUCA_PIPELINE_STAGES: {
   key: string;
   label: string;
   statuses: SubscriptionStatus[];
-}[] = [
-  ...SUBSCRIPTION_STAGES.map(({ key, label, statuses }) => ({ key, label, statuses })),
-  { key: "holding", label: HOLDING_ISSUED_LABEL, statuses: ["allocated"] },
-];
+}[] = [...SUBSCRIPTION_STAGES.map(({ key, label, statuses }) => ({ key, label, statuses }))];
 
 export const OWNER_LABELS: Record<SubscriptionOwner, string> = {
   investor: "Investor",
@@ -279,6 +290,7 @@ export const NEXT_ACTION_LABELS: Record<string, string> = {
   match_payment: "Match the payment reference",
   reconcile_funds: "Reconcile funds in escrow",
   allocate_units: "Allocate units",
+  confirm_registry_issuance: "Akula Ops to issue the holding",
   return_funds: "Return funds to investor",
 };
 
@@ -291,6 +303,8 @@ export const CLOSED_SUBSCRIPTION_STATUSES: SubscriptionStatus[] = [
 ];
 
 export type Subscription = {
+  commercial_terms?: CommercialTerms;
+  effective_terms?: Fund;
   id: number;
   fund_id: number;
   fund_name: string;
@@ -307,6 +321,11 @@ export type Subscription = {
   /** What LUCA said is missing/needed, set when status is information_requested. */
   information_request_note: string | null;
   information_requested_at: string | null;
+  information_response_note?: string | null;
+  information_responded_at?: string | null;
+  topup_declared_at?: string | null;
+  topup_matched_amount?: number;
+  holding_id?: number | null;
   reserved_at: string | null;
   confirmed_at: string | null;
   institution_reviewed_at: string | null;

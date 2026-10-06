@@ -1,7 +1,9 @@
+import DealOverviewPage from "@/components/deal-overview-page";
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import type { WorkflowView } from "@/lib/workflow-types";
 import type { Document } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +29,64 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const ACCOUNT_DOCUMENTS_LABEL = "Account documents";
+
+function RequiredVersionReviews() {
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["investorDocumentReviews"],
+    queryFn: () => api<WorkflowView>("/api/v1/workflows"),
+    refetchInterval: 2000,
+  });
+  const acknowledge = useMutation({
+    mutationFn: ({ id, target }: { id: number; target: number }) =>
+      api("/api/v1/workflows", { method: "POST", body: { type: "acknowledge", id, target } }),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  const pending = data?.subscriptions.filter((s) => s.needsReview) ?? [];
+  if (!pending.length) return null;
+  return (
+    <section className="space-y-3 rounded-lg border bg-card p-4">
+      <h2 className="font-semibold">Updated investment documents to review</h2>
+      {pending.map((sub) => {
+        const version = data?.versions.find((v) => v.id === sub.needsReview);
+        return (
+          <div key={sub.id} className="rounded border p-3">
+            <strong>
+              {sub.asset_name} · subscription #{sub.id}
+            </strong>
+            <p className="text-sm">
+              Version #{version?.number ?? sub.needsReview}. Allocation and issuance wait for your
+              acknowledgement.
+            </p>
+            <details className="my-2">
+              <summary>Read revised offering</summary>
+              <div className="max-h-[70vh] overflow-auto">
+                {version ? (
+                  <DealOverviewPage
+                    fund={version.snapshot}
+                    viewer="investor"
+                    preview
+                    backTo="/documents"
+                    backLabel="Back to documents"
+                  />
+                ) : (
+                  "Version unavailable"
+                )}
+              </div>
+            </details>
+            <Button
+              disabled={!version || acknowledge.isPending}
+              onClick={() => acknowledge.mutate({ id: sub.id, target: sub.needsReview! })}
+            >
+              I reviewed this version — acknowledge
+            </Button>
+          </div>
+        );
+      })}
+      {acknowledge.isError && <p role="alert">{acknowledge.error.message}</p>}
+    </section>
+  );
+}
 
 function DocumentRow({ doc }: { doc: Document }) {
   return (
@@ -175,6 +235,7 @@ export default function DocumentsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <RequiredVersionReviews />
       <div className="mb-2 space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Documents</h1>
         <p className="text-muted-foreground">

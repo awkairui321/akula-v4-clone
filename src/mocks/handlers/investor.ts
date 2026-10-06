@@ -1,4 +1,14 @@
+import { commercialTerms, fundForSegment } from "../../lib/investor-access";
 import {
+  segmentFor,
+  investorAudience,
+  mayDiscover,
+  hasInvestmentHistory,
+} from "../investor-access";
+import {
+  command,
+  portfolioHistory,
+  persist,
   ownedSubscription,
   recordSignature,
   requestWithdrawal,
@@ -32,10 +42,13 @@ import {
   ownerFor,
   nextActionFor,
   adviserClients,
+  partners,
+  users,
+  verificationDocumentsByInvestor,
+  nextDocumentId,
   highlights,
   fundAsSeenBy,
   documentRequests,
-  nextDocumentId,
   communications,
   communicationRecipients,
 } from "../db";
@@ -45,13 +58,29 @@ function unauthorized() {
 }
 
 export const investorHandlers = [
+  http.get("*/api/v1/demo/investor-segment", ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    return HttpResponse.json({ segment: segmentFor(user) });
+  }),
+  http.patch("*/api/v1/demo/investor-segment", async ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    const body = (await request.json()) as { segment?: string };
+    if (body.segment !== "independent" && body.segment !== "partner_referred")
+      return HttpResponse.json({ error: "Choose a valid demo investor profile." }, { status: 422 });
+    user.investor_segment = body.segment;
+    return HttpResponse.json({ segment: segmentFor(user) });
+  }),
   // GET /api/v1/rm_highlights — deals the investor's own RM/adviser has
   // flagged for them, if they have an adviser relationship on file at all.
   http.get("*/api/v1/rm_highlights", ({ request }) => {
     const user = currentUser(request);
     if (!user) return unauthorized();
     const clientIds = adviserClients.filter((c) => c.investor_id === user.id).map((c) => c.id);
-    const mine = highlights.filter((h) => clientIds.includes(h.adviser_client_id));
+    const mine = highlights.filter(
+      (h) => clientIds.includes(h.adviser_client_id) && mayDiscover(user, h.fund_id),
+    );
     return HttpResponse.json({ highlights: mine });
   }),
 
@@ -81,11 +110,23 @@ export const investorHandlers = [
       );
     return HttpResponse.json({
       funds: funds
-        .filter((f) => user.role === "luca" || user.role === "ops" || f.state !== "draft")
+        .filter(
+          (f) =>
+            (user.role === "luca" || user.role === "ops" || f.state !== "draft") &&
+            mayDiscover(user, f.id),
+        )
         .map((f) =>
           user.role === "luca" || user.role === "ops"
             ? f
-            : fundAsSeenBy({ ...(currentVersion(f.id)?.snapshot ?? f), state: f.state }, user.id),
+            : investorAudience(user)
+              ? fundForSegment(
+                  fundAsSeenBy(
+                    { ...(currentVersion(f.id)?.snapshot ?? f), state: f.state },
+                    user.id,
+                  ),
+                  segmentFor(user),
+                )
+              : { ...(currentVersion(f.id)?.snapshot ?? f), state: f.state },
         ),
     });
   }),
@@ -105,13 +146,23 @@ export const investorHandlers = [
       return HttpResponse.json({ error: "Disclosure access required" }, { status: 403 });
     if (fund.state === "draft" && !["luca", "ops"].includes(user.role))
       return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
+    if (!mayDiscover(user, fund.id) && !hasInvestmentHistory(user, fund.id))
+      return HttpResponse.json(
+        { error: "This opportunity is available to partner-referred investors." },
+        { status: 403 },
+      );
     return HttpResponse.json({
       fund: ["luca", "ops"].includes(user.role)
         ? fund
-        : fundAsSeenBy(
-            { ...(currentVersion(fund.id)?.snapshot ?? fund), state: fund.state },
-            user.id,
-          ),
+        : investorAudience(user)
+          ? fundForSegment(
+              fundAsSeenBy(
+                { ...(currentVersion(fund.id)?.snapshot ?? fund), state: fund.state },
+                user.id,
+              ),
+              segmentFor(user),
+            )
+          : { ...(currentVersion(fund.id)?.snapshot ?? fund), state: fund.state },
     });
   }),
 
@@ -125,6 +176,67 @@ export const investorHandlers = [
     const company = findDiscoverCompanyById(Number(params.id));
     if (!company) return HttpResponse.json({ error: "Company not found" }, { status: 404 });
     return HttpResponse.json({ company });
+  }),
+
+  http.get("*/api/v1/portfolio/history", ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    return HttpResponse.json({ history: portfolioHistory(user) });
+  }),
+
+  http.get("*/api/v1/onboarding/documents", ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    return HttpResponse.json({ documents: verificationDocumentsByInvestor[user.id] ?? [] });
+  }),
+  http.post("*/api/v1/onboarding/documents", async ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    const body = (await request.json()) as { name?: string; kind?: string; file_data_url?: string };
+    if (
+      !body.name?.trim() ||
+      !["passport", "accreditation_letter"].includes(body.kind ?? "") ||
+      !body.file_data_url ||
+      !/^data:(application\/pdf|image\/(png|jpeg));base64,[A-Za-z0-9+/]+={0,2}$/.test(
+        body.file_data_url,
+      ) ||
+      body.file_data_url.length > 2800000
+    )
+      return HttpResponse.json(
+        { error: "Choose a PDF, PNG or JPEG document up to 2 MB and a valid document type." },
+        { status: 422 },
+      );
+    const id = nextDocumentId();
+    const doc = {
+      id,
+      document_type: body.kind!,
+      status: "pending",
+      notes: body.name.trim(),
+      has_file: true,
+      created_at: new Date().toISOString(),
+    };
+    (verificationDocumentsByInvestor[user.id] ??= []).push(doc);
+    const profile = findInvestorProfileByUserId(user.id);
+    documents.push({
+      id,
+      name: body.name.trim(),
+      kind: body.kind!,
+      status: "action_required",
+      review_state: "received",
+      has_file: true,
+      file_data_url: body.file_data_url,
+      fund_id: null,
+      fund_name: null,
+      subscription_id: null,
+      owner_id: user.id,
+      owner_name: profile
+        ? `${profile.first_name} ${profile.last_name}`.trim() || user.email
+        : user.email,
+      owner_email: user.email,
+      created_at: doc.created_at,
+    });
+    persist();
+    return HttpResponse.json({ document: doc });
   }),
 
   // GET /api/v1/holdings
@@ -161,7 +273,21 @@ export const investorHandlers = [
     }
     const working = findFundById(body.fund_id);
     const published = currentVersion(body.fund_id);
-    const fund = working && published ? { ...published.snapshot, state: working.state } : undefined;
+    const fund =
+      working && published
+        ? fundForSegment(
+            fundAsSeenBy({ ...published.snapshot, state: working.state }, user.id),
+            segmentFor(user),
+          )
+        : undefined;
+    if (working && !mayDiscover(user, working.id))
+      return HttpResponse.json(
+        {
+          error:
+            "This opportunity is not available for new subscriptions under your investor profile.",
+        },
+        { status: 403 },
+      );
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
     if (
       !user.has_investor_profile ||
@@ -197,6 +323,14 @@ export const investorHandlers = [
     }
     const sub = createSubscription(user.id, body.fund_id, body.amount);
     sub.document_version_id = published!.id;
+    sub.effective_terms = structuredClone(fund);
+    sub.commercial_terms = commercialTerms(
+      segmentFor(user),
+      fundAsSeenBy(published!.snapshot, user.id),
+    );
+    const feeAcknowledgement = sub.acknowledgements.find((term) => term.key === "fees_disclosure");
+    if (feeAcknowledgement)
+      feeAcknowledgement.body += ` My ${sub.commercial_terms.segment === "independent" ? "independent" : "partner-referred"} profile subscription fee is ${sub.commercial_terms.subscriptionFeePct}%. Allocation consideration is ${sub.commercial_terms.allocationPriority === "partner_priority" ? "partner priority" : "standard"}, subject to LUCA's decision; no allocation is guaranteed.`;
     sub.subscription_fee = ((amount * Number(fund.subscription_fee_pct)) / 100).toFixed(2);
     sub.fund_name = fund.name;
     sub.asset_name = fund.asset.name;
@@ -223,7 +357,15 @@ export const investorHandlers = [
     const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
     const body = (await request.json().catch(() => ({}))) as { payment_declared?: boolean };
-    if (body.payment_declared) {
+    if (body.payment_declared && sub.status === "reconciliation") {
+      try {
+        command(currentUser(request)!, { type: "declare-topup", id: sub.id });
+      } catch (error) {
+        return HttpResponse.json({ error: (error as Error).message }, { status: 422 });
+      }
+    } else if (body.payment_declared) {
+      if (sub.on_hold)
+        return HttpResponse.json({ error: "Subscription is on hold" }, { status: 422 });
       if (!["awaiting_funds", "payment_unmatched"].includes(sub.status))
         return HttpResponse.json(
           { error: "Funding is not available at this stage" },
@@ -443,7 +585,12 @@ export const investorHandlers = [
     const user = currentUser(request);
     if (!user) return unauthorized();
     const recipient = communicationRecipients.find(
-      (r) => r.communication_id === Number(params.id) && r.investor_id === user.id,
+      (r) =>
+        r.communication_id === Number(params.id) &&
+        r.investor_id === user.id &&
+        r.routed_via === "investor" &&
+        r.delivered_at &&
+        communications.some((c) => c.id === r.communication_id && c.status === "sent"),
     );
     if (!recipient) return HttpResponse.json({ error: "Message not found" }, { status: 404 });
     if (!recipient.opened_at) recipient.opened_at = new Date().toISOString();
@@ -511,6 +658,8 @@ export const investorHandlers = [
     if (!fundId) {
       return HttpResponse.json({ documents: documents.filter((d) => d.owner_id === user.id) });
     }
+    if (!mayDiscover(user, Number(fundId)) && !hasInvestmentHistory(user, Number(fundId)))
+      return HttpResponse.json({ error: "Opportunity access required" }, { status: 403 });
     const forFund = documents.filter(
       (d) =>
         d.fund_id === Number(fundId) &&
@@ -614,6 +763,24 @@ export const investorHandlers = [
     return HttpResponse.json({ consents: consentsForUser(user.id) });
   }),
 
+  http.post("*/api/v1/subscriptions/:id/information_response", async ({ params, request }) => {
+    const user = currentUser(request);
+    const sub = ownedSubscription(request, Number(params.id));
+    if (!user || !sub)
+      return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
+    const body = (await request.json()) as { text?: string };
+    try {
+      command(user, { type: "respond-information", id: sub.id, text: body.text });
+      return HttpResponse.json({
+        subscription: toSubscription(sub),
+        wizard_step: wizardStepFor(sub),
+        acknowledgements_complete: acknowledgementsResponse(sub).complete,
+      });
+    } catch (error) {
+      return HttpResponse.json({ error: (error as Error).message }, { status: 422 });
+    }
+  }),
+
   // POST /api/v1/subscriptions/:id/proceed_to_funding
   http.post("*/api/v1/subscriptions/:id/proceed_to_funding", ({ params, request }) => {
     const sub = ownedSubscription(request, Number(params.id));
@@ -706,6 +873,56 @@ async function upsertProfile(request: Request) {
     investorProfiles.push(profile);
   }
 
+  if (patch.channel !== undefined && patch.channel !== "direct" && patch.channel !== "eam_referred")
+    return HttpResponse.json({ error: "Invalid investor channel" }, { status: 422 });
+  const referralCodes: Record<string, number> = { MERIDIAN: 1, "STRAITS-FO": 2 };
+  const nextChannel = patch.channel ?? profile.channel;
+  const code = String(patch.referral_code ?? profile.referral_code ?? "")
+    .trim()
+    .toUpperCase();
+  if (
+    nextChannel === "eam_referred" &&
+    !profile.eam_firm &&
+    (patch.channel !== undefined || patch.referral_code !== undefined)
+  ) {
+    const partner = partners.find((p) => p.id === referralCodes[code]);
+    const adviser =
+      partner && users.find((u) => u.email === partner.contact_email && u.has_eam_profile);
+    if (!partner || !adviser)
+      return HttpResponse.json(
+        {
+          error:
+            "Enter a valid adviser referral code to link your institution. Demo codes: MERIDIAN, STRAITS-FO.",
+        },
+        { status: 422 },
+      );
+    profile.eam_firm = partner.firm_name;
+    profile.eam_name = partner.display_name;
+    if (!adviserClients.some((c) => c.investor_id === user.id && c.eam_user_id === adviser.id))
+      adviserClients.push({
+        id: Math.max(0, ...adviserClients.map((c) => c.id)) + 1,
+        investor_id: user.id,
+        investor_profile_id: profile.id,
+        eam_user_id: adviser.id,
+        client_name: `${profile.first_name} ${profile.last_name}`.trim() || user.email,
+        client_email: user.email,
+        stage: "onboarding",
+        notes: "Linked by validated demo referral code.",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    if (!partner.clientInvestorIds.includes(user.id)) partner.clientInvestorIds.push(user.id);
+  }
+  // Changing a commercial route does not silently transfer an existing servicing relationship.
+  if (patch.referral_code !== undefined && profile.eam_firm && code) {
+    const partner = partners.find((p) => p.id === referralCodes[code]);
+    if (!partner || partner.firm_name !== profile.eam_firm)
+      return HttpResponse.json(
+        { error: "This referral code does not match your existing institution." },
+        { status: 422 },
+      );
+  }
+  if (patch.channel !== undefined) delete user.investor_segment;
   const previousStep = profile.onboarding_step;
   const allowed = [
     "first_name",
@@ -729,6 +946,10 @@ async function upsertProfile(request: Request) {
     profile,
     Object.fromEntries(Object.entries(patch).filter(([key]) => allowed.includes(key))),
   );
+  for (const client of adviserClients.filter((c) => c.investor_id === user.id)) {
+    client.client_name = `${profile.first_name} ${profile.last_name}`.trim() || user.email;
+    client.updated_at = new Date().toISOString();
+  }
   // onboarding_step should only ever move forward.
   if (typeof patch.onboarding_step === "number") {
     profile.onboarding_step = Math.max(previousStep, patch.onboarding_step);

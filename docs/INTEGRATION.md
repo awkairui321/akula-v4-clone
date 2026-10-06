@@ -1,6 +1,6 @@
 # Akula v4 connected beta integration
 
-Destination: `awkairui321/akula-v4-clone`. Based on source commit `f99d032d49d3fbd63217bb0ac5232a2b37fbe487`. The v4 router, numeric IDs, authenticated demo profiles, React Query, API paths, MSW transport, investor journeys and external-institution portal are retained. Existing discovery, watchlist, early-exit, communications and editor routes remain. Reference repositories were read only.
+Destination: `awkairui321/akula-v4-clone`. Based on source commit `f99d032d49d3fbd63217bb0ac5232a2b37fbe487`. The v4 router, numeric IDs, authenticated demo profiles, React Query, API paths, MSW transport, investor journeys and external-institution portal are retained. Existing discovery, early-exit, Messages, Compliance and editor routes remain. The current investor portal uses separate Account and Support routes; it has no Watchlist route. Reference repositories were read only.
 
 ## Implemented
 
@@ -10,12 +10,14 @@ Destination: `awkairui321/akula-v4-clone`. Based on source commit `f99d032d49d3f
 - Allocation and issuance are separate. Partial allocations retain requested principal, use actual allocated principal/fees, and reconcile residual returns. Zero allocations cannot issue. Receipt corrections preserve original entries. Late cash appends a new obligation rather than overwriting settled history. Cancelled offerings cannot advance through allocation or issuance.
 - Exact offering snapshots, signature references, version approval/publication and investor acknowledgment of revisions. Original signed economics and documents remain. Existing editors author working content; investor deal reads use the published snapshot. Newly created offerings are drafts and need review/approval/publication.
 - Shared support cases with references, investment links, replies and team routing. Existing institution discussions are linked to the same servicing records; messages flow in both directions.
-- Manager-controlled RM assignment, exact published-version highlights, private notes and dated follow-ups. Reassignment and newer publication remove stale highlights from current display. Full-shelf access does not depend on highlights.
+- Manager-controlled RM assignment, exact published-version highlights, private notes and dated follow-ups. Reassignment and newer publication remove stale highlights from current display. Commercial shelf access does not depend on highlights. Independent investors see Helios, Orbis and Ledger; referred investors see all published deals. Historical holdings and applications remain available after a commercial-profile change.
 - Company requests, unique-investor demand, manual sharing/status changes and company-matched publication links. Requests never reserve an allocation. The existing editor creates company-specific offerings; missing material is not borrowed from another company.
 - Sourced valuation records and stale-report labels. Experimental secondary indications are separate observations and never affect portfolio values, class units or returns.
 - Record-derived operational totals, separated by currency and offering. Existing portfolio headline totals now use current held records rather than hard-coded example performance; absent history is explicitly labeled.
 - Versioned browser persistence, scoped export, explicit reset and storage/recovery feedback. Original source reference documents are not included in this repository.
 - Consistent seven-section deal navigation/order, wrapping small-screen navigation, responsive flex sizing and undisclosed null chart values. Company material, charts, calculator and editor are retained.
+
+The C4 alignment extends published main commit `54c0ae15d75f65e42fa9bbae248f3ec6d2e3be68`. See [C4 guide alignment](C4_GUIDE_ALIGNMENT.md) for the current twelve-section mapping and updated diagrams.
 
 ## Demo access
 
@@ -40,7 +42,7 @@ Existing portals link to **Connected workflows**. Ops and RM logins open this wo
 
 Run `npm run typecheck`, `npm run lint`, `npm run format_check` and `npm run build`. A pnpm lockfile is also provided for the verified local dependency installation. CI runs typechecking, model/API tests, lint, formatting and the production build.
 
-Browser verification includes a manager partial allocation, separate Ops issuance and residual settlement, preservation on reload, an investor-created case, immutable document preview, and responsive workflow layout. Final results are in `VERIFICATION.md`.
+Earlier integration browser verification included a manager partial allocation, separate Ops issuance and residual settlement, preservation on reload, an investor-created case, immutable document preview, and responsive workflow layout. Final results are in `VERIFICATION.md`.
 
 ## Boundaries
 

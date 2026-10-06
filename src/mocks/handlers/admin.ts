@@ -83,6 +83,8 @@ function applyTransition(
 ): { sub: MockSubscription } | { error: string } {
   const sub = findSubscriptionById(id);
   if (!sub) return { error: "Subscription not found" };
+  if (sub.on_hold && to !== "cancelled")
+    return { error: "Release the LUCA hold before processing." };
   if (!to || !TRANSITIONS[sub.status].includes(to)) {
     return { error: `Cannot move a subscription from ${sub.status} to ${to ?? "(none)"}` };
   }
@@ -135,6 +137,8 @@ function applyTransition(
     sub.institution_reviewed_at = sub.institution_reviewed_at ?? now;
   }
   if (to === "information_requested") {
+    sub.information_response_note = null;
+    sub.information_responded_at = null;
     sub.information_request_note = extras.informationRequestNote!.trim();
     sub.information_requested_at = now;
   }
@@ -1120,13 +1124,12 @@ export const adminHandlers = [
     const status: CommunicationStatus = sendAt.getTime() > now.getTime() ? "scheduled" : "sent";
     const commId = nextCommunicationId();
 
-    body.investor_ids.forEach((investorId, i) => {
+    body.investor_ids.forEach((investorId) => {
       const investor = adminInvestors().find((inv) => inv.id === investorId);
       if (!investor) return;
       const routedVia: "investor" | "eam" =
         body.routing === "through_rm" && investor.eam_firm ? "eam" : "investor";
       const delivered = status === "sent";
-      const opened = delivered && i % 6 !== 0;
       communicationRecipients.push({
         id: nextCommunicationRecipientId(),
         communication_id: commId,
@@ -1136,7 +1139,7 @@ export const adminHandlers = [
         eam_firm: investor.eam_firm,
         routed_via: routedVia,
         delivered_at: delivered ? now.toISOString() : null,
-        opened_at: opened ? new Date(now.getTime() + 60 * 60 * 1000).toISOString() : null,
+        opened_at: null,
         downloaded_document_ids: [],
       });
     });
