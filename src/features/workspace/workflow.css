@@ -263,8 +263,10 @@
 }
 .wf-main {
   min-width: 0;
-  max-width: 1400px;
-  padding: 36px 4%;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 36px 24px;
   flex: 1;
 }
 .wf-main header {
@@ -1022,18 +1024,18 @@
     top: 23px;
   }
   .wf-main {
-    padding: 24px 16px;
+    padding: 24px;
   }
   .rm-main {
-    padding: 0 16px 20px;
+    padding: 0 24px 20px;
   }
   .rm-main .rm-header {
     position: static;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin: 0 -16px 18px;
-    padding: 10px 16px;
+    margin: 0 -24px 18px;
+    padding: 10px 24px;
   }
   .wf-main header {
     display: block;
@@ -1072,6 +1074,19 @@
   }
   .wf-stats strong {
     font-size: 20px;
+  }
+}
+
+@media (max-width: 639px) {
+  .wf-main {
+    padding: 24px 12px;
+  }
+  .rm-main {
+    padding: 0 12px 20px;
+  }
+  .rm-main .rm-header {
+    margin: 0 -12px 18px;
+    padding: 10px 12px;
   }
 }
 

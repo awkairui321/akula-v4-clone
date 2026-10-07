@@ -58,7 +58,11 @@ export default function PortfolioPage() {
         <div className="text-3xl font-bold tracking-tight">Your portfolio</div>
         <p className="text-muted-foreground">Holdings and subscription activity.</p>
       </div>
-      <Tabs value={section} onValueChange={(value) => setSearchParams({ section: String(value) })}>
+      <Tabs
+        value={section}
+        onValueChange={(value) => setSearchParams({ section: String(value) })}
+        className="min-w-0"
+      >
         <TabsList variant="line" className="w-full justify-start border-b">
           <TabsTrigger value="holdings" className="flex-none">
             Holdings
@@ -70,13 +74,13 @@ export default function PortfolioPage() {
             {TabTitle("Requests & discussions", 0)}
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="holdings">
+        <TabsContent value="holdings" className="w-full min-w-0">
           <Subscriptions />
         </TabsContent>
-        <TabsContent value="activity">
+        <TabsContent value="activity" className="w-full min-w-0">
           <SubscriptionActivity />
         </TabsContent>
-        <TabsContent value="requests">
+        <TabsContent value="requests" className="w-full min-w-0">
           <Requests />
         </TabsContent>
       </Tabs>
