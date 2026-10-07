@@ -6,19 +6,15 @@ import { api } from "@/lib/api";
 import { SECTOR_LABELS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
 import { formatPrice, formatPricePrecise } from "@/lib/currency";
+import { fundAudienceLabel } from "@/lib/investor-access";
+import { useAuth } from "@/contexts/auth-context";
+import { DEAL_DOCUMENT_KINDS } from "@/lib/types";
+import type { AdminDocument, SubscriptionsResponse } from "../types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { StateBadge, allocationOf, daysUntil, formatClose } from "./deal-status";
+import { StateBadge, daysUntil, formatClose } from "./deal-status";
 import { fundLabel, groupProjects, nextFundLabel, type Project } from "./projects";
 import { usePublication, publicationStatus } from "./use-publication";
 
@@ -106,10 +102,19 @@ function AddFundDialog({
 
 /** One company and every fund raising into it. */
 export default function ProjectPage() {
+  const { user } = useAuth();
   const { assetId } = useParams<{ assetId: string }>();
-  const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const publication = usePublication();
+  const { data: subscriptionData } = useQuery({
+    queryKey: ["admin", "subscriptions", "board"],
+    queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
+    enabled: user?.role === "luca",
+  });
+  const { data: documentData } = useQuery({
+    queryKey: ["admin", "documents"],
+    queryFn: () => api<{ documents: AdminDocument[] }>("/api/v1/admin/documents"),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "funds"],
@@ -206,75 +211,168 @@ export default function ProjectPage() {
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Funds in this project
         </h2>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Fund</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Price / unit</TableHead>
-              <TableHead className="text-right">Fees</TableHead>
-              <TableHead className="text-right">Committed</TableHead>
-              <TableHead className="text-right">Closes</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {project.funds.map((fund) => {
-              const { allocated, total, pct: fundPct } = allocationOf(fund);
-              const days = daysUntil(fund.closes_at);
-              const status = publicationStatus(
-                fund.id,
-                publication.versions,
-                publication.unpublished,
-              );
-              return (
-                <TableRow
-                  key={fund.id}
-                  className="cursor-pointer"
-                  onClick={() => navigate(`/luca/deals/${fund.id}`)}
-                >
-                  <TableCell>
+        <div className="grid gap-6 xl:grid-cols-2">
+          {project.funds.map((fund) => {
+            const status = publicationStatus(
+              fund.id,
+              publication.versions,
+              publication.unpublished,
+            );
+            const docs = (documentData?.documents ?? []).filter(
+              (doc) =>
+                doc.fund_id === fund.id &&
+                doc.subscription_id === null &&
+                DEAL_DOCUMENT_KINDS.some((kind) => kind.value === doc.kind),
+            );
+            const clients = (subscriptionData?.subscriptions ?? []).filter(
+              (sub) =>
+                sub.fund_id === fund.id && ["allocation_pending", "allocated"].includes(sub.status),
+            );
+            const clientGroups = [...new Set(clients.map((sub) => sub.investor_id))].map((id) => {
+              const subscriptions = clients.filter((sub) => sub.investor_id === id);
+              const pending = subscriptions.filter((sub) => sub.status === "allocation_pending");
+              return {
+                id,
+                name: subscriptions[0].investor_name,
+                pending,
+                issued: subscriptions
+                  .filter((sub) => sub.holding_id)
+                  .reduce((sum, sub) => sum + Number(sub.allocated_principal ?? sub.amount), 0),
+                recorded: subscriptions
+                  .filter((sub) => sub.status === "allocated" && !sub.holding_id)
+                  .reduce((sum, sub) => sum + Number(sub.allocated_principal ?? sub.amount), 0),
+              };
+            });
+            return (
+              <article
+                key={fund.id}
+                aria-label={fund.name}
+                className="flex flex-col overflow-hidden rounded-xl border bg-card"
+              >
+                <header className="space-y-3 border-b px-6 py-5">
+                  <div className="flex items-center justify-between gap-3">
                     <Link
                       to={`/luca/deals/${fund.id}`}
-                      className="font-medium hover:underline"
-                      onClick={(e) => e.stopPropagation()}
+                      className="text-lg font-semibold hover:underline"
                     >
                       {fundLabel(fund)}
                     </Link>
-                    <p className="text-xs text-muted-foreground">{fund.name}</p>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col items-start gap-1">
-                      <StateBadge fund={fund} />
-                      {status && <span className="text-xs text-amber-700">{status.label}</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatPricePrecise(fund.price)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {fund.subscription_fee_pct}% · {fund.management_fee_pct}% ·{" "}
-                    {fund.carried_interest_pct}%
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatPrice(allocated)}
-                    {total !== null && (
-                      <span className="text-xs text-muted-foreground">
-                        {" "}
-                        of {formatPrice(total)}
-                        {fundPct !== null && ` · ${fundPct}%`}
-                      </span>
+                    <StateBadge fund={fund} />
+                  </div>
+                  <p className="text-sm text-muted-foreground">{fund.name}</p>
+                  <span className="inline-flex rounded-full bg-muted px-3 py-1 text-xs">
+                    {fundAudienceLabel(fund)}
+                  </span>
+                  <p className="min-h-4 text-xs text-amber-700">{status?.label ?? "\u00a0"}</p>
+                </header>
+                <div className="space-y-6 px-6 py-5">
+                  <dl className="grid grid-cols-3 gap-3">
+                    {[
+                      ["Subscription", fund.subscription_fee_pct],
+                      ["Management / year", fund.management_fee_pct],
+                      ["Carried interest", fund.carried_interest_pct],
+                    ].map(([label, fee]) => (
+                      <div key={label}>
+                        <dt className="text-xs text-muted-foreground">{label}</dt>
+                        <dd className="mt-1 text-lg font-semibold tabular-nums">{fee}%</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="text-xs text-muted-foreground">
+                    {formatPricePrecise(fund.price)} / unit · Minimum{" "}
+                    {formatPrice(fund.min_subscription)} · {formatClose(daysUntil(fund.closes_at))}
+                  </p>
+                  <div className="min-h-36 space-y-2">
+                    <h3 className="text-sm font-medium">
+                      Fund documents{" "}
+                      <span className="ml-1 text-muted-foreground">{docs.length}</span>
+                    </h3>
+                    {docs.length ? (
+                      <ul className="space-y-2 text-xs text-muted-foreground">
+                        {docs.map((doc) => (
+                          <li key={doc.id}>{doc.name.replace(fund.name + " · ", "")}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No fund documents added yet.</p>
                     )}
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {fund.closes_at && days !== null && days > 0
-                      ? `${formatDate(fund.closes_at)} · ${formatClose(days)}`
-                      : formatClose(days)}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+                  </div>
+                  {user?.role === "luca" && (
+                    <div className="space-y-2 border-t pt-4">
+                      <h3 className="text-sm font-medium">Client allocations</h3>
+                      {clients.length ? (
+                        <ul className="divide-y">
+                          {clientGroups.map((client) => (
+                            <li
+                              key={client.id}
+                              className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+                            >
+                              <div>
+                                <Link
+                                  to={`/luca/investors/${client.id}`}
+                                  className="font-medium hover:underline"
+                                >
+                                  {client.name}
+                                </Link>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {[
+                                    client.issued > 0 &&
+                                      `Holdings issued · ${formatPrice(client.issued)}`,
+                                    client.recorded > 0 &&
+                                      `Allocation recorded · ${formatPrice(client.recorded)}`,
+                                    client.pending.length > 0 &&
+                                      `Ready for allocation · ${formatPrice(client.pending.reduce((sum, sub) => sum + Number(sub.amount), 0))}`,
+                                  ]
+                                    .filter(Boolean)
+                                    .join("; ")}
+                                </p>
+                              </div>
+                              {client.pending.length > 0 && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  nativeButton={false}
+                                  render={
+                                    <Link
+                                      to={
+                                        client.pending.length === 1
+                                          ? `/luca/subscriptions/${client.pending[0].id}/allocate`
+                                          : `/luca/subscriptions?deal=${fund.id}&stage=ready_allocation&q=${encodeURIComponent(client.name)}`
+                                      }
+                                    />
+                                  }
+                                >
+                                  Allocate →
+                                </Button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          No clients at allocation yet.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4 text-sm">
+                  <Link to={`/luca/deals/${fund.id}`} className="text-primary hover:underline">
+                    Open fund →
+                  </Link>
+                  {user?.role === "luca" && (
+                    <Link
+                      to={`/luca/subscriptions?deal=${fund.id}`}
+                      className="text-muted-foreground hover:underline"
+                    >
+                      All subscriptions
+                    </Link>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
         <p className="text-xs text-muted-foreground">
           Fees are subscription · management · carried interest. Each fund has one fee schedule, set
           in its overview editor. Company information is shared by every fund in the project.

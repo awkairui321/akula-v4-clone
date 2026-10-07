@@ -22,7 +22,6 @@ export default function InvestorSegmentControl({ personaId }: { personaId?: numb
     },
   });
   if (!isMocking || !query.data) return null;
-  const referred = query.data.segment === "partner_referred";
   return (
     <section className="mb-5 rounded-lg border bg-muted/40 p-4" aria-label="Demo investor profile">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -46,9 +45,8 @@ export default function InvestorSegmentControl({ personaId }: { personaId?: numb
         </label>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
-        {referred
-          ? "Expanded deal access · published subscription fees · priority allocation consideration by LUCA."
-          : "Standard deal access · published subscription fee plus 1 percentage point · standard allocation consideration."}
+        Your client class determines which fund variants are available. Each fund shows its
+        applicable fees; LUCA reviews and allocates each subscription separately.
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
         Simulation only. Existing subscriptions keep their agreed fees and profile. KYC and LUCA

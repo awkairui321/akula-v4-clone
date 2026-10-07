@@ -1,4 +1,4 @@
-import { mayDiscover, hasInvestmentHistory } from "./investor-access";
+import { mayDiscover, hasInvestmentHistory, setPublishedAudienceReader } from "./investor-access";
 import * as db from "./db";
 import type {
   WorkflowState,
@@ -68,6 +68,7 @@ export function ownedSubscription(request: Request, sid: number) {
 const CHANGE_LABELS: Record<string, string> = {
   hook: "Headline",
   descriptor: "Descriptor",
+  eligible_segments: "Client audience",
   price: "Price per unit",
   min_subscription: "Minimum subscription",
   subscription_fee_pct: "Subscription fee",
@@ -216,6 +217,7 @@ export function recordDealChange(user: db.MockUser, fundId: number, fields: stri
 export function currentVersion(fid: number) {
   return workflow.versions.filter((v) => v.fundId === fid && v.status === "published").at(-1);
 }
+setPublishedAudienceReader((fundId) => currentVersion(fundId)?.snapshot);
 export function signedVersion(sid: number) {
   const signature = workflow.signatures.find((s) => s.subscriptionId === sid);
   return workflow.versions.find((v) => v.id === signature?.versionId);
@@ -269,9 +271,11 @@ export function requestWithdrawal(sub: db.MockSubscription) {
 }
 export function seedWorkflow() {
   if (workflow.versions.length) {
+    ensureFundVariantExample();
     ensureIllustrativeDemand();
     return;
   }
+  db.ensureFundVariantExample();
   for (const fund of db.funds)
     workflow.versions.push({
       id: id(),
@@ -392,6 +396,45 @@ function ensureIllustrativeDemand() {
     }
   }
 }
+function ensureFundVariantExample() {
+  const added = db.ensureFundVariantExample();
+  for (const fundId of [8, 1201]) {
+    const fund = db.findFundById(fundId)!;
+    const published = currentVersion(fundId);
+    if (!published)
+      workflow.versions.push({
+        id: id(),
+        fundId,
+        number: 1,
+        status: "published",
+        snapshot: structuredClone(fund),
+        at: now(),
+      });
+    else if (!published.snapshot.eligible_segments)
+      published.snapshot.eligible_segments = structuredClone(fund.eligible_segments);
+  }
+  for (const sub of added) {
+    recordSignature(sub, "Illustrative client signature");
+    workflow.receipts.push({
+      id: id(),
+      subscriptionId: sub.id,
+      amount: round(Number(sub.amount) + Number(sub.subscription_fee)),
+      currency: sub.currency,
+      reference: sub.payment_reference!,
+      matched: true,
+      at: sub.funds_received_at || now(),
+    });
+    if (sub.status === "allocated")
+      workflow.allocations.push({
+        id: id(),
+        subscriptionId: sub.id,
+        principal: Number(sub.amount),
+        fee: Number(sub.subscription_fee),
+        price: Number(db.findFundById(sub.fund_id)!.price),
+        at: sub.allocated_at || now(),
+      });
+  }
+}
 export let storageWarning: string | null = null;
 let restoreFailed = false;
 const KEY = "akula-v4-simulation-v1";
@@ -423,6 +466,7 @@ export function restore() {
     );
     db.restoreDemoState(saved.db);
     Object.assign(workflow, saved.workflow);
+    ensureFundVariantExample();
     ensureIllustrativeDemand();
     persist();
   } catch {
@@ -1146,9 +1190,19 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       // The Fund Manager approves what they are looking at, including their own edits.
       if (c.type === "approve") v.snapshot = structuredClone(f);
       v.status = "published";
+      v.at = now();
       v.decision = { by: user.id, at: now(), outcome: "published" };
       Object.assign(f, structuredClone(v.snapshot));
       f.state = "open";
+      // Publish reviewed deal materials with this variant; client verification files stay separate.
+      for (const doc of db.documents.filter(
+        (doc) =>
+          doc.fund_id === f.id &&
+          doc.subscription_id === null &&
+          doc.owner_name === "LUCA SGP" &&
+          doc.review_state !== "on_hold",
+      ))
+        doc.review_state = "filed";
       for (const sub of db.subscriptions.filter(
         (s) =>
           s.fund_id === f.id && !["cancelled", "rejected", "funds_returned"].includes(s.status),

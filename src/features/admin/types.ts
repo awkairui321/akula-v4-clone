@@ -14,6 +14,7 @@ export {
 import type { SubscriptionStatus, SubscriptionOwner } from "@/lib/types";
 
 export type AdminSubscription = {
+  allocated_principal?: number;
   commercial_terms?: CommercialTerms;
   holding_id?: number | null;
   id: number;

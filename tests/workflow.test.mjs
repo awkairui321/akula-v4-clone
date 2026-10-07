@@ -215,7 +215,7 @@ test("commercial profiles filter discovery and new subscriptions, preserving his
   const shelf = await (await request("funds", user)).json();
   assert.deepEqual(
     shelf.funds.map((f) => f.id),
-    [1, 3, 4],
+    [1, 3, 4, 1201],
   );
   assert.equal(Number(shelf.funds[0].subscription_fee_pct), base + 1);
   assert.equal(
@@ -1690,4 +1690,164 @@ test("RM-prepared approval waits for client ownership confirmations, NDA and con
     200,
   );
   assert.equal(db.findAdminInvestorSeed(client.id).verification_status, "approved");
+});
+
+test("Quanta variants have separate audiences, fees, documents and funded client allocations", async () => {
+  const direct = db.findFundById(1201),
+    partner = db.findFundById(8);
+  assert.equal(direct.asset.id, partner.asset.id);
+  assert.deepEqual(
+    [direct.subscription_fee_pct, direct.management_fee_pct, direct.carried_interest_pct],
+    ["2", "1", "10"],
+  );
+  assert.deepEqual(
+    [partner.subscription_fee_pct, partner.management_fee_pct, partner.carried_interest_pct],
+    ["4", "2", "20"],
+  );
+  const examples = db.subscriptions.filter((sub) =>
+    sub.payment_reference?.startsWith("FUND-VARIANT-DEMO-"),
+  );
+  assert.equal(examples.length, 4);
+  for (const sub of examples) {
+    assert.equal(w.matched(sub.id), Number(sub.amount) + Number(sub.subscription_fee));
+    assert.ok(w.signedVersion(sub.id));
+    if (sub.status === "allocated")
+      assert.ok(
+        db.holdings.some((h) => h.id === sub._convertedToHoldingId && h.fund_id === sub.fund_id),
+      );
+  }
+  const user = investor();
+  await request("demo/investor-segment", user, "PATCH", { segment: "independent" });
+  let shelf = await (await request("funds", user)).json();
+  assert.ok(shelf.funds.some((f) => f.id === 1201));
+  assert.ok(!shelf.funds.some((f) => f.id === 8));
+  const created = await (
+    await request("subscriptions", user, "POST", { fund_id: 1201, amount: "25000" })
+  ).json();
+  assert.equal(created.subscription.subscription_fee, "500.00");
+  const directDocs = await (await request("documents?fund_id=1201", user)).json();
+  assert.equal(directDocs.documents.length, 3);
+  assert.ok(directDocs.documents.every((d) => d.fund_id === 1201));
+  await request("demo/investor-segment", user, "PATCH", { segment: "partner_referred" });
+  shelf = await (await request("funds", user)).json();
+  assert.ok(shelf.funds.some((f) => f.id === 8));
+  assert.ok(!shelf.funds.some((f) => f.id === 1201));
+  assert.equal(
+    (await request("subscriptions", user, "POST", { fund_id: 1201, amount: "25000" })).status,
+    403,
+  );
+  const partnerDocs = await (await request("documents?fund_id=8", user)).json();
+  assert.ok(partnerDocs.documents.some((d) => d.name.includes("Partner offering memorandum")));
+  assert.ok(!partnerDocs.documents.some((d) => d.fund_id === 1201));
+  const pending = examples.find(
+    (sub) => sub.fund_id === 1201 && sub.status === "allocation_pending",
+  );
+  w.command(manager(), {
+    type: "allocate",
+    id: pending.id,
+    amount: 50000,
+    price: Number(direct.price),
+  });
+  assert.equal(w.workflow.allocations.find((a) => a.subscriptionId === pending.id).fee, 1000);
+});
+
+test("client audience edits require exact Fund Manager publication and never change sibling funds", async () => {
+  const user = investor(),
+    team = db.users.find((u) => u.role === "investment_team");
+  const upload = await (
+    await request("admin/documents", team, "POST", {
+      document: {
+        name: "Direct variant revised terms.pdf",
+        kind: "factsheet",
+        fund_id: 1201,
+        file_data_url: db.documents.find((d) => d.fund_id === 1201 && d.file_data_url)
+          .file_data_url,
+      },
+    })
+  ).json();
+  assert.equal(upload.document.review_state, "received");
+  assert.ok(
+    !(await (await request("documents?fund_id=1201", user)).json()).documents.some(
+      (d) => d.id === upload.document.id,
+    ),
+  );
+  await request("demo/investor-segment", user, "PATCH", { segment: "partner_referred" });
+  for (const segments of [[], ["unknown"], "independent"])
+    assert.equal(
+      (await request("funds/1201", team, "PATCH", { fund: { eligible_segments: segments } }))
+        .status,
+      422,
+    );
+  assert.equal(
+    (
+      await request("funds/1201", team, "PATCH", {
+        fund: { eligible_segments: ["partner_referred"] },
+      })
+    ).status,
+    200,
+  );
+  const hasDirect = async () =>
+    (await (await request("funds", user)).json()).funds.some((f) => f.id === 1201);
+  assert.equal(await hasDirect(), false);
+  w.command(team, { type: "prepare", id: 1201 });
+  const version = w.workflow.versions.at(-1);
+  w.command(team, { type: "review", id: version.id });
+  assert.equal(await hasDirect(), false);
+  assert.throws(() => w.command(team, { type: "approve", id: version.id }));
+  w.command(manager(), { type: "approve", id: version.id });
+  assert.equal(db.documents.find((d) => d.id === upload.document.id).review_state, "filed");
+  assert.ok(
+    (await (await request("documents?fund_id=1201", user)).json()).documents.some(
+      (d) => d.id === upload.document.id,
+    ),
+  );
+  assert.equal(await hasDirect(), true);
+  assert.deepEqual(w.currentVersion(8).snapshot.eligible_segments, ["partner_referred"]);
+  assert.equal(w.currentVersion(8).snapshot.subscription_fee_pct, "4");
+});
+
+test("saved demos gain the two-fund example once while preserving edits and historical records", () => {
+  const saved = db.exportDemoState();
+  saved.arrays.funds = saved.arrays.funds.filter((f) => f.id !== 1201);
+  delete saved.arrays.funds.find((f) => f.id === 8).eligible_segments;
+  saved.arrays.subscriptions = saved.arrays.subscriptions.filter(
+    (s) => !s.payment_reference?.startsWith("FUND-VARIANT-DEMO-"),
+  );
+  saved.arrays.holdings = saved.arrays.holdings.filter(
+    (h) =>
+      ![1201].includes(h.fund_id) &&
+      !(h.fund_id === 8 && h.investor_id === 19 && h.committed_amount === "150000.00"),
+  );
+  saved.arrays.documents = saved.arrays.documents.filter(
+    (d) => ![1201].includes(d.fund_id) && !d.name.startsWith("Quanta Compute SPV I · Partner"),
+  );
+  saved.arrays.users.find((u) => u.id === 2).email = "preserved@example.com";
+  db.restoreDemoState(saved);
+  const oldIds = db.subscriptions.map((s) => s.id);
+  w.workflow.versions = w.workflow.versions.filter((v) => v.fundId !== 1201);
+  delete w.currentVersion(8).snapshot.eligible_segments;
+  w.seedWorkflow();
+  assert.equal(db.users.find((u) => u.id === 2).email, "preserved@example.com");
+  assert.ok(oldIds.every((id) => db.subscriptions.some((s) => s.id === id)));
+  assert.ok(w.currentVersion(1201));
+  const counts = [
+    db.funds.length,
+    db.subscriptions.length,
+    db.documents.length,
+    db.holdings.length,
+    w.workflow.receipts.length,
+    w.workflow.versions.length,
+  ];
+  w.seedWorkflow();
+  assert.deepEqual(
+    [
+      db.funds.length,
+      db.subscriptions.length,
+      db.documents.length,
+      db.holdings.length,
+      w.workflow.receipts.length,
+      w.workflow.versions.length,
+    ],
+    counts,
+  );
 });

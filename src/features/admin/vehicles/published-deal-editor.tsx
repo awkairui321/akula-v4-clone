@@ -53,6 +53,7 @@ const str = (value: string | number | null | undefined): string =>
 const orNull = (value: string): string | null => (value.trim() === "" ? null : value.trim());
 
 type Draft = {
+  audience: string;
   state: FundStatus;
   vehicle_type: string;
   deal_type: string;
@@ -126,6 +127,11 @@ function dateInputValue(iso: string | null): string {
 function draftFrom(fund: Fund): Draft {
   const { asset } = fund;
   return {
+    audience: !fund.eligible_segments
+      ? "legacy"
+      : fund.eligible_segments.length === 2
+        ? "all"
+        : fund.eligible_segments[0],
     state: fund.state,
     vehicle_type: fund.vehicle_type,
     deal_type: fund.deal_type,
@@ -474,6 +480,12 @@ function payloadFrom(draft: Draft): Record<string, unknown> {
   return {
     fund: {
       state: draft.state,
+      ...(draft.audience !== "legacy"
+        ? {
+            eligible_segments:
+              draft.audience === "all" ? ["independent", "partner_referred"] : [draft.audience],
+          }
+        : {}),
       vehicle_type: draft.vehicle_type,
       deal_type: draft.deal_type,
       security_type: draft.security_type.trim(),
@@ -866,7 +878,16 @@ export default function PublishedDealEditor({
   });
 
   const checks = qualityGate(draft);
-  const failures = checks.filter((c) => c.status === "fail").length;
+  // Incomplete narratives may be saved as working drafts. Invalid terms and malformed rows cannot.
+  const failures = checks.filter(
+    (c) =>
+      c.status === "fail" &&
+      [
+        "Minimum investment is a sane positive amount",
+        "Fee components within sane bounds",
+        "Every table row uses the column format",
+      ].includes(c.label),
+  ).length;
 
   const problemsIn = (field: CollectionField) => formatProblems(draft[field], LINE_FORMATS[field]);
 
@@ -885,11 +906,11 @@ export default function PublishedDealEditor({
         <div className="space-y-5 rounded-lg border bg-muted p-4">
           <div className="space-y-2">
             <p className="text-xs tracking-wide text-muted-foreground uppercase">
-              Edit published deal
+              Edit fund variant
             </p>
-            <DialogTitle className="mt-1">master</DialogTitle>
+            <DialogTitle className="mt-1">{fund.name}</DialogTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              Changes save to the shared LUCA record and flow to EAM and investor views.
+              Edit this fund's working version. Changes reach investors after Fund Manager approval.
             </p>
           </div>
 
@@ -1103,6 +1124,42 @@ export default function PublishedDealEditor({
             </div>
           </EditorSection>
 
+          <EditorSection label="Client audience">
+            <p className="text-sm text-muted-foreground">
+              Choose which clients can discover and subscribe to this fund variant. The audience
+              becomes live after Fund Manager approval. Existing investments retain access to their
+              records.
+            </p>
+            <Field label="Client class">
+              <Select
+                value={draft.audience}
+                onValueChange={(value) => set("audience", value as string)}
+              >
+                <SelectTrigger aria-label="Client class">
+                  <SelectValue>
+                    {
+                      (
+                        {
+                          legacy: "Existing client audience",
+                          all: "All client classes",
+                          independent: "Direct clients",
+                          partner_referred: "Partner-referred clients",
+                        } as Record<string, string>
+                      )[draft.audience]
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {draft.audience === "legacy" && (
+                    <SelectItem value="legacy">Existing client audience</SelectItem>
+                  )}
+                  <SelectItem value="all">All client classes</SelectItem>
+                  <SelectItem value="independent">Direct clients</SelectItem>
+                  <SelectItem value="partner_referred">Partner-referred clients</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </EditorSection>
           <EditorSection label="Fees">
             <p className="text-sm text-muted-foreground">
               This fund has one fee schedule. It applies to every investor in it and is published
@@ -1128,14 +1185,16 @@ export default function PublishedDealEditor({
                 onChange={(v) => set("carried_interest_pct", v)}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Partner-referred investors pay a {draft.subscription_fee_pct || "0"}% subscription
-              fee. Independent investors pay{" "}
-              {Number.isFinite(Number(draft.subscription_fee_pct))
-                ? Number(draft.subscription_fee_pct) + 1
-                : "—"}
-              %, one percentage point more.
-            </p>
+            {draft.audience === "legacy" && (
+              <p className="text-xs text-muted-foreground">
+                Partner-referred investors pay a {draft.subscription_fee_pct || "0"}% subscription
+                fee. Independent investors pay{" "}
+                {Number.isFinite(Number(draft.subscription_fee_pct))
+                  ? Number(draft.subscription_fee_pct) + 1
+                  : "—"}
+                %, one percentage point more.
+              </p>
+            )}
           </EditorSection>
 
           <EditorSection label="Company and opportunity narrative">
@@ -1463,10 +1522,10 @@ export default function PublishedDealEditor({
 
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4">
             <div>
-              <strong className="text-sm">Publish this revision</strong>
+              <strong className="text-sm">Save working changes</strong>
               <p className="text-xs text-muted-foreground">
-                Saving updates the LUCA SGP preview, the EAM read-only overview and the investor
-                page from the same record.
+                Save this fund variant, then submit it for Fund Manager approval. Investor views
+                keep the approved version until the new revision is published.
               </p>
             </div>
             <Button
@@ -1481,8 +1540,8 @@ export default function PublishedDealEditor({
               {failures > 0
                 ? "Resolve quality-gate issues"
                 : save.isPending
-                  ? "Publishing..."
-                  : "Save and publish all changes"}
+                  ? "Saving..."
+                  : "Save working changes"}
             </Button>
           </div>
         </div>
