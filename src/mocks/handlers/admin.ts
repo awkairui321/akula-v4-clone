@@ -2,8 +2,8 @@ import { canManageOfferingRequest } from "@/lib/permissions";
 import { workflow, command, persist, recordDealChange } from "../workflow";
 import { http, HttpResponse } from "msw";
 import {
+  referenceFor,
   currentUser,
-  findUserById,
   subscriptions,
   findSubscriptionById,
   toAdminSubscription,
@@ -27,6 +27,7 @@ import {
   findOrCreateTag,
   investorPricing,
   nextInvestorPricingId,
+  subscriptionFeeOnAllocation,
   documentRequests,
   nextDocumentRequestId,
   bankTransfers,
@@ -44,7 +45,6 @@ import {
   type CommunicationRouting,
   type CommunicationStatus,
 } from "../db";
-import { clientCode } from "@/lib/client-code";
 import { STATUS_LABELS } from "@/lib/types";
 import type { SubscriptionStatus, Fund } from "@/lib/types";
 
@@ -477,47 +477,6 @@ export const adminHandlers = [
     });
   }),
 
-  // PATCH /api/v1/admin/investors/:id/verification
-  http.patch("*/api/v1/admin/investors/:id/verification", async ({ request, params }) => {
-    const user = requireAdmin(request);
-    if (!user) return unauthorized();
-    const seed = findAdminInvestorSeed(Number(params.id));
-    if (!seed) return HttpResponse.json({ error: "Investor not found" }, { status: 404 });
-
-    const body = (await request.json()) as {
-      identity_status?: string;
-      accreditation_status?: string;
-      notes?: string;
-    };
-    if (body.identity_status)
-      seed.identity_status = body.identity_status as typeof seed.identity_status;
-    if (body.accreditation_status) {
-      seed.accreditation_status = body.accreditation_status as typeof seed.accreditation_status;
-    }
-
-    if (seed.identity_status === "failed" || seed.accreditation_status === "not_accredited") {
-      seed.verification_status = "rejected";
-    } else if (seed.identity_status === "verified" && seed.accreditation_status === "accredited") {
-      seed.verification_status = "approved";
-    } else if (seed.identity_status === "pending" || seed.accreditation_status === "pending") {
-      seed.verification_status = "in_review";
-    } else {
-      seed.verification_status = "pending";
-    }
-    seed.reviewed_at = new Date().toISOString();
-    const identity = findUserById(seed.id);
-    if (identity)
-      identity.kyc_status =
-        seed.verification_status === "approved"
-          ? "approved"
-          : seed.verification_status === "rejected"
-            ? "failed"
-            : "pending";
-
-    const investor = adminInvestors().find((i) => i.id === seed.id);
-    return HttpResponse.json({ investor });
-  }),
-
   // PATCH /api/v1/admin/investors/:id/notes — LUCA's private notes, saved on
   // their own, independent of any identity/accreditation decision.
   http.patch("*/api/v1/admin/investors/:id/notes", async ({ request, params }) => {
@@ -753,7 +712,7 @@ export const adminHandlers = [
           ...p,
           investor_name: investor?.full_name ?? `Investor #${p.investor_id}`,
           investor_email: investor?.email ?? "",
-          client_code: clientCode(p.investor_id),
+          client_code: referenceFor(p.investor_id),
           eam_firm: investor?.eam_firm ?? null,
         };
       });
@@ -904,8 +863,7 @@ export const adminHandlers = [
       const period = (s.allocated_at ?? s.created_at).slice(0, 7);
       periodMap.set(
         period,
-        (periodMap.get(period) ?? 0) +
-          (s.allocated_principal ?? parseFloat(s.amount)) * (sharePct / 100),
+        (periodMap.get(period) ?? 0) + subscriptionFeeOnAllocation(s) * (sharePct / 100),
       );
     }
     const revenue_periods = [...periodMap.entries()]

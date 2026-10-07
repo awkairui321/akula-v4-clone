@@ -1,5 +1,6 @@
 import { http, HttpResponse } from "msw";
 import {
+  referenceFor,
   currentUser,
   users,
   investorProfiles,
@@ -14,11 +15,13 @@ import {
   logEvent,
   nextDocumentId,
   nextInvestorUserId,
+  recordClientEvent,
+  referralCodes,
   tokenFor,
   type MockUser,
 } from "../db";
 import { assignClientToRm, persist, recordAudit, workflow } from "../workflow";
-import { clientCode } from "@/lib/client-code";
+import { attachReferral } from "../onboarding";
 import { documentKindLabel } from "@/lib/document-catalogue";
 import {
   RM_DOCUMENT_KINDS,
@@ -94,7 +97,7 @@ function summarise(user: MockUser): PreparedClient {
   const docs = preparedDocuments(user.id);
   return {
     id: user.id,
-    client_code: clientCode(user.id),
+    client_code: referenceFor(user.id),
     full_name: fullName(user),
     email: user.email,
     country: profile.country || null,
@@ -202,8 +205,15 @@ export const rmHandlers = [
   http.post("*/api/v1/rm/clients", async ({ request }) => {
     const rm = actor(request);
     if (!rm) return fail("Relationship manager access required.", 403);
-    const body = (await request.json()) as { email?: string } & Record<string, unknown>;
+    const body = (await request.json()) as { email?: string; partner_firm?: string } & Record<
+      string,
+      unknown
+    >;
     const email = body.email?.trim().toLowerCase() ?? "";
+    const partnerCode = body.partner_firm
+      ? referralCodes.find((r) => r.partner_firm === body.partner_firm)
+      : undefined;
+    if (body.partner_firm && !partnerCode) return fail("Choose one of the listed partner firms.");
     const values = cleanProfilePatch(body);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail("Enter a valid email address.");
     if (!values.first_name || !values.last_name) return fail("Enter the client's legal name.");
@@ -256,6 +266,7 @@ export const rmHandlers = [
       eligibility_confirmed_at: null,
       eam_firm: null,
       eam_name: null,
+      referral: { code: null, via: "rm_invite", rm_id: rm.id, partner_firm: null },
       prepared_by_rm: {
         rm_id: rm.id,
         rm_name: rmName(rm),
@@ -281,11 +292,18 @@ export const rmHandlers = [
       nda_status: "not_started",
       eam_firm: null,
       internal_notes: "",
+      registered_at: at,
+      referral: { code: null, via: "rm_invite", rm_id: rm.id, partner_firm: null },
     });
     assignClientToRm(id, rm.id);
+    recordClientEvent(id, "registered", `${rmName(rm)} created the account.`, rmName(rm));
+    recordClientEvent(id, "invited", "Invitation sent to the client.", rmName(rm));
+    // A partner named by the RM is tagged too; the RM stays the covering RM.
+    if (partnerCode) attachReferral(id, partnerCode.code, "rm_invite", rm.id);
+    else recordClientEvent(id, "referred", `Referred by ${rmName(rm)}.`, rmName(rm));
     recordAudit(
       rm.id,
-      `${rmName(rm)} created an account for ${values.first_name} ${values.last_name} (${clientCode(id)}).`,
+      `${rmName(rm)} created an account for ${values.first_name} ${values.last_name} (${referenceFor(id)}).`,
     );
     logEvent(
       "status_change",
@@ -389,6 +407,13 @@ export const rmHandlers = [
       user.id,
       `${rmName(user)} uploaded ${documentKindLabel(body.kind!)} for ${fullName(client)}.`,
     );
+    recordClientEvent(
+      client.id,
+      "documents",
+      `${documentKindLabel(body.kind!)} uploaded for the client; awaiting their confirmation.`,
+      rmName(user),
+      ["luca", "rm", "investor"],
+    );
     logEvent(
       "document_uploaded",
       `${rmName(user)} uploaded ${documentKindLabel(body.kind!)} for ${fullName(client)}; awaiting investor confirmation.`,
@@ -459,6 +484,12 @@ export const rmHandlers = [
     client.invite_token = null;
     client.activated_at = new Date().toISOString();
     recordAudit(client.id, `${fullName(client)} activated their account.`);
+    recordClientEvent(
+      client.id,
+      "milestone",
+      "Activated their account from the invitation.",
+      fullName(client),
+    );
     persist();
     return HttpResponse.json(
       { user: { id: client.id } },

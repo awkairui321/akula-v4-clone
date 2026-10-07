@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,17 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [clientError, setClientError] = useState("");
+  const [params] = useSearchParams();
+  const ref = params.get("ref");
+  const referral = useQuery({
+    queryKey: ["public", "referral", ref],
+    queryFn: () =>
+      api<{ code: string; label: string; partner_firm: string | null; rm: string | null }>(
+        `/api/v1/public/referral?code=${encodeURIComponent(ref ?? "")}`,
+      ),
+    enabled: Boolean(ref),
+    retry: false,
+  });
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -22,6 +33,7 @@ export default function SignupPage() {
         method: "POST",
         body: {
           user: { email, password, password_confirmation: passwordConfirmation },
+          ref: referral.data?.code,
         },
       }),
     onSuccess: async () => {
@@ -52,6 +64,19 @@ export default function SignupPage() {
         <CardHeader>
           <CardTitle>Create your account</CardTitle>
           <CardDescription>Enter your email and create a password</CardDescription>
+          {referral.data && (
+            <p className="mt-2 border-l-2 border-primary pl-3 text-sm text-muted-foreground">
+              You were referred by{" "}
+              <span className="font-medium text-foreground">{referral.data.label}</span>
+              {referral.data.rm ? `, covered by ${referral.data.rm}` : ""}. Your account will be
+              linked to them.
+            </p>
+          )}
+          {ref && referral.isError && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              This referral link is not valid, so you will register directly with LUCA.
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">

@@ -72,6 +72,8 @@ const add = (a: Capital, b: Capital): Capital => ({
 export function buildPartnerBook(data: WorkflowView): {
   partners: PartnerLine[];
   direct: Capital & { clientCount: number };
+  /** Every client, whoever brought them in, by project and fund. */
+  all: { projects: ProjectLine[]; clients: ClientLine[] };
 } {
   const capitalOfSub = (id: number, amount: string, fee: string, status: string): Capital => {
     if (INACTIVE.includes(status)) return empty();
@@ -126,8 +128,10 @@ export function buildPartnerBook(data: WorkflowView): {
     ...new Set(data.clients.map((c) => c.eamFirm).filter((x): x is string => !!x)),
   ].sort();
 
-  const partners = firms.map((firm): PartnerLine => {
-    const clients = data.clients.filter((c) => c.eamFirm === firm);
+  /** The funds and projects a set of clients is in, each with those clients under it. */
+  const projectsFor = (
+    clients: typeof data.clients,
+  ): { funds: FundLine[]; projects: ProjectLine[]; subs: typeof data.subscriptions } => {
     const clientIds = new Set(clients.map((c) => c.id));
     const subs = data.subscriptions.filter((s) => clientIds.has(s.investor_id));
     const fundIds = [...new Set(subs.map((s) => s.fund_id))];
@@ -165,6 +169,12 @@ export function buildPartnerBook(data: WorkflowView): {
         };
       })
       .sort((a, b) => b.committed - a.committed);
+    return { funds, projects, subs };
+  };
+
+  const partners = firms.map((firm): PartnerLine => {
+    const clients = data.clients.filter((c) => c.eamFirm === firm);
+    const { projects, subs } = projectsFor(clients);
 
     const clientLines = clients
       .map((c) => clientLine(c.id))
@@ -181,7 +191,12 @@ export function buildPartnerBook(data: WorkflowView): {
   });
 
   const direct = data.clients.filter((c) => !c.eamFirm).map((c) => clientLine(c.id));
+  const everyone = projectsFor(data.clients);
   return {
+    all: {
+      projects: everyone.projects,
+      clients: data.clients.map((c) => clientLine(c.id)).sort((a, b) => b.committed - a.committed),
+    },
     partners: partners.sort((a, b) => b.committed - a.committed),
     direct: {
       ...direct.reduce((t, c) => add(t, c), empty() as Capital),

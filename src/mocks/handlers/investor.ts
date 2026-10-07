@@ -16,6 +16,7 @@ import {
   currentVersion,
   disclosureAccess,
 } from "../workflow";
+import { attachReferral, submitForReview } from "../onboarding";
 import { http, HttpResponse } from "msw";
 import {
   currentUser,
@@ -43,8 +44,6 @@ import {
   ownerFor,
   nextActionFor,
   adviserClients,
-  partners,
-  users,
   verificationDocumentsByInvestor,
   nextDocumentId,
   highlights,
@@ -52,6 +51,11 @@ import {
   documentRequests,
   communications,
   communicationRecipients,
+  syncSeedFromAccount,
+  findAdminInvestorSeed,
+  recordClientEvent,
+  findReferralCode,
+  clientEvents,
 } from "../db";
 
 function unauthorized() {
@@ -92,7 +96,11 @@ export const investorHandlers = [
     const profile = findInvestorProfileByUserId(user.id);
     if (!profile) return HttpResponse.json({ investor_profile: null });
     return HttpResponse.json({
-      investor_profile: { ...profile, completed: investorOnboardingComplete(profile, user) },
+      investor_profile: {
+        ...profile,
+        completed: investorOnboardingComplete(profile, user),
+        reference: findAdminInvestorSeed(user.id)?.reference ?? null,
+      },
     });
   }),
 
@@ -232,6 +240,12 @@ export const investorHandlers = [
       created_at: new Date().toISOString(),
     };
     (verificationDocumentsByInvestor[user.id] ??= []).push(doc);
+    recordClientEvent(
+      user.id,
+      "documents",
+      `Uploaded ${body.kind === "passport" ? "an identity document" : "accreditation evidence"}.`,
+      body.name.trim() ? (findAdminInvestorSeed(user.id)?.full_name ?? user.email) : user.email,
+    );
     const profile = findInvestorProfileByUserId(user.id);
     documents.push({
       id,
@@ -531,6 +545,13 @@ export const investorHandlers = [
       user._ndaPollCount += 1;
       if (user._ndaPollCount >= 2) {
         user.nda_status = "signed";
+        syncSeedFromAccount(user.id);
+        recordClientEvent(
+          user.id,
+          "milestone",
+          "Signed the NDA.",
+          findAdminInvestorSeed(user.id)?.full_name ?? user.email,
+        );
       }
     }
     return HttpResponse.json({ nda_status: user.nda_status });
@@ -554,6 +575,8 @@ export const investorHandlers = [
     if (!user) return unauthorized();
     user.kyc_status = "pending";
     user._kycPollCount = 0;
+    // Their submission reaches LUCA's review queue; LUCA's decision is what unlocks the next step.
+    submitForReview(user.id);
     return HttpResponse.json({ success: true });
   }),
 
@@ -768,6 +791,21 @@ export const investorHandlers = [
     if (!body.consent_item_id || !grantConsent(user.id, body.consent_item_id)) {
       return HttpResponse.json({ error: "Consent item not found" }, { status: 404 });
     }
+    syncSeedFromAccount(user.id);
+    const profile = findInvestorProfileByUserId(user.id);
+    if (
+      profile &&
+      investorOnboardingComplete(profile, user) &&
+      !clientEvents.some(
+        (e) => e.investor_id === user.id && e.text.startsWith("Completed onboarding"),
+      )
+    )
+      recordClientEvent(
+        user.id,
+        "milestone",
+        "Completed onboarding: identity verified, NDA signed and consents granted. Ready to invest.",
+        findAdminInvestorSeed(user.id)?.full_name ?? user.email,
+      );
     return HttpResponse.json({ consents: consentsForUser(user.id) });
   }),
 
@@ -893,12 +931,11 @@ async function upsertProfile(request: Request) {
     return HttpResponse.json({ error: "Invalid investor channel" }, { status: 422 });
   // An account referred by a LUCA RM is partner-referred and tagged to that RM; the client
   // cannot switch to the independent (direct) schedule, and no partner code is needed.
-  if (profile.prepared_by_rm && patch.channel === "direct")
+  if ((profile.prepared_by_rm || profile.referral) && patch.channel === "direct")
     return HttpResponse.json(
       { error: "Your account was referred by your LUCA RM, so it stays partner-referred." },
       { status: 422 },
     );
-  const referralCodes: Record<string, number> = { MERIDIAN: 1, "STRAITS-FO": 2 };
   const nextChannel = patch.channel ?? profile.channel;
   const code = String(patch.referral_code ?? profile.referral_code ?? "")
     .trim()
@@ -907,40 +944,23 @@ async function upsertProfile(request: Request) {
     nextChannel === "eam_referred" &&
     !profile.eam_firm &&
     !profile.prepared_by_rm &&
+    !profile.referral &&
     (patch.channel !== undefined || patch.referral_code !== undefined)
   ) {
-    const partner = partners.find((p) => p.id === referralCodes[code]);
-    const adviser =
-      partner && users.find((u) => u.email === partner.contact_email && u.has_eam_profile);
-    if (!partner || !adviser)
+    // A code typed by hand tags the client the same way a referral link does.
+    if (!attachReferral(user.id, code, "code").ok)
       return HttpResponse.json(
         {
           error:
-            "Enter a valid adviser referral code to link your institution. Demo codes: MERIDIAN, STRAITS-FO.",
+            "Enter a valid referral code to link your adviser. Demo codes: MERIDIAN, NIMBUS, STRAITS-FO, ORCHARD.",
         },
         { status: 422 },
       );
-    profile.eam_firm = partner.firm_name;
-    profile.eam_name = partner.display_name;
-    if (!adviserClients.some((c) => c.investor_id === user.id && c.eam_user_id === adviser.id))
-      adviserClients.push({
-        id: Math.max(0, ...adviserClients.map((c) => c.id)) + 1,
-        investor_id: user.id,
-        investor_profile_id: profile.id,
-        eam_user_id: adviser.id,
-        client_name: `${profile.first_name} ${profile.last_name}`.trim() || user.email,
-        client_email: user.email,
-        stage: "onboarding",
-        notes: "Linked by validated demo referral code.",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    if (!partner.clientInvestorIds.includes(user.id)) partner.clientInvestorIds.push(user.id);
   }
   // Changing a commercial route does not silently transfer an existing servicing relationship.
   if (patch.referral_code !== undefined && profile.eam_firm && code) {
-    const partner = partners.find((p) => p.id === referralCodes[code]);
-    if (!partner || partner.firm_name !== profile.eam_firm)
+    const owner = findReferralCode(code);
+    if (!owner || owner.partner_firm !== profile.eam_firm)
       return HttpResponse.json(
         { error: "This referral code does not match your existing institution." },
         { status: 422 },
@@ -992,7 +1012,12 @@ async function upsertProfile(request: Request) {
     persist();
   }
 
+  syncSeedFromAccount(user.id);
   return HttpResponse.json({
-    investor_profile: { ...profile, completed: investorOnboardingComplete(profile, user) },
+    investor_profile: {
+      ...profile,
+      completed: investorOnboardingComplete(profile, user),
+      reference: findAdminInvestorSeed(user.id)?.reference ?? null,
+    },
   });
 }

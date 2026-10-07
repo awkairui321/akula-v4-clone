@@ -1,9 +1,10 @@
 import { workflow } from "../workflow";
 import { mayDiscover } from "../investor-access";
 import { findUserById } from "../db";
-import { clientCode } from "@/lib/client-code";
+import { partnerOnboarding } from "../onboarding";
 import { http, HttpResponse } from "msw";
 import {
+  referenceFor,
   currentUser,
   findEamProfileByUserId,
   adviserClients,
@@ -28,7 +29,7 @@ function unauthorized() {
 
 function stripClient(client: MockAdviserClient) {
   const { eam_user_id: _eam_user_id, investor_id: _investor_id, ...rest } = client;
-  return { ...rest, investor_user_id: _investor_id, client_code: clientCode(_investor_id) };
+  return { ...rest, investor_user_id: _investor_id, client_code: referenceFor(_investor_id) };
 }
 
 function myClients(eamUserId: number): MockAdviserClient[] {
@@ -91,8 +92,9 @@ function clientDocuments(investorId: number) {
     }));
 }
 
-function clientDetailFor(client: MockAdviserClient) {
+function clientDetailFor(client: MockAdviserClient, viewer?: ReturnType<typeof findUserById>) {
   return {
+    onboarding: viewer ? partnerOnboarding(viewer, client.investor_id) : null,
     client: stripClient(client),
     holdings: clientHoldings(client.investor_id),
     subscriptions: clientSubscriptions(client.investor_id),
@@ -249,7 +251,7 @@ export const eamHandlers = [
           ...holding,
           adviser_client_id: client.id,
           client_name: client.client_name,
-          client_code: clientCode(client.investor_id),
+          client_code: referenceFor(client.investor_id),
         })),
       ),
     );
@@ -382,7 +384,7 @@ export const eamHandlers = [
     if (!client || client.eam_user_id !== user.id) {
       return HttpResponse.json({ error: "Client not found" }, { status: 404 });
     }
-    return HttpResponse.json(clientDetailFor(client));
+    return HttpResponse.json(clientDetailFor(client, user));
   }),
 
   // PATCH /api/v1/eam/clients/:id
@@ -397,7 +399,7 @@ export const eamHandlers = [
     if (body.adviser_client?.notes !== undefined) client.notes = body.adviser_client.notes;
     if (body.adviser_client?.stage) client.stage = body.adviser_client.stage as ClientStage;
     client.updated_at = new Date().toISOString();
-    return HttpResponse.json(clientDetailFor(client));
+    return HttpResponse.json(clientDetailFor(client, user));
   }),
 
   // GET /api/v1/eam/opportunities

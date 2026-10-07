@@ -8,6 +8,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BuildingIcon, UserIcon } from "lucide-react";
 
+/** The signup link that tags a new client to this firm and the LUCA RM covering it. */
+function ReferralLink() {
+  const { data } = useQuery({
+    queryKey: ["eam", "referral"],
+    queryFn: () => api<{ code: string | null; rm: string | null }>("/api/v1/eam/referral"),
+  });
+  if (!data?.code) return null;
+  const url = `${window.location.origin}/signup?ref=${encodeURIComponent(data.code)}`;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Your referral link</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <p className="text-muted-foreground">
+          Clients who sign up with this link are tagged to your firm
+          {data.rm ? ` and covered by ${data.rm}` : ""}. You can follow their onboarding under
+          Clients.
+        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="min-w-0 truncate font-mono text-xs">{url}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigator.clipboard?.writeText(url).catch(() => undefined)}
+          >
+            Copy link
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProfilePage() {
   const queryClient = useQueryClient();
 
@@ -79,6 +113,8 @@ export default function ProfilePage() {
               </div>
             </CardContent>
           </Card>
+
+          <ReferralLink />
 
           <Card>
             <CardHeader>

@@ -6,7 +6,7 @@ import { formatPrice, formatPriceCompact } from "@/lib/currency";
 import { useAuth } from "@/contexts/auth-context";
 import type { Fund } from "@/lib/types";
 import type { WorkflowView } from "@/lib/workflow-types";
-import type { InvestorsResponse, PartnersResponse, SubscriptionsResponse } from "./types";
+import type { PartnersResponse, SubscriptionsResponse } from "./types";
 import { Button } from "@/components/ui/button";
 import { PERIODS, buildAnalytics, type Period } from "./analytics-data";
 
@@ -34,9 +34,6 @@ const VIZ_CSS = `
 `;
 
 const SECTION = "text-xs font-medium tracking-wide text-muted-foreground uppercase";
-const monthLabel = (key: string) =>
-  new Date(`${key}-01T00:00:00`).toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
-
 type Tip = { x: number; y: number; title: string; lines: string[] } | null;
 
 /** Capital in three states, nested on one baseline against the target. */
@@ -138,14 +135,9 @@ function BarRow({
 export default function AnalyticsPage() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("90d");
-  const [showTable, setShowTable] = useState(false);
   const [tip, setTip] = useState<Tip>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const investors = useQuery({
-    queryKey: ["admin", "investors", "all"],
-    queryFn: () => api<InvestorsResponse>("/api/v1/admin/investors"),
-  });
   const subs = useQuery({
     queryKey: ["admin", "subscriptions", "all"],
     queryFn: () => api<SubscriptionsResponse>("/api/v1/admin/subscriptions"),
@@ -164,13 +156,12 @@ export default function AnalyticsPage() {
     queryFn: () => api<PartnersResponse>("/api/v1/admin/partners"),
   });
 
-  const ready = investors.data && subs.data && funds.data && workflow.data && partners.data;
+  const ready = subs.data && funds.data && workflow.data && partners.data;
   const a = useMemo(
     () =>
       ready
         ? buildAnalytics(
             {
-              investors: investors.data!.investors,
               subscriptions: subs.data!.subscriptions,
               funds: funds.data!.funds,
               workflow: workflow.data!,
@@ -179,7 +170,7 @@ export default function AnalyticsPage() {
             period,
           )
         : null,
-    [ready, investors.data, subs.data, funds.data, workflow.data, partners.data, period],
+    [ready, subs.data, funds.data, workflow.data, partners.data, period],
   );
 
   const showTip = (next: Tip, e?: React.PointerEvent) => {
@@ -190,15 +181,11 @@ export default function AnalyticsPage() {
 
   if (!a) return <p className="py-12 text-center text-muted-foreground">Loading analytics...</p>;
 
-  const monthMax = Math.max(1, ...a.series.map((s) => s.amount));
   const sourceMax = Math.max(1, ...a.sources.map((s) => s.committed));
-  const funnelMax = Math.max(1, a.funnel[0].count);
   const speedMax = Math.max(1, ...a.speed.map((s) => s.median ?? 0));
-  const biggestDrop = a.funnel
-    .slice(1)
-    .map((stage, i) => ({ stage, lost: a.funnel[i].count - stage.count, from: a.funnel[i] }))
-    .sort((x, y) => y.lost - x.lost)[0];
   const periodLabel = PERIODS.find((p) => p.key === period)!.label.toLowerCase();
+  // "in the last 90 days", or simply "all time" when there is no window.
+  const within = period === "all" ? "all time" : `the last ${periodLabel}`;
 
   return (
     <div ref={rootRef} className="viz-root relative flex w-full flex-col gap-10">
@@ -240,8 +227,7 @@ export default function AnalyticsPage() {
           </Button>
         ))}
         <span className="ml-2 text-xs text-muted-foreground">
-          Applies to commitments over time, the investor funnel, speed and fees. Capital and sources
-          are the position today.
+          Applies to speed and fees. Capital and sources are the position today.
         </span>
       </div>
 
@@ -259,7 +245,7 @@ export default function AnalyticsPage() {
             [
               "Median start to allocation",
               a.endToEnd.median === null ? "—" : `${a.endToEnd.median.toFixed(1)} days`,
-              `${a.endToEnd.n} subscription${a.endToEnd.n === 1 ? "" : "s"} in the last ${periodLabel}`,
+              `${a.endToEnd.n} subscription${a.endToEnd.n === 1 ? "" : "s"}, ${within}`,
             ],
           ] as const
         ).map(([label, value, note]) => (
@@ -336,134 +322,6 @@ export default function AnalyticsPage() {
         </div>
       </section>
 
-      {/* Commitments over time */}
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 className={SECTION}>New commitments by month · last {periodLabel}</h2>
-          <Button size="sm" variant="ghost" onClick={() => setShowTable((v) => !v)}>
-            {showTable ? "Show chart" : "Show as table"}
-          </Button>
-        </div>
-        {a.series.length === 0 ? (
-          <p className="border-y py-8 text-sm text-muted-foreground">
-            No new commitments in this period.
-          </p>
-        ) : showTable ? (
-          <table className="w-full max-w-md text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="pb-2 font-normal">Month</th>
-                <th className="pb-2 text-right font-normal">Committed</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y border-y">
-              {a.series.map((s) => (
-                <tr key={s.month}>
-                  <td className="py-2">{monthLabel(s.month)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatPrice(s.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className="border-y py-4">
-            <div className="relative flex h-48 items-end gap-3 pl-14">
-              {[1, 0.5, 0].map((t) => (
-                <div
-                  key={t}
-                  className="pointer-events-none absolute right-0 left-0 flex items-center"
-                  style={{ bottom: `${t * 100}%` }}
-                >
-                  <span className="w-12 pr-2 text-right text-[11px] text-muted-foreground tabular-nums">
-                    {formatPriceCompact(monthMax * t)}
-                  </span>
-                  <span className="h-px flex-1" style={{ background: "var(--viz-grid)" }} />
-                </div>
-              ))}
-              {a.series.map((s) => (
-                <div
-                  key={s.month}
-                  tabIndex={0}
-                  role="img"
-                  aria-label={`${monthLabel(s.month)}: ${formatPrice(s.amount)} committed`}
-                  className="relative z-10 flex h-full flex-1 items-end justify-center outline-none focus-visible:bg-muted/40"
-                  onPointerMove={(e) =>
-                    showTip(
-                      {
-                        x: 0,
-                        y: 0,
-                        title: monthLabel(s.month),
-                        lines: [`${formatPrice(s.amount)} committed`],
-                      },
-                      e,
-                    )
-                  }
-                  onPointerLeave={() => showTip(null)}
-                  onFocus={() =>
-                    setTip({
-                      x: 40,
-                      y: 20,
-                      title: monthLabel(s.month),
-                      lines: [`${formatPrice(s.amount)} committed`],
-                    })
-                  }
-                  onBlur={() => setTip(null)}
-                >
-                  <div
-                    className="w-full max-w-6 rounded-t-[4px]"
-                    style={{
-                      height: `${Math.max(1, (s.amount / monthMax) * 100)}%`,
-                      background: "var(--viz-main)",
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 flex gap-3 pl-14">
-              {a.series.map((s) => (
-                <span
-                  key={s.month}
-                  className="flex-1 text-center text-[11px] text-muted-foreground"
-                >
-                  {monthLabel(s.month)}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Funnel */}
-      <section className="space-y-3">
-        <h2 className={SECTION}>Investor funnel · registered in the last {periodLabel}</h2>
-        <div className="divide-y border-y">
-          {a.funnel.map((stage, i) => (
-            <BarRow
-              key={stage.key}
-              label={stage.label}
-              note={
-                i === 0
-                  ? undefined
-                  : `${a.funnel[0].count ? Math.round((stage.count / a.funnel[0].count) * 100) : 0}% of registered`
-              }
-              value={stage.count}
-              max={funnelMax}
-              display={String(stage.count)}
-              href="/luca/clients?tab=onboarding"
-              onTip={showTip}
-              tip={[`${stage.count} of ${a.funnel[0].count} investors`]}
-            />
-          ))}
-        </div>
-        {biggestDrop && biggestDrop.lost > 0 && (
-          <p className="text-sm text-muted-foreground">
-            Biggest drop: {biggestDrop.lost} investor{biggestDrop.lost === 1 ? "" : "s"} between “
-            {biggestDrop.from.label.toLowerCase()}” and “{biggestDrop.stage.label.toLowerCase()}”.
-            Each stage counts everyone who reached it, so a stage can be ahead of the one before.
-          </p>
-        )}
-      </section>
-
       {/* Sources */}
       <section className="space-y-3">
         <h2 className={SECTION}>Where the committed capital comes from</h2>
@@ -499,9 +357,7 @@ export default function AnalyticsPage() {
 
       {/* Speed */}
       <section className="space-y-3">
-        <h2 className={SECTION}>
-          How long each step takes · subscriptions started in the last {periodLabel}
-        </h2>
+        <h2 className={SECTION}>How long each step takes · subscriptions started {within}</h2>
         <div className="divide-y border-y">
           {a.speed.map((step) => (
             <BarRow
@@ -521,49 +377,102 @@ export default function AnalyticsPage() {
             />
           ))}
         </div>
-        {a.oldestOpen.length > 0 && (
-          <div className="space-y-2 pt-2">
-            <h3 className="text-sm font-medium">Oldest subscriptions still open</h3>
-            <ul className="divide-y border-y text-sm">
-              {a.oldestOpen.map(({ s, age }) => (
-                <li
-                  key={s.id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 py-2 md:grid-cols-[12rem_minmax(0,1fr)_6rem]"
-                >
-                  <Link
-                    to={`/luca/investors/${s.investor_id}`}
-                    className="truncate font-medium hover:underline"
-                  >
-                    {s.investor_name}
-                  </Link>
-                  <span className="order-3 col-span-2 truncate text-muted-foreground md:order-none md:col-span-1">
-                    {s.fund_name} · {s.status.replaceAll("_", " ")}
-                  </span>
-                  <span className="text-right tabular-nums">{age} days</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </section>
 
       {/* Fees */}
-      <section className="space-y-3">
-        <h2 className={SECTION}>Fees · allocated in the last {periodLabel}</h2>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-5 border-y py-5 lg:grid-cols-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Subscription fees on allocations</p>
-            <p className="mt-1 text-2xl font-semibold">{formatPrice(a.fees.earned)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Revenue share accrued to partners</p>
-            <p className="mt-1 text-2xl font-semibold">{formatPrice(a.fees.owedToPartners)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">All time, from the partner terms</p>
-          </div>
+      <section className="space-y-4">
+        <div>
+          <h2 className={SECTION}>Fees: what we charge and what we receive</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Subscription fees and the partners&apos; share are for allocations made {within}.
+            Management fee and carry are the position today.
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Management fees and carried interest are not tracked in this demo, so they are not shown.
-        </p>
+        <div className="grid grid-cols-2 gap-x-8 gap-y-5 border-y py-5 lg:grid-cols-4">
+          {(
+            [
+              [
+                "Subscription fees charged",
+                formatPrice(a.fees.subscriptionFees),
+                "On allocations in the period",
+              ],
+              [
+                "Shared with partners",
+                formatPrice(a.fees.revenueShare),
+                "Partner share of those fees",
+              ],
+              ["Subscription income to LUCA", formatPrice(a.fees.net), "After the partners' share"],
+              [
+                "Management fee per year",
+                formatPrice(a.fees.managementRunRate),
+                "Estimate on capital held today",
+              ],
+            ] as const
+          ).map(([label, value, note]) => (
+            <div key={label}>
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="mt-1 text-2xl font-semibold">{value}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{note}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="divide-y border-y">
+          <div className="grid grid-cols-[minmax(0,1.4fr)_9rem_repeat(5,minmax(6rem,1fr))] gap-x-3 py-2 text-xs text-muted-foreground max-xl:hidden">
+            <span>Fund</span>
+            <span>Fee schedule</span>
+            <span className="text-right">Allocated</span>
+            <span className="text-right">Subscription fees</span>
+            <span className="text-right">Partner share</span>
+            <span className="text-right">Mgmt fee / year</span>
+            <span className="text-right">Carry (unrealised)</span>
+          </div>
+          {a.fees.rows.length === 0 && (
+            <p className="py-6 text-sm text-muted-foreground">No capital has been allocated yet.</p>
+          )}
+          {a.fees.rows.map((row) => (
+            <Link
+              key={row.fundId}
+              to={`/luca/deals/${row.fundId}`}
+              className="grid grid-cols-[minmax(0,1.4fr)_9rem_repeat(5,minmax(6rem,1fr))] items-center gap-x-3 gap-y-1 py-2.5 text-sm hover:bg-muted/40 max-xl:grid-cols-2"
+            >
+              <span className="min-w-0 truncate font-medium">{row.label}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {row.schedule.subscription}% · {row.schedule.management}% · {row.schedule.carry}%
+              </span>
+              <span className="text-right tabular-nums">{formatPrice(row.allocated)}</span>
+              <span className="text-right tabular-nums">{formatPrice(row.subscriptionFees)}</span>
+              <span className="text-right text-muted-foreground tabular-nums">
+                {formatPrice(row.revenueShare)}
+              </span>
+              <span className="text-right tabular-nums">{formatPrice(row.managementRunRate)}</span>
+              <span className="text-right text-muted-foreground tabular-nums">
+                {formatPrice(row.unrealisedCarry)}
+              </span>
+            </Link>
+          ))}
+        </div>
+
+        <ul className="space-y-1 text-xs text-muted-foreground">
+          <li>
+            Fee schedule is subscription · management · carried interest, set once per fund in its
+            overview editor.
+          </li>
+          <li>
+            Subscription fee: the rate is frozen on each application (the fund&apos;s rate, plus one
+            point for independent investors). At allocation the fee is the allocated amount times
+            that rate.
+          </li>
+          <li>
+            Partner share: each partner&apos;s revenue-share percentage applied to the subscription
+            fees on its clients&apos; allocations.
+          </li>
+          <li>
+            Management fee is estimated as the yearly percentage on allocated capital, and carry as
+            the carry percentage on unrealised gains. Neither is billed or received yet; carry is
+            received only on exit.
+          </li>
+        </ul>
       </section>
     </div>
   );

@@ -6,12 +6,10 @@ import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
 import {
   VERIFICATION_LABELS,
-  type AccreditationStatus,
   type AdminInvestor,
   type AdminPartner,
   type AdminSubscription,
   type ActivityResponse,
-  type IdentityStatus,
   type InvestorDetailResponse,
   type PlatformEvent,
 } from "../types";
@@ -20,10 +18,20 @@ import type { Holding } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { WorkflowCommand, WorkflowView } from "@/lib/workflow-types";
+import type { ClientEvent } from "@/lib/client-onboarding";
+import { useAuth } from "@/contexts/auth-context";
+import { useRms } from "../use-rms";
 import {
   Table,
   TableHeader,
@@ -44,9 +52,6 @@ import {
   SendIcon,
 } from "lucide-react";
 
-const IDENTITY_CHOICES: IdentityStatus[] = ["pending", "verified", "failed"];
-const ACCREDITATION_CHOICES: AccreditationStatus[] = ["pending", "accredited", "not_accredited"];
-
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleDateString() : "—";
 }
@@ -58,7 +63,6 @@ function daysUntil(value: string | null): number | null {
 
 export default function AdminInvestorDetailPage() {
   const { id } = useParams();
-  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "investors", id],
@@ -85,8 +89,9 @@ export default function AdminInvestorDetailPage() {
     0,
   );
   const totalDistributions = holdings.reduce((sum, h) => sum + parseFloat(h.distributions), 0);
-  const eamPartner = investor.eam_firm
-    ? (partnersData?.partners ?? []).find((p) => p.firm_name === investor.eam_firm)
+  const partnerFirm = investor.referral?.partner_firm ?? investor.eam_firm;
+  const eamPartner = partnerFirm
+    ? (partnersData?.partners ?? []).find((p) => p.firm_name === partnerFirm)
     : undefined;
 
   const expiryDays = daysUntil(investor.accreditation_expiry);
@@ -106,20 +111,43 @@ export default function AdminInvestorDetailPage() {
       </Link>
 
       {/* Unified header */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h1 className="text-2xl font-bold tracking-tight">{investor.full_name}</h1>
-            <p className="font-mono text-xs text-muted-foreground">
-              Client tag {investor.client_code}
-            </p>
             <Badge>{VERIFICATION_LABELS[investor.verification_status]}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            {investor.email} · {investor.investor_type} · {investor.country ?? "—"} ·{" "}
-            {investor.eam_firm ?? "Direct"}
+            {investor.email} ·{" "}
+            {investor.investor_type === "institutional" ? "Entity" : "Individual"} ·{" "}
+            {investor.country ?? "—"}
+          </p>
+          <p className="text-sm">
+            <span className="font-mono font-medium">
+              {investor.reference ?? "Reference issued on approval"}
+            </span>
+            <span className="text-muted-foreground">
+              {" · "}
+              {investor.referral?.partner_firm ? (
+                eamPartner ? (
+                  <Link
+                    to={`/luca/partners/${encodeURIComponent(investor.referral.partner_firm)}`}
+                    className="underline underline-offset-2"
+                  >
+                    {investor.referral.partner_firm}
+                  </Link>
+                ) : (
+                  investor.referral.partner_firm
+                )
+              ) : investor.referral?.via === "rm_invite" ? (
+                "Referred by their RM"
+              ) : (
+                "Direct"
+              )}
+            </span>
           </p>
         </div>
+        <RmAssignment investor={investor} />
       </div>
 
       {(needsReview || expirySoon) && (
@@ -128,7 +156,6 @@ export default function AdminInvestorDetailPage() {
           needsReview={needsReview}
           expirySoon={expirySoon}
           expiryDays={expiryDays}
-          onReviewed={() => queryClient.invalidateQueries({ queryKey: ["admin", "investors"] })}
         />
       )}
 
@@ -143,7 +170,8 @@ export default function AdminInvestorDetailPage() {
               <TabsTrigger value="holdings">Holdings</TabsTrigger>
               <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
               <TabsTrigger value="evidence">Evidence</TabsTrigger>
-              <TabsTrigger value="history">History</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="history">Transactions</TabsTrigger>
               <TabsTrigger value="notes">
                 Notes
                 {investor.internal_notes.trim() && (
@@ -210,6 +238,10 @@ export default function AdminInvestorDetailPage() {
               </Card>
             </TabsContent>
 
+            <TabsContent value="timeline">
+              <ClientTimeline investorId={investor.id} />
+            </TabsContent>
+
             <TabsContent value="history">
               <TransactionHistory investorId={investor.id} />
             </TabsContent>
@@ -229,13 +261,11 @@ function NeedsAttentionCallout({
   needsReview,
   expirySoon,
   expiryDays,
-  onReviewed,
 }: {
   investor: AdminInvestor;
   needsReview: boolean;
   expirySoon: boolean;
   expiryDays: number | null;
-  onReviewed: () => void;
 }) {
   return (
     <div className="mb-6 space-y-4 rounded-lg border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
@@ -252,7 +282,22 @@ function NeedsAttentionCallout({
           ({formatDate(investor.accreditation_expiry)}).
         </p>
       )}
-      {needsReview && <ReviewPanel investor={investor} onReviewed={onReviewed} />}
+      {needsReview && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-amber-900 dark:text-amber-200">
+            {investor.needs_info
+              ? "Waiting on the client to answer your request for more information."
+              : "This client is waiting for LUCA to verify their identity and accreditation."}
+          </p>
+          <Button
+            size="sm"
+            nativeButton={false}
+            render={<Link to={`/luca/clients/${investor.id}/review`} />}
+          >
+            Review application
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -306,10 +351,10 @@ function IdentityPanel({
           label="CDD (NDA)"
           ok={investor.nda_status === "signed"}
           failed={false}
-          value={investor.nda_status}
+          value={investor.nda_status.replace(/_/g, " ")}
         />
         <Separator className="my-2" />
-        <Row label="Onboarding completed" value={formatDate(investor.onboarding_completed_at)} />
+        <Row label="Approved by LUCA" value={formatDate(investor.approved_at)} />
         <Row label="Last reviewed" value={formatDate(investor.reviewed_at)} />
         <Row label="Committed (all-time)" value={formatPrice(investor.committed_amount)} />
         <Row label="Open subscriptions" value={String(investor.open_subscriptions)} />
@@ -538,91 +583,6 @@ function NotesPanel({ investor }: { investor: AdminInvestor }) {
   );
 }
 
-/**
- * Identity and accreditation are the two facts a reviewer establishes; the
- * overall verification status is derived from them server-side and is never
- * set directly here.
- */
-function ReviewPanel({
-  investor,
-  onReviewed,
-}: {
-  investor: AdminInvestor;
-  onReviewed: () => void;
-}) {
-  const [identity, setIdentity] = useState<IdentityStatus | null>(null);
-  const [accreditation, setAccreditation] = useState<AccreditationStatus | null>(null);
-
-  const review = useMutation({
-    mutationFn: () =>
-      api<{ investor: AdminInvestor }>(`/api/v1/admin/investors/${investor.id}/verification`, {
-        method: "PATCH",
-        body: {
-          identity_status: identity ?? undefined,
-          accreditation_status: accreditation ?? undefined,
-        },
-      }),
-    onSuccess: () => {
-      toast.success("Decision recorded.");
-      setIdentity(null);
-      setAccreditation(null);
-      onReviewed();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <div className="space-y-4 rounded-lg border bg-card p-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Identity</Label>
-          <div className="flex flex-wrap gap-2">
-            {IDENTITY_CHOICES.map((choice) => (
-              <Button
-                key={choice}
-                size="sm"
-                variant={identity === choice ? "secondary" : "outline"}
-                onClick={() => setIdentity(choice === identity ? null : choice)}
-              >
-                {choice === investor.identity_status && (
-                  <CheckIcon className="size-3.5 text-muted-foreground" />
-                )}
-                {choice.replace(/_/g, " ")}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Accreditation</Label>
-          <div className="flex flex-wrap gap-2">
-            {ACCREDITATION_CHOICES.map((choice) => (
-              <Button
-                key={choice}
-                size="sm"
-                variant={accreditation === choice ? "secondary" : "outline"}
-                onClick={() => setAccreditation(choice === accreditation ? null : choice)}
-              >
-                {choice === investor.accreditation_status && (
-                  <CheckIcon className="size-3.5 text-muted-foreground" />
-                )}
-                {choice.replace(/_/g, " ")}
-              </Button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <Button
-        disabled={review.isPending || (!identity && !accreditation)}
-        onClick={() => review.mutate()}
-      >
-        Record decision
-      </Button>
-    </div>
-  );
-}
-
 function Row({
   label,
   value,
@@ -639,5 +599,94 @@ function Row({
         {value}
       </span>
     </div>
+  );
+}
+
+/** The one RM covering this client. Reassigning is recorded on the client's timeline. */
+function RmAssignment({ investor }: { investor: AdminInvestor }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { rms, label } = useRms();
+  const { data } = useQuery({
+    queryKey: ["workflows", user?.id],
+    queryFn: () => api<WorkflowView>("/api/v1/workflows"),
+    staleTime: 0,
+  });
+  const current = data?.assignments.find((a) => a.investorId === investor.id)?.staffId ?? null;
+  const assign = useMutation({
+    mutationFn: (target: number) =>
+      api<WorkflowView>("/api/v1/workflows", {
+        method: "POST",
+        body: { type: "assign", id: investor.id, target } satisfies WorkflowCommand,
+      }),
+    onSuccess: () => {
+      toast.success("Relationship manager updated.");
+      queryClient.invalidateQueries();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">Relationship manager</p>
+      <Select
+        value={current === null ? "" : String(current)}
+        onValueChange={(v) => v && Number(v) !== current && assign.mutate(Number(v))}
+      >
+        <SelectTrigger className="w-56" aria-label="Relationship manager">
+          <SelectValue>{label(current) ?? "Unassigned"}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {rms.map((r) => (
+            <SelectItem key={r.id} value={String(r.id)}>
+              {r.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Everything that has happened to this client, newest first, with who did it. */
+export function ClientTimeline({ investorId }: { investorId: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["clients", investorId, "events"],
+    queryFn: () => api<{ events: ClientEvent[] }>(`/api/v1/clients/${investorId}/events`),
+  });
+  const events = [...(data?.events ?? [])].reverse();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Timeline</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing recorded yet.</p>
+        ) : (
+          <ul className="divide-y text-sm">
+            {events.map((e) => (
+              <li
+                key={e.id}
+                className="flex flex-wrap items-baseline justify-between gap-x-4 py-2.5"
+              >
+                <span className="min-w-0">
+                  <span className="block">{e.text}</span>
+                  <span className="block text-xs text-muted-foreground">{e.actor}</span>
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {new Date(e.at).toLocaleDateString("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }

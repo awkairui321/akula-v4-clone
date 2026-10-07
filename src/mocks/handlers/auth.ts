@@ -9,6 +9,7 @@ import {
   users,
   type MockUser,
 } from "../db";
+import { registerClient } from "../onboarding";
 
 function authHeaders(userId: number): HeadersInit {
   return { Authorization: `Bearer ${tokenFor(userId)}` };
@@ -64,6 +65,7 @@ export const authHandlers = [
   http.post("*/api/v1/public/signup", async ({ request }) => {
     const body = (await request.json()) as {
       user?: { email?: string; password?: string; password_confirmation?: string };
+      ref?: string;
     };
     const { email, password, password_confirmation } = body.user ?? {};
 
@@ -115,6 +117,8 @@ export const authHandlers = [
       eam_name: null,
     });
 
+    // A new client joins LUCA's book, tagged to whoever referred them and assigned an RM.
+    registerClient(newUser.id, body.ref);
     return HttpResponse.json({ user: { id: newUser.id } }, { headers: authHeaders(newUser.id) });
   }),
 

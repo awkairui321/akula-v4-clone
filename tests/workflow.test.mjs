@@ -10,18 +10,20 @@ for (const file of [
   "src/lib/permissions.ts",
   "src/lib/investor-access.ts",
   "src/mocks/investor-access.ts",
-  "src/lib/client-code.ts",
+  "src/lib/client-onboarding.ts",
   "src/lib/rm-onboarding.ts",
   "src/features/partners/partner-data.ts",
   "src/features/admin/analytics-data.ts",
   "src/lib/document-catalogue.ts",
   "src/mocks/db.ts",
   "src/mocks/workflow.ts",
+  "src/mocks/onboarding.ts",
   "src/mocks/handlers/workflow.ts",
   "src/mocks/handlers/guard.ts",
   "src/mocks/handlers/investor.ts",
   "src/mocks/handlers/eam.ts",
   "src/mocks/handlers/rm.ts",
+  "src/mocks/handlers/client.ts",
   "src/mocks/handlers/admin.ts",
   "src/mocks/handlers/auth.ts",
   "src/mocks/handlers/public.ts",
@@ -465,19 +467,149 @@ test("EAM revenue share is calculated on the subscription fee base", async () =>
   );
 });
 
-test("client tags are stable and unique across the seeded investor book", () => {
+test("every client has one covering RM and references are issued only on approval", () => {
   const investors = db.adminInvestors();
-  assert.equal(new Set(investors.map((investor) => investor.client_code)).size, investors.length);
-  assert.ok(investors.every((investor) => /^[A-Z0-9]{5}$/.test(investor.client_code)));
-  const rmClients = w.view(rm()).clients;
-  assert.ok(
-    rmClients.every(
-      (client) =>
-        client.code === investors.find((investor) => investor.id === client.id)?.client_code,
-    ),
-  );
+  const issued = investors.filter((i) => i.reference && /^LC-\d{6}$/.test(i.reference));
+  assert.equal(new Set(issued.map((i) => i.reference)).size, issued.length);
+  for (const i of investors) {
+    assert.equal(w.workflow.assignments.filter((a) => a.investorId === i.id).length, 1);
+    assert.equal(Boolean(i.reference), i.verification_status === "approved");
+  }
 });
-
+async function signup(email, ref) {
+  const res = await handlers
+    .find((h) => h.info.path === "*/api/v1/public/signup")
+    .run({
+      request: new Request("http://localhost:3000/api/v1/public/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user: { email, password: "password1", password_confirmation: "password1" },
+          ref,
+        }),
+      }),
+      requestId: crypto.randomUUID(),
+    });
+  assert.equal(res.response.status, 200);
+  return db.users.find((u) => u.email === email);
+}
+test("a referral link tags the client to the RM and partner and lands them in LUCA's book", async () => {
+  const user = await signup("new.client@example.com", "meridian");
+  const seed = db.findAdminInvestorSeed(user.id);
+  assert.ok(seed, "the new signup is in LUCA's client list");
+  assert.equal(seed.referral.partner_firm, "Meridian Capital Advisors");
+  assert.equal(seed.referral.rm_id, 6);
+  assert.equal(w.workflow.assignments.find((a) => a.investorId === user.id).staffId, 6);
+  assert.equal(db.findInvestorProfileByUserId(user.id).channel, "eam_referred");
+  assert.ok(
+    seed.reference === undefined || seed.reference === null,
+    "no reference before approval",
+  );
+  const partner = db.users.find(
+    (u) =>
+      u.has_eam_profile &&
+      u.email ===
+        db.partners.find((p) => p.firm_name === "Meridian Capital Advisors").contact_email,
+  );
+  assert.ok(
+    db.adviserClients.some((c) => c.investor_id === user.id && c.eam_user_id === partner.id),
+  );
+  // The client cannot switch to direct after being referred.
+  await request("investor_profile", user, "PATCH", { investor_profile: { channel: "direct" } });
+  assert.equal(db.findInvestorProfileByUserId(user.id).channel, "eam_referred");
+  // A plain signup is direct and still gets an RM.
+  const direct = await signup("direct.client@example.com");
+  assert.equal(db.findAdminInvestorSeed(direct.id).referral.via, "direct");
+  assert.equal(w.workflow.assignments.filter((a) => a.investorId === direct.id).length, 1);
+});
+test("approval needs both checks, issues a sequential reference and reaches every portal", async () => {
+  const user = await signup("review.client@example.com", "MERIDIAN");
+  const fm = manager();
+  const bad = await request(`admin/investors/${user.id}/review`, fm, "POST", {
+    decision: "approve",
+    identity: "verified",
+    accreditation: "pending",
+  });
+  assert.equal(bad.status, 422);
+  assert.equal(db.findAdminInvestorSeed(user.id).verification_status !== "approved", true);
+  const before = db.nextReference();
+  const ok = await request(`admin/investors/${user.id}/review`, fm, "POST", {
+    decision: "approve",
+    identity: "verified",
+    accreditation: "accredited",
+    note: "Passport and broker letter checked.",
+  });
+  assert.equal(ok.status, 200);
+  const seed = db.findAdminInvestorSeed(user.id);
+  assert.equal(seed.reference, before);
+  assert.equal(seed.verification_status, "approved");
+  assert.equal(db.findUserById(user.id).kyc_status, "approved");
+  const status = await (await request("onboarding/review", user)).json();
+  assert.equal(status.status, "approved");
+  assert.equal(status.reference, before);
+  const next = db.nextReference();
+  assert.equal(Number(next.slice(3)), Number(before.slice(3)) + 1);
+  // Events: each audience sees its own slice.
+  const asRm = await (await request(`clients/${user.id}/events`, rm())).json();
+  assert.ok(asRm.events.some((e) => e.kind === "approved"));
+  const eam = db.users.find((u) => u.id === 4);
+  const asPartner = await (await request(`clients/${user.id}/events`, eam)).json();
+  assert.ok(asPartner.events.some((e) => e.kind === "approved"));
+  const asOther = await (await request(`clients/${user.id}/events`, investor())).json();
+  assert.equal(asOther.events.length, 0);
+  const own = await (await request(`clients/${user.id}/events`, user)).json();
+  assert.ok(own.events.some((e) => e.kind === "approved"));
+  assert.ok(db.clientEvents.some((e) => e.investor_id === user.id && e.kind === "approved"));
+  // The partner's client detail now carries the onboarding record, with no private notes.
+  const detail = await (
+    await request(`eam/clients/${db.adviserClients.find((c) => c.investor_id === user.id).id}`, eam)
+  ).json();
+  assert.equal(detail.onboarding.investor.reference, before);
+  assert.equal(detail.onboarding.investor.decision_note, null);
+});
+test("a declined or incomplete client can reapply; requesting information opens a document request", async () => {
+  const user = await signup("reapply.client@example.com");
+  const fm = manager();
+  const info = await request(`admin/investors/${user.id}/review`, fm, "POST", {
+    decision: "request_info",
+    note: "Please send a proof of address.",
+    request_kinds: ["proof_of_address"],
+  });
+  assert.equal(info.status, 200);
+  assert.equal((await (await request("onboarding/review", user)).json()).status, "needs_info");
+  assert.ok(db.documentRequests.some((r) => r.investor_id === user.id));
+  const declined = await request(`admin/investors/${user.id}/review`, fm, "POST", {
+    decision: "decline",
+    note: "Accreditation evidence has expired.",
+  });
+  assert.equal(declined.status, 200);
+  const review = await (await request("onboarding/review", user)).json();
+  assert.equal(review.status, "declined");
+  assert.equal(review.can_reapply, true);
+  assert.equal(
+    (await request(`admin/investors/${user.id}/review`, user, "POST", { decision: "approve" }))
+      .status,
+    403,
+  );
+  assert.equal(
+    (await request("onboarding/resubmit", user, "POST", { note: "New letter." })).status,
+    200,
+  );
+  assert.equal((await (await request("onboarding/review", user)).json()).status, "in_review");
+  assert.ok(db.clientEvents.some((e) => e.investor_id === user.id && e.kind === "reapplied"));
+});
+test("reassigning an RM is recorded and an RM only sees their own clients", async () => {
+  const clients = await (await request("rm/clients", rm())).json();
+  assert.ok(clients.clients.length > 0);
+  assert.ok(clients.clients.every((c) => c.rm_id === rm().id));
+  const mine = clients.clients[0];
+  const other = db.users.find((u) => u.role === "rm" && u.id !== rm().id);
+  assert.equal((await request(`rm/clients/${mine.id}/status`, other)).status, 403);
+  w.command(manager(), { type: "assign", id: mine.id, target: other.id });
+  assert.equal(w.workflow.assignments.find((a) => a.investorId === mine.id).staffId, other.id);
+  assert.equal((await request(`rm/clients/${mine.id}/status`, rm())).status, 403);
+  assert.equal((await request(`rm/clients/${mine.id}/status`, other)).status, 200);
+});
 test("adviser cases may link an owned holding but reject another client's holding", () => {
   const adviser = db.users.find((user) => user.id === 4);
   const own = db.holdings.find((holding) =>
@@ -1329,29 +1461,58 @@ test("partner book adds up: partner = projects = funds = clients, and an RM only
 
 test("analytics are calculated from the records and stay consistent across periods", () => {
   const input = {
-    investors: db.adminInvestors(),
     subscriptions: db.subscriptions.map(db.toAdminSubscription),
     funds: db.funds,
     workflow: w.view(manager()),
-    partners: [],
+    partners: db.partners.map(db.partnerSummary),
   };
   const all = buildAnalytics(input, "all");
   const sum = (rows, key) => Math.round(rows.reduce((n, r) => n + r[key], 0));
   for (const key of ["committed", "funded", "allocated"])
     assert.equal(sum(all.capital, key), Math.round(all.totals[key]));
   assert.ok(all.totals.funded <= all.totals.committed + 0.01);
-  assert.equal(all.funnel[0].count, input.investors.length);
-  assert.ok(all.funnel.every((stage) => stage.count <= all.funnel[0].count));
   assert.equal(sum(all.sources, "committed"), Math.round(all.totals.committed));
   assert.ok(
     all.concentration.top1 <= all.concentration.top5 &&
       all.concentration.top5 <= all.concentration.top10,
   );
   assert.ok(all.concentration.top10 <= 1.0001);
+  for (const s of all.speed) assert.ok(s.median === null || s.median >= 0);
   // A shorter period can only ever show less.
   const recent = buildAnalytics(input, "30d");
-  assert.ok(sum(recent.series, "amount") <= sum(all.series, "amount"));
-  assert.ok(recent.funnel[0].count <= all.funnel[0].count);
-  assert.ok(recent.fees.earned <= all.fees.earned + 0.01);
-  for (const s of all.speed) assert.ok(s.median === null || s.median >= 0);
+  assert.ok(recent.fees.subscriptionFees <= all.fees.subscriptionFees + 0.01);
+});
+
+test("fees link up: schedule frozen on the application, allocation fee, partner share and net income", () => {
+  const input = {
+    subscriptions: db.subscriptions.map(db.toAdminSubscription),
+    funds: db.funds,
+    workflow: w.view(manager()),
+    partners: db.partners.map(db.partnerSummary),
+  };
+  const all = buildAnalytics(input, "all");
+  // Subscription fees equal the sum of the fees recorded on the allocations.
+  const recorded = w.workflow.allocations.filter((a) => !a.voided).reduce((n, a) => n + a.fee, 0);
+  assert.ok(Math.abs(all.fees.subscriptionFees - recorded) < 0.01);
+  // What we keep is what we charge less what we share with partners.
+  assert.ok(Math.abs(all.fees.net - (all.fees.subscriptionFees - all.fees.revenueShare)) < 0.01);
+  assert.ok(all.fees.revenueShare <= all.fees.subscriptionFees);
+  // A partner's accrued plus paid share is its percentage of the fees on its clients' allocations.
+  for (const p of input.partners) {
+    const mock = db.partners.find((x) => x.id === p.id);
+    const fees = db.subscriptions
+      .filter((s) => mock.clientInvestorIds.includes(s.investor_id) && s.status === "allocated")
+      .reduce((n, s) => n + db.subscriptionFeeOnAllocation(s), 0);
+    const share = fees * (Number(p.eam_revenue_share_pct ?? 0) / 100);
+    assert.ok(Math.abs(Number(p.accrued_revenue) + Number(p.paid_revenue) - share) < 0.02);
+  }
+  // Each fund row carries that fund's own schedule and a management-fee estimate from it.
+  for (const row of all.fees.rows) {
+    const fund = db.findFundById(row.fundId);
+    assert.equal(row.schedule.management, fund.management_fee_pct);
+    assert.ok(
+      Math.abs(row.managementRunRate - (row.allocated * Number(fund.management_fee_pct)) / 100) <
+        0.01,
+    );
+  }
 });

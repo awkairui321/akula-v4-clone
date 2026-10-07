@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
+import { ReviewStatusBanner } from "@/features/investor/review-status";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -176,6 +177,7 @@ export default function AppLayout() {
         </header>
 
         <main className="mx-auto w-full max-w-310 flex-1 px-3 py-6 sm:px-6 sm:py-8">
+          <ReviewStatusBanner />
           <Outlet />
         </main>
       </div>

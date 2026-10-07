@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { OnboardingRecord } from "@/features/clients/onboarding-record";
 import { ArrowLeftIcon, SendIcon, Trash2Icon, XIcon, PlusIcon, FileTextIcon } from "lucide-react";
 
 const STAGE_VARIANT: Record<ClientStage, "default" | "secondary" | "outline" | "destructive"> = {
@@ -722,9 +723,14 @@ export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [params, setParams] = useSearchParams();
   const requestedTab = params.get("tab") ?? "overview";
-  const tab = ["overview", "holdings", "activity", "conversations", "documents"].includes(
-    requestedTab,
-  )
+  const tab = [
+    "overview",
+    "holdings",
+    "onboarding",
+    "activity",
+    "conversations",
+    "documents",
+  ].includes(requestedTab)
     ? requestedTab
     : "overview";
   const discussionId = Number(params.get("discussion")) || null;
@@ -772,7 +778,7 @@ export default function ClientDetailPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{detail.client.client_name}</h1>
             <p className="text-sm text-muted-foreground">
-              {detail.client.client_email} · Client tag {detail.client.client_code}
+              {detail.client.client_email} · Reference {detail.client.client_code}
             </p>
           </div>
         </div>
@@ -792,6 +798,9 @@ export default function ClientDetailPage() {
           <TabsTrigger value="holdings" className="flex-none">
             Holdings
           </TabsTrigger>
+          <TabsTrigger value="onboarding" className="flex-none">
+            Onboarding
+          </TabsTrigger>
           <TabsTrigger value="activity" className="flex-none">
             Activity
           </TabsTrigger>
@@ -807,6 +816,13 @@ export default function ClientDetailPage() {
         </TabsContent>
         <TabsContent value="holdings">
           <HoldingsTab detail={detail} />
+        </TabsContent>
+        <TabsContent value="onboarding" className="pt-6">
+          {detail.onboarding ? (
+            <OnboardingRecord bundle={detail.onboarding} events={detail.onboarding.events} />
+          ) : (
+            <p className="py-8 text-sm text-muted-foreground">No onboarding record yet.</p>
+          )}
         </TabsContent>
         <TabsContent value="activity">
           <ActivityTab detail={detail} highlights={highlights ?? []} />

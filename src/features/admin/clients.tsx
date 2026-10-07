@@ -1,30 +1,35 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { SearchIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
 import type { WorkflowView } from "@/lib/workflow-types";
 import { useAuth } from "@/contexts/auth-context";
+import { usePartnerBook } from "@/features/partners/use-partner-book";
+import { ByProject, CapitalHeader, useOpenSet } from "@/features/partners/capital-tree";
 import type { AdminInvestor, InvestorsResponse } from "./types";
-import { clientStage, type ClientStage } from "./client-stage";
-import { OnboardingReviewDialog } from "./onboarding-review";
+import { clientStage, PIPELINE, type ClientStage, type StageKey } from "./client-stage";
+import { useRms } from "./use-rms";
 import { SummaryFigure } from "./summary-figure";
-import WorkflowPage from "@/features/workspace/workflow-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type Tab = "clients" | "onboarding" | "tools";
+type Tab = "projects" | "directory" | "onboarding";
 const TABS: { key: Tab; label: string }[] = [
-  { key: "clients", label: "Clients" },
+  { key: "projects", label: "Projects" },
+  { key: "directory", label: "Directory" },
   { key: "onboarding", label: "Onboarding" },
-  { key: "tools", label: "RM assignments and follow-ups" },
 ];
 
-const RM_LABELS: Record<number, string> = { 6: "rm@akula.vc", 8: "rm2@akula.vc" };
 const DAY = 24 * 60 * 60 * 1000;
 const ageDays = (iso: string) =>
   Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / DAY));
+const dateText = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : "—";
+const SECTION = "text-xs font-medium tracking-wide text-muted-foreground uppercase";
 
 const STAGE_TONE: Record<ClientStage["waitingOn"], string> = {
   client: "text-amber-700",
@@ -34,17 +39,34 @@ const STAGE_TONE: Record<ClientStage["waitingOn"], string> = {
 
 type Row = { investor: AdminInvestor; stage: ClientStage; rm: string | null };
 
-/** Every client, where each is in onboarding, and who it is waiting on. */
+const kind = (i: AdminInvestor) => (i.investor_type === "institutional" ? "Entity" : "Individual");
+const partnerOf = (i: AdminInvestor) => i.referral?.partner_firm ?? i.eam_firm ?? null;
+
+/** Where the client came from, in one phrase. */
+const sourceOf = (i: AdminInvestor) =>
+  partnerOf(i) ?? (i.referral?.via === "rm_invite" ? "Referred by RM" : "Direct");
+
+/** What compliance has established, in words an operator can scan. */
+function complianceOf(i: AdminInvestor) {
+  if (i.identity_status === "failed" || i.accreditation_status === "not_accredited")
+    return { text: "Failed checks", tone: "text-destructive" };
+  const parts = [
+    i.identity_status === "verified" ? "KYC verified" : "KYC open",
+    i.accreditation_status === "accredited"
+      ? `Accredited${i.accreditation_expiry ? ` to ${dateText(i.accreditation_expiry)}` : ""}`
+      : "Accreditation open",
+  ];
+  const done = i.identity_status === "verified" && i.accreditation_status === "accredited";
+  return { text: parts.join(" · "), tone: done ? "text-muted-foreground" : "text-amber-700" };
+}
+
+/** Every client: by project and fund, as a directory, and through onboarding. */
 export default function ClientsPage() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = searchParams.get("tab");
-  const tab: Tab = TABS.some((t) => t.key === requested) ? (requested as Tab) : "clients";
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState<"all" | "individual" | "institutional">("all");
-  const [reviewing, setReviewing] = useState<AdminInvestor | null>(null);
+  const tab: Tab = TABS.some((t) => t.key === requested) ? (requested as Tab) : "projects";
+  const { label: rmLabel } = useRms();
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "investors", "all"],
@@ -59,35 +81,20 @@ export default function ClientsPage() {
   const rows: Row[] = useMemo(
     () =>
       (data?.investors ?? []).map((investor) => {
-        const staff = workflow?.assignments.find((a) => a.investorId === investor.id)?.staffId;
-        return {
-          investor,
-          stage: clientStage(investor),
-          rm: staff ? (RM_LABELS[staff] ?? `RM #${staff}`) : null,
-        };
+        const staff =
+          workflow?.assignments.find((a) => a.investorId === investor.id)?.staffId ??
+          investor.rm_id;
+        return { investor, stage: clientStage(investor), rm: staff ? rmLabel(staff) : null };
       }),
-    [data, workflow],
+    [data, workflow, rmLabel],
   );
 
-  const q = search.trim().toLowerCase();
-  const filtered = rows
-    .filter(
-      (r) =>
-        (type === "all" || r.investor.investor_type === type) &&
-        (!q ||
-          `${r.investor.full_name} ${r.investor.client_code} ${r.investor.email} ${r.investor.eam_firm ?? ""}`
-            .toLowerCase()
-            .includes(q)),
-    )
-    .sort((a, b) => a.investor.full_name.localeCompare(b.investor.full_name));
-
-  const inOnboarding = rows.filter((r) => ["client", "luca"].includes(r.stage.waitingOn));
-  const waitingLuca = inOnboarding.filter((r) => r.stage.waitingOn === "luca");
-  const waitingClient = inOnboarding.filter((r) => r.stage.waitingOn === "client");
-  const counts: Record<Tab, number | null> = {
-    clients: rows.length,
-    onboarding: inOnboarding.length,
-    tools: null,
+  const waitingLuca = rows.filter((r) => r.stage.waitingOn === "luca").length;
+  const waitingClient = rows.filter((r) => r.stage.waitingOn === "client").length;
+  const counts: Record<Tab, number> = {
+    projects: 0,
+    directory: rows.length,
+    onboarding: waitingLuca + waitingClient,
   };
 
   return (
@@ -95,7 +102,7 @@ export default function ClientsPage() {
       <div className="space-y-1">
         <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
         <p className="text-muted-foreground">
-          Everyone investing through LUCA, where each is in onboarding, and who it is waiting on.
+          Who is invested where, who every client is, and who is waiting on whom to get onboarded.
         </p>
       </div>
 
@@ -105,8 +112,8 @@ export default function ClientsPage() {
           label="Onboarded"
           value={String(rows.filter((r) => r.stage.key === "onboarded").length)}
         />
-        <SummaryFigure label="Waiting on LUCA" value={String(waitingLuca.length)} />
-        <SummaryFigure label="Waiting on the client" value={String(waitingClient.length)} />
+        <SummaryFigure label="Waiting on LUCA" value={String(waitingLuca)} />
+        <SummaryFigure label="Waiting on the client" value={String(waitingClient)} />
       </div>
 
       <div role="tablist" aria-label="Clients" className="flex flex-wrap gap-x-6 border-b">
@@ -116,7 +123,7 @@ export default function ClientsPage() {
             role="tab"
             type="button"
             aria-selected={tab === t.key}
-            onClick={() => setSearchParams(t.key === "clients" ? {} : { tab: t.key })}
+            onClick={() => setSearchParams(t.key === "projects" ? {} : { tab: t.key })}
             className={`-mb-px flex items-center gap-2 border-b-2 px-1 pb-3 text-sm transition-colors ${
               tab === t.key
                 ? "border-primary font-medium text-foreground"
@@ -124,7 +131,7 @@ export default function ClientsPage() {
             }`}
           >
             {t.label}
-            {counts[t.key] !== null && (
+            {counts[t.key] > 0 && (
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
                 {counts[t.key]}
               </span>
@@ -133,192 +140,312 @@ export default function ClientsPage() {
         ))}
       </div>
 
-      {tab === "tools" ? (
-        <WorkflowPage surface="Relationships" compact />
+      {tab === "projects" ? (
+        <ProjectsTab />
       ) : isLoading ? (
         <p className="py-12 text-center text-muted-foreground">Loading clients...</p>
-      ) : tab === "clients" ? (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative w-full max-w-sm">
-              <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search name, code, email or partner"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            {(["all", "individual", "institutional"] as const).map((t) => (
-              <Button
-                key={t}
-                size="sm"
-                variant={type === t ? "secondary" : "outline"}
-                className="rounded-full"
-                onClick={() => setType(t)}
-              >
-                {t === "all" ? "All" : t === "individual" ? "Individuals" : "Entities"}
-              </Button>
-            ))}
-          </div>
-          {filtered.length === 0 ? (
-            <p className="border-y py-12 text-center text-sm text-muted-foreground">
-              No clients match.
-            </p>
-          ) : (
-            <div>
-              <div className="hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_7rem] gap-x-4 border-b pb-2 text-xs text-muted-foreground lg:grid">
-                <span>Client</span>
-                <span>Partner</span>
-                <span>RM</span>
-                <span>Onboarding</span>
-                <span className="text-right">Committed</span>
-              </div>
-              <ul className="divide-y border-b">
-                {filtered.map(({ investor, stage, rm }) => (
-                  <li key={investor.id}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/luca/investors/${investor.id}`)}
-                      className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 py-3 text-left hover:bg-muted/40 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_7rem]"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">
-                          {investor.full_name}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {investor.client_code} ·{" "}
-                          {investor.investor_type === "institutional" ? "Entity" : "Individual"}
-                          {investor.prepared_by_rm
-                            ? ` · prepared by ${investor.prepared_by_rm}`
-                            : ""}
-                        </span>
-                      </span>
-                      <span className="hidden truncate text-sm lg:block">
-                        {investor.eam_firm ?? "Direct"}
-                      </span>
-                      <span className="hidden truncate text-sm text-muted-foreground lg:block">
-                        {rm ?? "—"}
-                      </span>
-                      <span
-                        className={`order-3 col-span-2 text-sm lg:order-none lg:col-span-1 ${STAGE_TONE[stage.waitingOn]}`}
-                      >
-                        {stage.label}
-                      </span>
-                      <span className="text-right text-sm tabular-nums">
-                        {formatPrice(Number(investor.committed_amount))}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
+      ) : tab === "directory" ? (
+        <DirectoryTab rows={rows} />
       ) : (
-        <div className="space-y-8">
-          <Queue
-            title="Waiting on LUCA"
-            note="Identity and accreditation decisions."
-            rows={waitingLuca}
-            empty="Nothing is waiting for your decision."
-            action={(r) => (
-              <Button size="sm" onClick={() => setReviewing(r.investor)}>
-                Review
-              </Button>
-            )}
-          />
-          <Queue
-            title="Waiting on the client"
-            note="Started but not yet finished by the client."
-            rows={waitingClient}
-            empty="No clients are mid-onboarding."
-            action={(r) => (
-              <Button
-                size="sm"
-                variant="outline"
-                nativeButton={false}
-                render={
-                  <Link
-                    to={`/luca/communications/new?audience=investor:${r.investor.id}&purpose=request&docs=`}
-                  />
-                }
-              >
-                Send a reminder
-              </Button>
-            )}
-          />
-        </div>
-      )}
-
-      {reviewing && (
-        <OnboardingReviewDialog
-          investor={reviewing}
-          onClose={() => setReviewing(null)}
-          onReviewed={() => queryClient.invalidateQueries({ queryKey: ["admin", "investors"] })}
-        />
+        <OnboardingTab rows={rows} />
       )}
     </div>
   );
 }
 
-function Queue({
-  title,
-  note,
-  rows,
-  empty,
-  action,
-}: {
-  title: string;
-  note: string;
-  rows: Row[];
-  empty: string;
-  action: (row: Row) => React.ReactNode;
-}) {
+/** Project, then each fund in it, then which clients are in that fund and for how much. */
+function ProjectsTab() {
+  const { book, isLoading } = usePartnerBook();
+  const { open, toggle } = useOpenSet();
+  if (isLoading || !book)
+    return <p className="py-12 text-center text-muted-foreground">Loading projects...</p>;
+  const projects = book.all.projects;
   return (
-    <section className="space-y-2">
-      <div>
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          {title} ({rows.length})
-        </h2>
-        <p className="text-sm text-muted-foreground">{note}</p>
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <h2 className={SECTION}>Clients by project and fund</h2>
+        <p className="text-sm text-muted-foreground">
+          Committed is subscribed and still live, funded is cash received after fees, allocated is
+          what LUCA has allocated. Open a fund to see who is in it.
+        </p>
       </div>
-      {rows.length === 0 ? (
-        <p className="border-y py-6 text-sm text-muted-foreground">{empty}</p>
+      {projects.length === 0 ? (
+        <p className="border-y py-12 text-center text-sm text-muted-foreground">
+          No client has subscribed to a project yet.
+        </p>
       ) : (
-        <ul className="divide-y border-y">
-          {rows
-            .sort((a, b) => ageDays(b.investor.created_at) - ageDays(a.investor.created_at))
-            .map((r) => (
-              <li
-                key={r.investor.id}
-                className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3"
-              >
-                <span className="min-w-0">
-                  <Link
-                    to={`/luca/investors/${r.investor.id}`}
-                    className="block truncate text-sm font-medium hover:underline"
-                  >
-                    {r.investor.full_name}
-                  </Link>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {r.investor.client_code} ·{" "}
-                    {r.investor.investor_type === "institutional" ? "Entity" : "Individual"} ·{" "}
-                    {r.investor.eam_firm ?? "Direct"}
-                    {r.investor.prepared_by_rm ? ` · prepared by ${r.investor.prepared_by_rm}` : ""}
-                  </span>
-                </span>
-                <span className="flex items-center gap-4 text-sm">
-                  <span className={STAGE_TONE[r.stage.waitingOn]}>{r.stage.label}</span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {ageDays(r.investor.created_at)}d
-                  </span>
-                  {action(r)}
-                </span>
-              </li>
-            ))}
-        </ul>
+        <div className="border-y">
+          <CapitalHeader first="Project, fund, client" />
+          <div className="divide-y">
+            <ByProject
+              projects={projects}
+              open={open}
+              toggle={toggle}
+              clientHref={(id) => `/luca/investors/${id}`}
+            />
+          </div>
+        </div>
       )}
     </section>
+  );
+}
+
+const GRID =
+  "lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_7rem]";
+
+/** Everyone, with individuals and entities one toggle apart rather than separate pages. */
+function DirectoryTab({ rows }: { rows: Row[] }) {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [type, setType] = useState<"all" | "individual" | "institutional">("all");
+  const q = search.trim().toLowerCase();
+  const filtered = rows
+    .filter(
+      (r) =>
+        (type === "all" || r.investor.investor_type === type) &&
+        (!q ||
+          `${r.investor.full_name} ${r.investor.reference ?? ""} ${r.investor.email} ${sourceOf(r.investor)} ${r.rm ?? ""}`
+            .toLowerCase()
+            .includes(q)),
+    )
+    .sort((a, b) => a.investor.full_name.localeCompare(b.investor.full_name));
+  const count = (t: typeof type) =>
+    rows.filter((r) => t === "all" || r.investor.investor_type === t).length;
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-sm">
+          <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search name, reference, email, partner or RM"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {(["all", "individual", "institutional"] as const).map((t) => (
+          <Button
+            key={t}
+            size="sm"
+            variant={type === t ? "secondary" : "outline"}
+            className="rounded-full"
+            onClick={() => setType(t)}
+          >
+            {t === "all" ? "All" : t === "individual" ? "Individuals" : "Entities"} {count(t)}
+          </Button>
+        ))}
+      </div>
+      {filtered.length === 0 ? (
+        <p className="border-y py-12 text-center text-sm text-muted-foreground">
+          No clients match.
+        </p>
+      ) : (
+        <div>
+          <div
+            className={`hidden gap-x-4 border-b pb-2 text-xs text-muted-foreground lg:grid ${GRID}`}
+          >
+            <span>Client</span>
+            <span>Source</span>
+            <span>RM</span>
+            <span>Onboarding</span>
+            <span>Compliance</span>
+            <span className="text-right">Committed</span>
+          </div>
+          <ul className="divide-y border-b">
+            {filtered.map(({ investor, stage, rm }) => {
+              const compliance = complianceOf(investor);
+              return (
+                <li key={investor.id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/luca/investors/${investor.id}`)}
+                    className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 py-3 text-left hover:bg-muted/40 ${GRID}`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">
+                        {investor.full_name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        <span className="font-mono">
+                          {investor.reference ?? "No reference yet"}
+                        </span>{" "}
+                        · {kind(investor)}
+                      </span>
+                    </span>
+                    <span className="hidden truncate text-sm lg:block">{sourceOf(investor)}</span>
+                    <span className="hidden truncate text-sm text-muted-foreground lg:block">
+                      {rm ?? "—"}
+                    </span>
+                    <span
+                      className={`order-3 col-span-2 text-sm lg:order-none lg:col-span-1 ${STAGE_TONE[stage.waitingOn]}`}
+                    >
+                      {stage.label}
+                    </span>
+                    <span className={`hidden truncate text-xs lg:block ${compliance.tone}`}>
+                      {compliance.text}
+                    </span>
+                    <span className="text-right text-sm tabular-nums">
+                      {formatPrice(Number(investor.committed_amount))}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The pipeline in order, then everyone who is onboarded. */
+function OnboardingTab({ rows }: { rows: Row[] }) {
+  const byStage = (key: StageKey) =>
+    rows
+      .filter((r) => r.stage.key === key)
+      .sort((a, b) => ageDays(b.investor.created_at) - ageDays(a.investor.created_at));
+  const onboarded = byStage("onboarded").sort((a, b) =>
+    (b.investor.approved_at ?? "").localeCompare(a.investor.approved_at ?? ""),
+  );
+
+  return (
+    <div className="space-y-8">
+      {PIPELINE.map((step) => {
+        const list = byStage(step.key);
+        return (
+          <section key={step.key} className="space-y-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+              <h2 className={SECTION}>
+                {step.title} ({list.length})
+              </h2>
+              <p className="text-xs text-muted-foreground">{step.note}</p>
+            </div>
+            {list.length === 0 ? null : (
+              <ul className="divide-y border-y">
+                {list.map((r) => (
+                  <PipelineRow key={r.investor.id} row={r} />
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+          <h2 className={SECTION}>Onboarded ({onboarded.length})</h2>
+          <p className="text-xs text-muted-foreground">
+            Approved by LUCA, each with a unique reference.
+          </p>
+        </div>
+        {onboarded.length === 0 ? (
+          <p className="border-y py-3 text-sm text-muted-foreground">Nobody is onboarded yet.</p>
+        ) : (
+          <div>
+            <div className="hidden grid-cols-[7rem_minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)_7rem_minmax(0,1fr)] gap-x-4 border-b pb-2 text-xs text-muted-foreground lg:grid">
+              <span>Reference</span>
+              <span>Client</span>
+              <span>Source</span>
+              <span>RM</span>
+              <span>Approved</span>
+              <span>By</span>
+            </div>
+            <ul className="divide-y border-b">
+              {onboarded.map(({ investor, rm }) => (
+                <li key={investor.id}>
+                  <Link
+                    to={`/luca/investors/${investor.id}`}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 py-2.5 text-sm hover:bg-muted/40 lg:grid-cols-[7rem_minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)_7rem_minmax(0,1fr)]"
+                  >
+                    <span className="order-2 font-mono text-xs lg:order-none lg:text-sm">
+                      {investor.reference ?? "—"}
+                    </span>
+                    <span className="min-w-0 truncate font-medium">
+                      {investor.full_name}
+                      <span className="font-normal text-muted-foreground"> · {kind(investor)}</span>
+                    </span>
+                    <span className="hidden truncate lg:block">{sourceOf(investor)}</span>
+                    <span className="hidden truncate text-muted-foreground lg:block">
+                      {rm ?? "—"}
+                    </span>
+                    <span className="hidden tabular-nums lg:block">
+                      {dateText(investor.approved_at)}
+                    </span>
+                    <span className="hidden truncate text-muted-foreground lg:block">
+                      {investor.reviewed_by ?? "—"}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PipelineRow({ row }: { row: Row }) {
+  const { investor, stage, rm } = row;
+  const reminder = (
+    <Button
+      size="sm"
+      variant="outline"
+      nativeButton={false}
+      render={
+        <Link
+          to={`/luca/communications/new?audience=investor:${investor.id}&purpose=request&docs=`}
+        />
+      }
+    >
+      Send a reminder
+    </Button>
+  );
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
+      <span className="min-w-0">
+        <Link
+          to={`/luca/investors/${investor.id}`}
+          className="block truncate text-sm font-medium hover:underline"
+        >
+          {investor.full_name}
+        </Link>
+        <span className="block truncate text-xs text-muted-foreground">
+          {kind(investor)} · {sourceOf(investor)}
+          {rm ? ` · ${rm}` : ""}
+          {investor.reapplied_at ? " · reapplied" : ""}
+          {investor.prepared_by_rm ? ` · prepared by ${investor.prepared_by_rm}` : ""}
+        </span>
+        {(stage.key === "needs_info" || stage.key === "declined") && investor.decision_note && (
+          <span className="block truncate text-xs text-muted-foreground">
+            “{investor.decision_note}”
+          </span>
+        )}
+      </span>
+      <span className="flex items-center gap-4 text-sm">
+        <span className="text-muted-foreground tabular-nums">{ageDays(investor.created_at)}d</span>
+        {stage.key === "review" ? (
+          <Button
+            size="sm"
+            nativeButton={false}
+            render={<Link to={`/luca/clients/${investor.id}/review`} />}
+          >
+            Review application
+          </Button>
+        ) : stage.key === "declined" ? (
+          <Button
+            size="sm"
+            variant="outline"
+            nativeButton={false}
+            render={<Link to={`/luca/clients/${investor.id}/review`} />}
+          >
+            View decision
+          </Button>
+        ) : (
+          reminder
+        )}
+      </span>
+    </li>
   );
 }

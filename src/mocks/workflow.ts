@@ -1,6 +1,5 @@
 import { mayDiscover, hasInvestmentHistory } from "./investor-access";
 import * as db from "./db";
-import { clientCode } from "../lib/client-code";
 import type {
   WorkflowState,
   WorkflowCommand,
@@ -339,7 +338,11 @@ export function seedWorkflow() {
         })),
       });
   }
-  workflow.assignments = db.adminInvestors().map((i) => ({ investorId: i.id, staffId: 6 }));
+  // Each client is covered by the RM from their referral, else by a fixed split of the demo book.
+  workflow.assignments = db.adminInvestors().map((i) => ({
+    investorId: i.id,
+    staffId: db.defaultRmFor(db.findAdminInvestorSeed(i.id)!),
+  }));
   const sampleDemand = [
     [2, "Aster Compute", 75000],
     [11, "Aster Compute", 125000],
@@ -570,7 +573,7 @@ export function view(user: db.MockUser): WorkflowView {
       const investor = db.adminInvestors().find((i) => i.id === id);
       return {
         id,
-        code: clientCode(id),
+        code: db.referenceFor(id),
         name: investor?.full_name || db.findUserById(id)?.email || `Investor ${id}`,
         type: investor?.investor_type === "individual" ? "individual" : "entity",
         eamFirm: investor?.eam_firm ?? null,
@@ -1025,6 +1028,13 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       workflow.assignments.push({ investorId: c.id!, staffId: c.target! });
       for (const n of workflow.notes.filter((n) => n.investorId === c.id && !n.done))
         n.staffId = c.target!;
+      db.recordClientEvent(
+        c.id!,
+        "rm_assigned",
+        `Assigned to ${db.findUserById(c.target!)?.email ?? "an RM"}.`,
+        "LUCA Fund Manager",
+        ["luca", "rm"],
+      );
       break;
     }
     case "highlight": {

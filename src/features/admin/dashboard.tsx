@@ -1,3 +1,4 @@
+import { clientStage } from "./client-stage";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -351,15 +352,17 @@ export default function AdminDashboard() {
         amount: parseFloat(s.amount),
         to: "/luca/subscriptions?status=information_requested",
       })),
-    ...(investorsData?.investors ?? []).map((i) => ({
-      key: `investor-${i.id}`,
-      title: i.full_name,
-      detail: `${i.investor_type === "institutional" ? "Entity" : "Individual"} · ${i.client_code}`,
-      needs: "Review investor onboarding",
-      priority: 1,
-      ageDays: daysSince(i.created_at),
-      to: `/luca/investors/${i.id}`,
-    })),
+    ...(investorsData?.investors ?? [])
+      .filter((i) => clientStage(i).waitingOn === "luca")
+      .map((i) => ({
+        key: `investor-${i.id}`,
+        title: i.full_name,
+        detail: `${i.investor_type === "institutional" ? "Entity" : "Individual"} · ${i.referral?.partner_firm ?? "Direct"}`,
+        needs: "Verify identity and accreditation",
+        priority: 1,
+        ageDays: daysSince(i.created_at),
+        to: `/luca/clients/${i.id}/review`,
+      })),
     ...(documentsData?.documents ?? [])
       .filter((d) => !DEAL_MATERIAL_KINDS.includes(d.kind))
       .map((d) => ({

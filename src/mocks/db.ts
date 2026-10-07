@@ -1,5 +1,11 @@
 import type { InvestorSegment, CommercialTerms } from "../lib/investor-access";
 import type { PreparedByRm, UploadedBy } from "../lib/rm-onboarding";
+import type {
+  ClientEvent,
+  ClientEventAudience,
+  ClientEventKind,
+  Referral,
+} from "../lib/client-onboarding";
 // ---------------------------------------------------------------------------
 // In-memory mock database for the MSW mock API layer.
 //
@@ -23,7 +29,6 @@ import type { PreparedByRm, UploadedBy } from "../lib/rm-onboarding";
 //                           incomplete. Exercises dual-profile routing.
 // ---------------------------------------------------------------------------
 
-import { clientCode } from "@/lib/client-code";
 import type {
   Fund,
   Asset,
@@ -211,6 +216,8 @@ export type MockInvestorProfile = {
   eam_name: string | null;
   /** Set when a LUCA RM created this account and supplied part of it. */
   prepared_by_rm?: PreparedByRm | null;
+  /** How this client came to LUCA: the referring RM and partner. */
+  referral?: Referral | null;
 };
 
 export const investorProfiles: MockInvestorProfile[] = [
@@ -3923,6 +3930,18 @@ export type AdminInvestorSeed = {
   eam_firm: string | null;
   /** LUCA's own private notes on this investor — never shown to the investor, EAM or RM. */
   internal_notes: string;
+  /** Issued when LUCA approves the client, never before and never reused. */
+  reference?: string | null;
+  approved_at?: string | null;
+  reviewed_by?: string | null;
+  /** The reason given with the latest decision, shown to the client. */
+  decision_note?: string | null;
+  /** LUCA has asked for more information and is waiting on the client. */
+  needs_info?: boolean;
+  reapplied_at?: string | null;
+  /** When the client registered; absent on seeded clients. */
+  registered_at?: string | null;
+  referral?: Referral | null;
 };
 
 function committedAmountFor(investorId: number): string {
@@ -4446,10 +4465,172 @@ const adminInvestorSeeds: AdminInvestorSeed[] = [
   },
 ];
 
+/** Keep a live client's LUCA record in step with what they have done in their own account. */
+export function syncSeedFromAccount(userId: number) {
+  const seed = findAdminInvestorSeed(userId);
+  const user = findUserById(userId);
+  const profile = findInvestorProfileByUserId(userId);
+  // Seeded demo clients keep their fixed records; only clients who registered here are followed.
+  if (!seed?.registered_at || !user || !profile) return;
+  const name = `${profile.first_name} ${profile.last_name}`.trim();
+  if (name) seed.full_name = name;
+  seed.country = profile.country || seed.country;
+  seed.nationality = profile.nationality ?? seed.nationality;
+  seed.onboarding_step = profile.onboarding_step;
+  seed.nda_status = user.nda_status;
+  if (!seed.onboarding_completed_at && investorOnboardingComplete(profile, user))
+    seed.onboarding_completed_at = new Date().toISOString();
+}
+
+/** The reference LUCA issued when it approved this client, or a placeholder until then. */
+export function referenceFor(investorId: number): string {
+  return findAdminInvestorSeed(investorId)?.reference ?? "Ref pending";
+}
+
+/** The next reference in the sequence: LC-000101, LC-000102 and so on, never reused. */
+export function nextReference(): string {
+  const highest = Math.max(
+    100,
+    ...adminInvestorSeeds.map((s) => Number(s.reference?.replace(/\D/g, "")) || 0),
+  );
+  return `LC-${String(highest + 1).padStart(6, "0")}`;
+}
+
+/** Referral links and codes. Each belongs to an RM or to a partner (MFO or EAM) and its covering RM. */
+export type ReferralCode = {
+  code: string;
+  owner: "rm" | "partner";
+  rm_id: number;
+  partner_firm: string | null;
+  label: string;
+};
+export const referralCodes: ReferralCode[] = [
+  {
+    code: "LUCA-RM1",
+    owner: "rm",
+    rm_id: 6,
+    partner_firm: null,
+    label: "LUCA relationship manager",
+  },
+  {
+    code: "LUCA-RM2",
+    owner: "rm",
+    rm_id: 8,
+    partner_firm: null,
+    label: "LUCA relationship manager",
+  },
+  {
+    code: "MERIDIAN",
+    owner: "partner",
+    rm_id: 6,
+    partner_firm: "Meridian Capital Advisors",
+    label: "Meridian Capital Advisors",
+  },
+  {
+    code: "NIMBUS",
+    owner: "partner",
+    rm_id: 6,
+    partner_firm: "Nimbus Wealth Partners",
+    label: "Nimbus Wealth Partners",
+  },
+  {
+    code: "STRAITS-FO",
+    owner: "partner",
+    rm_id: 8,
+    partner_firm: "Straits Family Office",
+    label: "Straits Family Office",
+  },
+  {
+    code: "ORCHARD",
+    owner: "partner",
+    rm_id: 8,
+    partner_firm: "Orchard Peak Advisory",
+    label: "Orchard Peak Advisory",
+  },
+];
+export function findReferralCode(code: string | null | undefined): ReferralCode | undefined {
+  const wanted = String(code ?? "")
+    .trim()
+    .toUpperCase();
+  return wanted ? referralCodes.find((r) => r.code === wanted) : undefined;
+}
+/** The RM who covers a client: the one from their referral, otherwise a fixed split of the book. */
+export function defaultRmFor(seed: AdminInvestorSeed): number {
+  if (seed.referral?.rm_id) return seed.referral.rm_id;
+  const partner = seed.eam_firm
+    ? referralCodes.find((r) => r.partner_firm === seed.eam_firm)
+    : undefined;
+  return partner ? partner.rm_id : seed.id % 2 === 0 ? 6 : 8;
+}
+
+/** Everything that happens to a client, with who may read each entry. */
+export const clientEvents: ClientEvent[] = [];
+let clientEventAutoId = 1;
+export function recordClientEvent(
+  investorId: number,
+  kind: ClientEventKind,
+  text: string,
+  actor: string,
+  audience: ClientEventAudience[] = ["luca", "rm", "partner", "investor"],
+  at: string = new Date().toISOString(),
+) {
+  clientEvents.push({
+    id: clientEventAutoId++,
+    investor_id: investorId,
+    at,
+    kind,
+    text,
+    actor,
+    audience,
+  });
+}
+
+/** A message to one investor's inbox, recorded with the rest of LUCA's communications. */
+export function sendInvestorMessage(
+  investorId: number,
+  subject: string,
+  body: string,
+  purpose = "onboarding",
+) {
+  const investor = adminInvestors().find((i) => i.id === investorId);
+  if (!investor) return;
+  const id = nextCommunicationId();
+  const now = new Date().toISOString();
+  communicationRecipients.push({
+    id: nextCommunicationRecipientId(),
+    communication_id: id,
+    investor_id: investor.id,
+    investor_name: investor.full_name,
+    investor_email: investor.email,
+    eam_firm: investor.eam_firm,
+    routed_via: "investor",
+    email_status: "pending_integration",
+    delivered_at: now,
+    opened_at: null,
+    downloaded_document_ids: [],
+  });
+  communications.unshift({
+    id,
+    subject,
+    purpose,
+    delivery_channels: ["email", "inbox"],
+    body,
+    audience_type: "individual",
+    audience_description: investor.full_name,
+    fund_id: null,
+    routing: "direct",
+    attachment_document_ids: [],
+    status: "sent",
+    scheduled_at: null,
+    sent_at: now,
+    created_at: now,
+  });
+}
+
 export function adminInvestors(): AdminInvestor[] {
   return adminInvestorSeeds.map((seed) => ({
     id: seed.id,
-    client_code: clientCode(seed.id),
+    client_code: referenceFor(seed.id),
     email: seed.email,
     full_name: seed.full_name,
     investor_type: seed.investor_type,
@@ -4467,7 +4648,17 @@ export function adminInvestors(): AdminInvestor[] {
     internal_notes: seed.internal_notes,
     committed_amount: committedAmountFor(seed.id),
     open_subscriptions: openSubscriptionsFor(seed.id),
-    created_at: seed.onboarding_completed_at ?? daysAgo((seed.onboarding_step ?? 0) * 5 + 10),
+    created_at:
+      seed.registered_at ??
+      seed.onboarding_completed_at ??
+      daysAgo((seed.onboarding_step ?? 0) * 5 + 10),
+    reference: seed.reference ?? null,
+    needs_info: Boolean(seed.needs_info),
+    referral: seed.referral ?? null,
+    approved_at: seed.approved_at ?? null,
+    reviewed_by: seed.reviewed_by ?? null,
+    decision_note: seed.decision_note ?? null,
+    reapplied_at: seed.reapplied_at ?? null,
     prepared_by_rm: findInvestorProfileByUserId(seed.id)?.prepared_by_rm?.rm_name ?? null,
     invite_pending: Boolean(findUserById(seed.id)?.invite_token),
   }));
@@ -4638,6 +4829,7 @@ export const partners: MockPartner[] = [
     client_count: 0,
     verified_client_count: 0,
     allocated_volume: "0",
+    allocated_fees: "0",
     accrued_revenue: "0",
     paid_revenue: "0",
     created_at: daysAgo(220),
@@ -4653,6 +4845,7 @@ export const partners: MockPartner[] = [
     client_count: 0,
     verified_client_count: 0,
     allocated_volume: "0",
+    allocated_fees: "0",
     accrued_revenue: "0",
     paid_revenue: "0",
     created_at: daysAgo(210),
@@ -4668,6 +4861,7 @@ export const partners: MockPartner[] = [
     client_count: 0,
     verified_client_count: 0,
     allocated_volume: "0",
+    allocated_fees: "0",
     accrued_revenue: "0",
     paid_revenue: "0",
     created_at: daysAgo(300),
@@ -4683,6 +4877,7 @@ export const partners: MockPartner[] = [
     client_count: 0,
     verified_client_count: 0,
     allocated_volume: "0",
+    allocated_fees: "0",
     accrued_revenue: "0",
     paid_revenue: "0",
     created_at: daysAgo(180),
@@ -4690,21 +4885,37 @@ export const partners: MockPartner[] = [
   },
 ];
 
+/** The subscription fee LUCA earns on one allocation: the frozen rate times the allocated principal. */
+export function subscriptionFeeOnAllocation(sub: MockSubscription): number {
+  const requested = parseFloat(sub.amount);
+  const principal = sub.allocated_principal ?? requested;
+  return requested > 0 ? (principal * parseFloat(sub.subscription_fee)) / requested : 0;
+}
+
 export function partnerSummary(partner: MockPartner): AdminPartner {
   const investorSeeds = partner.clientInvestorIds
     .map((id) => findAdminInvestorSeed(id))
     .filter((s): s is AdminInvestorSeed => Boolean(s));
   const verified = investorSeeds.filter((s) => s.verification_status === "approved").length;
-  const allocatedVolume = subscriptions
-    .filter((s) => partner.clientInvestorIds.includes(s.investor_id) && s.status === "allocated")
-    .reduce((sum, s) => sum + (s.allocated_principal ?? parseFloat(s.amount)), 0);
-  const accrued = allocatedVolume * (parseFloat(partner.eam_revenue_share_pct ?? "0") / 100) * 0.6;
-  const paid = allocatedVolume * (parseFloat(partner.eam_revenue_share_pct ?? "0") / 100) * 0.4;
+  const allocatedSubs = subscriptions.filter(
+    (s) => partner.clientInvestorIds.includes(s.investor_id) && s.status === "allocated",
+  );
+  const allocatedVolume = allocatedSubs.reduce(
+    (sum, s) => sum + (s.allocated_principal ?? parseFloat(s.amount)),
+    0,
+  );
+  // The partner's revenue share is a share of the subscription fees LUCA earns on its clients'
+  // allocations. Each fee is the rate frozen on the application times the allocated principal.
+  const allocatedFees = allocatedSubs.reduce((sum, s) => sum + subscriptionFeeOnAllocation(s), 0);
+  const share = allocatedFees * (parseFloat(partner.eam_revenue_share_pct ?? "0") / 100);
+  const accrued = share * 0.6;
+  const paid = share * 0.4;
   return {
     ...partner,
     client_count: partner.clientInvestorIds.length,
     verified_client_count: verified,
     allocated_volume: allocatedVolume.toFixed(2),
+    allocated_fees: allocatedFees.toFixed(2),
     accrued_revenue: accrued.toFixed(2),
     paid_revenue: paid.toFixed(2),
   };
@@ -5071,6 +5282,7 @@ const demoArrays = {
   communicationRecipients,
   investorPricing,
   documentRequests,
+  clientEvents,
 };
 export function exportDemoState() {
   return structuredClone({
@@ -5081,7 +5293,7 @@ export function exportDemoState() {
 }
 export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
   // Tables added after a demo was saved are optional; keep their seed data.
-  const OPTIONAL_TABLES = ["investorPricing", "documentRequests"];
+  const OPTIONAL_TABLES = ["investorPricing", "documentRequests", "clientEvents"];
   if (
     !saved ||
     !saved.arrays ||
@@ -5123,4 +5335,85 @@ export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
   discussionMessageAutoId = high;
   communicationAutoId = high;
   communicationRecipientAutoId = high;
+  clientEventAutoId = high;
+  backfillOnboardingRecords();
 }
+
+/**
+ * Give every client the records the new onboarding flow relies on: a reference for those already
+ * approved, their referral, and a first entry in their timeline. Safe to run again.
+ */
+export function backfillOnboardingRecords() {
+  const approved = adminInvestorSeeds
+    .filter((seed) => seed.verification_status === "approved" && !seed.reference)
+    .sort(
+      (a, b) =>
+        (a.onboarding_completed_at ?? "").localeCompare(b.onboarding_completed_at ?? "") ||
+        a.id - b.id,
+    );
+  for (const seed of approved) {
+    seed.reference = nextReference();
+    seed.approved_at ??= seed.reviewed_at ?? seed.onboarding_completed_at;
+    seed.reviewed_by ??= "LUCA Fund Manager";
+  }
+  for (const seed of adminInvestorSeeds) {
+    if (!seed.referral) {
+      const code = seed.eam_firm
+        ? referralCodes.find((r) => r.partner_firm === seed.eam_firm)
+        : undefined;
+      seed.referral = code
+        ? { code: code.code, via: "code", rm_id: code.rm_id, partner_firm: code.partner_firm }
+        : { code: null, via: "direct", rm_id: null, partner_firm: null };
+    }
+    if (clientEvents.some((e) => e.investor_id === seed.id)) continue;
+    const registered =
+      seed.registered_at ??
+      seed.onboarding_completed_at ??
+      daysAgo((seed.onboarding_step ?? 0) * 5 + 10);
+    recordClientEvent(
+      seed.id,
+      "registered",
+      "Registered with LUCA.",
+      seed.full_name,
+      undefined,
+      registered,
+    );
+    if (seed.referral.partner_firm)
+      recordClientEvent(
+        seed.id,
+        "referred",
+        `Referred by ${seed.referral.partner_firm}.`,
+        seed.referral.partner_firm,
+        undefined,
+        registered,
+      );
+    if (["in_review", "rejected", "approved"].includes(seed.verification_status))
+      recordClientEvent(
+        seed.id,
+        "submitted",
+        "Sent identity and documents to LUCA for review.",
+        seed.full_name,
+        undefined,
+        seed.reviewed_at ?? registered,
+      );
+    if (seed.verification_status === "rejected")
+      recordClientEvent(
+        seed.id,
+        "declined",
+        "Declined by LUCA.",
+        seed.reviewed_by ?? "LUCA Fund Manager",
+        undefined,
+        seed.reviewed_at ?? registered,
+      );
+    if (seed.reference && seed.approved_at)
+      recordClientEvent(
+        seed.id,
+        "approved",
+        `Approved by LUCA. Reference ${seed.reference} issued.`,
+        seed.reviewed_by ?? "LUCA Fund Manager",
+        undefined,
+        seed.approved_at,
+      );
+  }
+}
+backfillOnboardingRecords();

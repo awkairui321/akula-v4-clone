@@ -121,6 +121,8 @@ export const VERIFICATION_LABELS: Record<VerificationStatus, string> = {
   rejected: "Rejected",
 };
 
+import type { Referral } from "@/lib/client-onboarding";
+
 export type AdminInvestor = {
   id: number;
   client_code: string;
@@ -146,6 +148,16 @@ export type AdminInvestor = {
   /** Name of the LUCA RM who prepared this account, if it was RM-prepared. */
   prepared_by_rm?: string | null;
   invite_pending?: boolean;
+  /** Issued when LUCA approved the client. Null until then. */
+  reference: string | null;
+  needs_info: boolean;
+  referral: Referral | null;
+  approved_at: string | null;
+  reviewed_by: string | null;
+  decision_note: string | null;
+  reapplied_at: string | null;
+  /** The LUCA RM covering this client. */
+  rm_id?: number | null;
 };
 
 export type InvestorsResponse = {
@@ -271,6 +283,8 @@ export type AdminPartner = {
   client_count: number;
   verified_client_count: number;
   allocated_volume: string;
+  /** Subscription fees earned on this partner's allocated clients. */
+  allocated_fees: string;
   accrued_revenue: string;
   paid_revenue: string;
   created_at: string;

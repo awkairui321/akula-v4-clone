@@ -1,3 +1,4 @@
+import type { ReviewBundle } from "@/lib/client-onboarding";
 export type EamProfile = {
   id: number;
   firm_name: string;
@@ -91,6 +92,8 @@ export type ClientDetail = {
   holdings: ClientHolding[];
   subscriptions: ClientSubscription[];
   documents: ClientDocument[];
+  /** LUCA's onboarding record for this client, as their partner may read it. */
+  onboarding?: ReviewBundle | null;
 };
 
 export type ClientHolding = {

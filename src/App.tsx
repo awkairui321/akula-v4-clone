@@ -15,6 +15,7 @@ import LoginPage from "@/features/unauthenticated/login";
 import SignupPage from "@/features/unauthenticated/signup";
 import ActivatePage from "@/features/unauthenticated/activate";
 import RmOnboardingList from "@/features/rm/onboarding-list";
+import RmClientStatusPage from "@/features/rm/client-status";
 import ClientOnboardingPage, { NewClientPage } from "@/features/rm/client-onboarding";
 import OnboardingPage from "@/features/investor/onboarding/onboarding";
 import ConfirmPage from "@/features/unauthenticated/confirm";
@@ -41,6 +42,7 @@ import CommunicationsPage from "@/features/admin/communications";
 import ComposeCommunicationPage from "@/features/admin/communications/compose";
 import CommunicationDetailPage from "@/features/admin/communications/detail";
 import ClientsPage from "@/features/admin/clients";
+import ClientReviewPage from "@/features/admin/client-review";
 import AnalyticsPage from "@/features/admin/analytics";
 import AdminInvestorDetailPage from "@/features/admin/investors/investor-detail";
 
@@ -247,6 +249,7 @@ function App() {
                         <Route path="/luca/partners" element={<PartnerBookPage />} />
                         <Route path="/luca/partners/:firm" element={<PartnerPage />} />
                         <Route path="/luca/clients" element={<ClientsPage />} />
+                        <Route path="/luca/clients/:id/review" element={<ClientReviewPage />} />
                         <Route path="/luca/analytics" element={<AnalyticsPage />} />
                         <Route
                           path="/luca/opportunities"
@@ -297,6 +300,7 @@ function App() {
                       <Route path="/rm/onboarding" element={<RmOnboardingList />} />
                       <Route path="/rm/onboarding/new" element={<NewClientPage />} />
                       <Route path="/rm/onboarding/:id" element={<ClientOnboardingPage />} />
+                      <Route path="/rm/clients/:id/status" element={<RmClientStatusPage />} />
                       <Route
                         path="/rm/opportunities"
                         element={<WorkflowPage surface="Opportunities" compact />}

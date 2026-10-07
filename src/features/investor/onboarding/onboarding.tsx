@@ -1,3 +1,4 @@
+import { ReviewStatusBanner } from "../review-status";
 import { useState, useEffect, useRef } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -66,6 +67,11 @@ type InvestorProfile = {
   accreditation_basis: string[] | null;
   eligibility_confirmed_at: string | null;
   prepared_by_rm?: PreparedByRm | null;
+  referral?: {
+    via: "link" | "code" | "rm_invite" | "direct";
+    rm_id: number | null;
+    partner_firm: string | null;
+  } | null;
 };
 
 type SectionStatus = "locked" | "not_started" | "in_progress" | "waiting" | "complete";
@@ -316,20 +322,27 @@ function ChannelSection({
   const [referralCode, setReferralCode] = useState(profile?.referral_code ?? "");
   const mutation = useProfileMutation(onComplete, profile ? "PATCH" : "POST");
 
-  if (profile?.prepared_by_rm) {
+  const referred = profile?.referral && profile.referral.via !== "direct" ? profile.referral : null;
+  if (profile && (profile.prepared_by_rm || referred)) {
     return (
       <>
         <div className="mb-6">
           <h2 className="text-2xl font-bold">How you are investing</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            This was set when {profile.prepared_by_rm.rm_name} referred you to Akula.
+            {profile.prepared_by_rm
+              ? `This was set when ${profile.prepared_by_rm.rm_name} referred you to Akula.`
+              : "This was set by the referral link you used to sign up."}
           </p>
         </div>
         <div className="rounded-lg border border-primary bg-primary/5 p-4">
           <p className="text-sm font-medium">Partner-referred investor</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Referred by {profile.prepared_by_rm.rm_name}. Expanded deal access, published fees and
-            priority allocation consideration; allocation is not guaranteed.
+            Referred by{" "}
+            {profile.prepared_by_rm?.rm_name ??
+              profile.referral?.partner_firm ??
+              "your LUCA relationship manager"}
+            . Expanded deal access, published fees and priority allocation consideration; allocation
+            is not guaranteed.
           </p>
         </div>
         <Button className="mt-6 w-full" onClick={() => onComplete(profile)}>
@@ -1366,7 +1379,8 @@ function KycSection({
         </div>
         <h2 className="text-xl font-semibold">Verification unsuccessful</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-          We were unable to verify your identity. Please contact support for assistance.
+          LUCA could not approve your application. The reason is shown at the top of this page, and
+          you can reapply once it is resolved.
         </p>
       </div>
     );
@@ -1638,6 +1652,7 @@ export default function OnboardingPage() {
             activeSection === "nda" && ndaStatus === "not_started" ? "max-w-4xl" : "max-w-xl"
           }`}
         >
+          <ReviewStatusBanner showWaiting />
           {profile?.prepared_by_rm && <PreparedNotice prepared={profile.prepared_by_rm} />}
           {activeSection === "channel" && (
             <ChannelSection

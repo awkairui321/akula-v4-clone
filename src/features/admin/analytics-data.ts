@@ -1,6 +1,6 @@
 import type { Fund } from "@/lib/types";
 import type { WorkflowView } from "@/lib/workflow-types";
-import type { AdminInvestor, AdminPartner, AdminSubscription } from "./types";
+import type { AdminPartner, AdminSubscription } from "./types";
 
 export type Period = "30d" | "90d" | "12m" | "all";
 export const PERIODS: { key: Period; label: string }[] = [
@@ -15,10 +15,9 @@ const PERIOD_DAYS: Record<Period, number | null> = { "30d": 30, "90d": 90, "12m"
 const INACTIVE = ["cancelled", "rejected", "not_allocated", "funds_returned"];
 
 export type AnalyticsInput = {
-  investors: AdminInvestor[];
   subscriptions: AdminSubscription[];
   funds: Fund[];
-  workflow: Pick<WorkflowView, "receipts" | "allocations">;
+  workflow: Pick<WorkflowView, "receipts" | "allocations" | "holdings">;
   partners: AdminPartner[];
 };
 
@@ -33,6 +32,22 @@ export type CapitalRow = {
   funded: number;
   allocated: number;
   funds: number;
+};
+
+export type FeeRow = {
+  fundId: number;
+  label: string;
+  schedule: { subscription: string; management: string; carry: string };
+  /** Capital LUCA has allocated in the fund (today). */
+  allocated: number;
+  /** Subscription fees on allocations made in the period. */
+  subscriptionFees: number;
+  /** The partners' share of those fees. */
+  revenueShare: number;
+  /** Yearly management fee on the capital held today. */
+  managementRunRate: number;
+  /** Carry on unrealised gains, which LUCA receives only on exit. */
+  unrealisedCarry: number;
 };
 
 const median = (values: number[]) => {
@@ -93,49 +108,6 @@ export function buildAnalytics(input: AnalyticsInput, period: Period, now = Date
   const totals = capitalOf(active);
   const target = capital.reduce((n, r) => n + (r.target ?? 0), 0);
 
-  /* ── New commitments by month ── */
-  const months = new Map<string, number>();
-  for (const s of active.filter((s) => inPeriod(s.created_at))) {
-    const key = s.created_at.slice(0, 7);
-    months.set(key, (months.get(key) ?? 0) + Number(s.amount));
-  }
-  const series = [...months.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, amount]) => ({ month, amount }));
-
-  /* ── Investor funnel: how far this period's new investors have got ── */
-  const cohort = input.investors.filter((i) => span === null || inPeriod(i.created_at));
-  const investedIds = new Set(active.map((s) => s.investor_id));
-  const funnel = [
-    { key: "registered", label: "Registered", count: cohort.length },
-    {
-      key: "details",
-      label: "Details completed",
-      count: cohort.filter((i) => (i.onboarding_step ?? 0) >= 4 || i.onboarding_completed_at)
-        .length,
-    },
-    {
-      key: "identity",
-      label: "Identity verified",
-      count: cohort.filter((i) => i.identity_status === "verified").length,
-    },
-    {
-      key: "nda",
-      label: "NDA signed",
-      count: cohort.filter((i) => i.nda_status === "signed").length,
-    },
-    {
-      key: "approved",
-      label: "Approved by LUCA",
-      count: cohort.filter((i) => i.verification_status === "approved").length,
-    },
-    {
-      key: "invested",
-      label: "Invested",
-      count: cohort.filter((i) => investedIds.has(i.id)).length,
-    },
-  ];
-
   /* ── Where the capital comes from (current commitments) ── */
   const bySource = new Map<string, { committed: number; clients: Set<number> }>();
   for (const s of active) {
@@ -170,28 +142,60 @@ export function buildAnalytics(input: AnalyticsInput, period: Period, now = Date
     step("Verification and allocation", (s) => days(s.funds_received_at, s.allocated_at)),
   ];
   const endToEnd = step("Start to allocation", (s) => days(s.created_at, s.allocated_at));
-  const oldestOpen = active
-    .filter((s) => !s.allocated_at && !s.holding_id)
-    .map((s) => ({ s, age: Math.floor((now - new Date(s.created_at).getTime()) / DAY) }))
-    .sort((a, b) => b.age - a.age)
-    .slice(0, 5);
 
-  /* ── Fees ── */
-  const fees = input.workflow.allocations
-    .filter((a) => !a.voided && inPeriod(a.at))
-    .reduce((n, a) => n + a.fee, 0);
-  const owedToPartners = input.partners.reduce((n, p) => n + Number(p.accrued_revenue), 0);
+  /* ── Fees: what each fund charges, and what LUCA receives ── */
+  const subById = new Map(input.subscriptions.map((s) => [s.id, s]));
+  const shareOf = (subscriptionId: number) => {
+    const firm = subById.get(subscriptionId)?.eam_firm;
+    const partner = firm ? input.partners.find((p) => p.firm_name === firm) : undefined;
+    return partner ? Number(partner.eam_revenue_share_pct ?? 0) / 100 : 0;
+  };
+  const allocations = input.workflow.allocations.filter((a) => !a.voided);
+  const feeRows: FeeRow[] = input.funds
+    .map((fund) => {
+      const own = allocations.filter((a) => subById.get(a.subscriptionId)?.fund_id === fund.id);
+      const recent = own.filter((a) => inPeriod(a.at));
+      const allocated = own.reduce((n, a) => n + a.principal, 0);
+      const gain = input.workflow.holdings
+        .filter((h) => h.fund_id === fund.id)
+        .reduce((n, h) => n + Math.max(0, Number(h.current_nav) - Number(h.committed_amount)), 0);
+      const subscriptionFees = recent.reduce((n, a) => n + a.fee, 0);
+      return {
+        fundId: fund.id,
+        label: fund.name,
+        schedule: {
+          subscription: fund.subscription_fee_pct,
+          management: fund.management_fee_pct,
+          carry: fund.carried_interest_pct,
+        },
+        allocated,
+        subscriptionFees,
+        revenueShare: recent.reduce((n, a) => n + a.fee * shareOf(a.subscriptionId), 0),
+        // Management fee is a yearly percentage of the capital held; carry is a share of gains.
+        managementRunRate: (allocated * Number(fund.management_fee_pct)) / 100,
+        unrealisedCarry: (gain * Number(fund.carried_interest_pct)) / 100,
+      };
+    })
+    .filter((row) => row.allocated > 0 || row.subscriptionFees > 0)
+    .sort((a, b) => b.subscriptionFees - a.subscriptionFees);
+  const feeTotal = (key: keyof Omit<FeeRow, "fundId" | "label" | "schedule">) =>
+    feeRows.reduce((n, row) => n + row[key], 0);
+  const fees = {
+    rows: feeRows,
+    subscriptionFees: feeTotal("subscriptionFees"),
+    revenueShare: feeTotal("revenueShare"),
+    net: feeTotal("subscriptionFees") - feeTotal("revenueShare"),
+    managementRunRate: feeTotal("managementRunRate"),
+    unrealisedCarry: feeTotal("unrealisedCarry"),
+  };
 
   return {
     capital,
     totals: { ...totals, target },
-    series,
-    funnel,
     sources,
     concentration: { top1: share(1), top5: share(5), top10: share(10), investors: ranked.length },
     speed,
     endToEnd,
-    oldestOpen,
-    fees: { earned: fees, owedToPartners },
+    fees,
   };
 }
