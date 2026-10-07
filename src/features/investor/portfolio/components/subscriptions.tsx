@@ -961,7 +961,7 @@ export default function Subscriptions() {
             held.length ? "grid items-start gap-0 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : ""
           }
         >
-          <section className="min-w-0 space-y-3">
+          <section className="min-w-0 space-y-3 lg:pr-8">
             <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Issued holdings
             </div>
