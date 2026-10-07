@@ -163,24 +163,6 @@ export default function AdminInvestorDetailPage() {
         </div>
 
         <div className="space-y-4">
-          <nav
-            aria-label="Client sections"
-            className="flex flex-wrap gap-x-6 gap-y-2 border-b pb-4 text-sm text-muted-foreground"
-          >
-            {[
-              ["holdings", "Holdings"],
-              ["subscriptions", "Subscriptions"],
-              ["evidence", "Evidence"],
-              ["timeline", "Timeline"],
-              ["history", "Transactions"],
-              ["notes", "Notes"],
-            ].map(([id, label]) => (
-              <a key={id} href={"#" + id} className="hover:text-foreground">
-                {label}
-              </a>
-            ))}
-          </nav>
-
           <section id="holdings" className="scroll-mt-8">
             <Card>
               <CardHeader>
