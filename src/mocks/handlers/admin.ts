@@ -46,7 +46,7 @@ import {
   type CommunicationRouting,
   type CommunicationStatus,
 } from "../db";
-import { STATUS_LABELS } from "@/lib/types";
+import { STATUS_LABELS, DEAL_DOCUMENT_KINDS } from "@/lib/types";
 import type { SubscriptionStatus, Fund } from "@/lib/types";
 
 function unauthorized() {
@@ -544,6 +544,14 @@ export const adminHandlers = [
     const fund = findFundById(fund_id);
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
 
+    if (
+      !DEAL_DOCUMENT_KINDS.some((k) => k.value === kind) ||
+      (file_data_url && !validUploadedFile({ name, file_data_url }))
+    )
+      return HttpResponse.json(
+        { error: "Choose a valid deal document and PDF, PNG or JPEG file up to 2 MB." },
+        { status: 422 },
+      );
     const doc: (typeof documents)[number] = {
       id: nextDocumentId(),
       name: name.trim(),
@@ -565,6 +573,7 @@ export const adminHandlers = [
       fundId: fund.id,
     });
 
+    persist();
     return HttpResponse.json({ document: doc });
   }),
 

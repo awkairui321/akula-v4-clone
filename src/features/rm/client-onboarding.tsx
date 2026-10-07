@@ -1,5 +1,7 @@
+import FileDropzone from "@/components/file-dropzone";
+import { readUpload } from "@/lib/file-upload";
 import { useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeftIcon, CheckCircle2Icon, CircleIcon, CopyIcon, Trash2Icon } from "lucide-react";
@@ -211,7 +213,10 @@ export function NewClientPage() {
 
   const create = useMutation({
     mutationFn: () =>
-      api<{ client: PreparedClient }>("/api/v1/rm/clients", { method: "POST", body: values }),
+      api<{ client: PreparedClient }>("/api/v1/rm/clients", {
+        method: "POST",
+        body: { ...values, defer_invite: true },
+      }),
     onSuccess: ({ client }) => {
       queryClient.invalidateQueries({ queryKey: ["rm"] });
       navigate(`/rm/onboarding/${client.id}?created=1`, { replace: true });
@@ -228,9 +233,9 @@ export function NewClientPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">New client account</h1>
           <p className="mt-1 text-muted-foreground">
-            Enter what you already know. The client receives an invitation, sets their own password
-            and reviews these details before anything is treated as confirmed. The account is tagged
-            to you as the referring RM, so the client is a partner-referred investor.
+            Enter the client details, then upload their documents. Generate a unique invitation link
+            when the files are ready. The client reviews the documents, confirms they belong to
+            them, signs the NDA and submits for LUCA approval.
           </p>
         </div>
       </div>
@@ -262,7 +267,7 @@ export function NewClientPage() {
 
         <div className="flex gap-3">
           <Button type="submit" disabled={!valid || create.isPending}>
-            {create.isPending ? "Creating..." : "Create account and invite"}
+            {create.isPending ? "Creating..." : "Prepare client account"}
           </Button>
           <Button type="button" variant="ghost" onClick={() => navigate("/rm/onboarding")}>
             Cancel
@@ -275,25 +280,14 @@ export function NewClientPage() {
 
 /* ─── One client ─── */
 
-function readFile(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Unable to read this file."));
-    reader.readAsDataURL(file);
-  });
-}
-
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 export default function ClientOnboardingPage() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Details | null>(null);
   const [kind, setKind] = useState<string>("passport");
-  const [file, setFile] = useState<File | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["rm", "onboarding", id],
@@ -321,16 +315,15 @@ export default function ClientOnboardingPage() {
   });
 
   const upload = useMutation({
-    mutationFn: async () => {
-      if (!file || file.size > 2 * 1024 * 1024) throw new Error("Choose a file up to 2 MB.");
+    mutationFn: async (file: File) => {
+      const uploaded = await readUpload(file);
       return api<ClientPreparation>(`/api/v1/rm/clients/${id}/documents`, {
         method: "POST",
-        body: { name: file.name, kind, file_data_url: await readFile(file) },
+        body: { name: uploaded.name, kind, file_data_url: uploaded.file_data_url },
       });
     },
     onSuccess: (next) => {
       refresh(next);
-      setFile(null);
       toast.success("Document added. The client will be asked to confirm it.");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -376,7 +369,6 @@ export default function ClientOnboardingPage() {
   const values = draft ?? saved;
   const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
   const inviteUrl = invite_path ? `${window.location.origin}${invite_path}` : null;
-  const justCreated = searchParams.get("created") === "1";
 
   return (
     <div className="flex w-full flex-col gap-8">
@@ -392,42 +384,6 @@ export default function ClientOnboardingPage() {
           <StageLabel stage={client.stage} />
         </div>
       </div>
-
-      {inviteUrl && (
-        <section className="space-y-3 border-y py-5">
-          <div>
-            <h2 className="font-semibold">
-              {justCreated ? "Account created. Send the invitation" : "Invitation not yet opened"}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              The client opens this link, sets their own password and reviews what you entered.
-              Email delivery is not connected in this demo, so share the link directly.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input readOnly value={inviteUrl} className="max-w-xl font-mono text-xs" />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard?.writeText(inviteUrl);
-                toast.success("Invitation link copied.");
-              }}
-            >
-              <CopyIcon className="mr-1.5 size-4" />
-              Copy link
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={resend.isPending}
-              onClick={() => resend.mutate()}
-            >
-              Issue new link
-            </Button>
-          </div>
-        </section>
-      )}
 
       <div className="grid gap-10 lg:grid-cols-[1fr_300px]">
         <div className="space-y-10">
@@ -524,23 +480,65 @@ export default function ClientOnboardingPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <input
-                aria-label="Document file"
-                type="file"
-                accept="application/pdf,image/png,image/jpeg"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:bg-transparent file:px-2 file:py-1 file:text-xs file:font-medium"
-              />
-              <Button
-                size="sm"
-                disabled={!file || upload.isPending}
-                onClick={() => upload.mutate()}
-              >
-                {upload.isPending ? "Uploading..." : "Add document"}
-              </Button>
             </div>
+            <FileDropzone
+              label="Upload client document"
+              disabled={upload.isPending}
+              onFiles={async (files) => {
+                await upload.mutateAsync(files[0]);
+              }}
+            />
             <p className="text-xs text-muted-foreground">PDF, PNG or JPEG up to 2 MB.</p>
           </section>
+          {inviteUrl && (
+            <section className="space-y-3 border-y py-5">
+              <div>
+                <h2 className="font-semibold">Share the client invitation</h2>
+                <p className="text-sm text-muted-foreground">
+                  The client opens this link, sets their own password and reviews what you entered.
+                  Email delivery is not connected in this demo, so share the link directly.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input readOnly value={inviteUrl} className="max-w-xl font-mono text-xs" />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(inviteUrl);
+                    toast.success("Invitation link copied.");
+                  }}
+                >
+                  <CopyIcon className="mr-1.5 size-4" />
+                  Copy link
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={resend.isPending}
+                  onClick={() => resend.mutate()}
+                >
+                  Issue new link
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {client.stage === "preparing" && (
+            <section className="space-y-3 rounded-lg border p-5">
+              <h2 className="font-semibold">Generate the client invitation</h2>
+              <p className="text-sm text-muted-foreground">
+                Upload the documents first. The client opens their unique link, confirms ownership,
+                signs the NDA and completes their declarations before LUCA reviews the account.
+              </p>
+              <Button
+                disabled={!documents.length || resend.isPending || dirty}
+                onClick={() => resend.mutate()}
+              >
+                Generate invitation link
+              </Button>
+            </section>
+          )}
         </div>
 
         <aside className="space-y-6">

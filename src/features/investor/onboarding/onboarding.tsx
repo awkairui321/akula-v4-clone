@@ -1168,6 +1168,7 @@ function VerificationDocuments() {
         documents: {
           id: number;
           document_type: string;
+          file_data_url?: string | null;
           notes: string | null;
           status: string;
           uploaded_by?: UploadedBy;
@@ -1236,6 +1237,15 @@ function VerificationDocuments() {
           <li key={doc.id} className="flex items-center justify-between gap-2 py-0.5">
             <span>
               {doc.notes || doc.document_type} - {doc.status}
+              {doc.file_data_url && (
+                <a
+                  href={doc.file_data_url}
+                  download={doc.notes ?? "Document"}
+                  className="ml-2 underline"
+                >
+                  Review file
+                </a>
+              )}
               {doc.uploaded_by?.role === "rm" && (
                 <span className="text-muted-foreground"> · provided by {doc.uploaded_by.name}</span>
               )}
@@ -1250,7 +1260,7 @@ function VerificationDocuments() {
                   disabled={confirm.isPending}
                   onClick={() => confirm.mutate(doc.id)}
                 >
-                  Confirm
+                  Confirm this document is mine
                 </Button>
               ))}
           </li>
@@ -1261,10 +1271,12 @@ function VerificationDocuments() {
 }
 
 function KycSection({
+  prepared = false,
   kycStatus,
   onComplete,
   onContinue,
 }: {
+  prepared?: boolean;
   kycStatus: string;
   onComplete: () => void;
   onContinue: () => void;
@@ -1363,9 +1375,16 @@ function KycSection({
         <h2 className="text-xl font-semibold">Verification in progress</h2>
         {isMocking && <VerificationDocuments />}
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-          LUCA reviews your submitted verification details. After approval, continue to sign the
-          NDA. This demo does not send verification emails.
+          {prepared
+            ? "Confirm your uploaded documents, then sign the NDA and grant consents while LUCA reviews your verification."
+            : "LUCA reviews your submitted verification details. After approval, continue to sign the NDA."}{" "}
+          This demo does not send verification emails.
         </p>
+        {prepared && (
+          <Button className="mt-6" onClick={onContinue}>
+            Continue to sign NDA
+          </Button>
+        )}
       </div>
     );
   }
@@ -1499,7 +1518,11 @@ function deriveSectionStatuses(
 
   // The NDA is only signed by a verified identity: it stays locked until Persona approves,
   // including while verification is pending or has failed.
-  let nda: SectionStatus = kyc === "complete" ? "not_started" : "locked";
+  let nda: SectionStatus =
+    kyc === "complete" ||
+    (profile?.prepared_by_rm && personalInfo === "complete" && kyc === "waiting")
+      ? "not_started"
+      : "locked";
   // The backend reports "pending" as soon as a document exists, i.e. while the investor is
   // still signing in the embed, so it is shown as in progress rather than awaiting confirmation.
   if (ndaStatus === "signed") nda = "complete";
@@ -1582,6 +1605,26 @@ export default function OnboardingPage() {
     navigate("/dashboard", { replace: true });
   }
 
+  if (
+    profile?.prepared_by_rm &&
+    ndaStatus === "signed" &&
+    consentsComplete &&
+    kycStatus === "pending"
+  )
+    return (
+      <div className="mx-auto max-w-2xl space-y-5 p-8">
+        <h1 className="text-2xl font-semibold">Pending LUCA approval</h1>
+        <p className="text-muted-foreground">
+          Your NDA and consents are complete. Confirm every document below belongs to you. LUCA will
+          review your identity, accreditation and client documents before approving your account.
+        </p>
+        <VerificationDocuments />
+        <Button variant="outline" onClick={() => refreshUser()}>
+          Check approval status
+        </Button>
+      </div>
+    );
+
   if (user?.onboarding_completed) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -1615,18 +1658,20 @@ export default function OnboardingPage() {
         </div>
         <Sidebar statuses={statuses} activeSection={activeSection} onSelect={goToSection} />
         <div className="mt-auto space-y-3 px-3">
-          <button
-            type="button"
-            onClick={async () => {
-              await api("/api/v1/onboarding/skip", { method: "POST" });
-              await refreshUser();
-              navigate("/dashboard", { replace: true });
-            }}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <FastForwardIcon className="size-3.5" />
-            Skip onboarding
-          </button>
+          {!profile?.prepared_by_rm && (
+            <button
+              type="button"
+              onClick={async () => {
+                await api("/api/v1/onboarding/skip", { method: "POST" });
+                await refreshUser();
+                navigate("/dashboard", { replace: true });
+              }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <FastForwardIcon className="size-3.5" />
+              Skip onboarding
+            </button>
+          )}
           <button
             type="button"
             onClick={async () => {
@@ -1683,6 +1728,7 @@ export default function OnboardingPage() {
           )}
           {activeSection === "kyc" && (
             <KycSection
+              prepared={Boolean(profile?.prepared_by_rm)}
               kycStatus={user?.kyc_status ?? "not_started"}
               onComplete={() => refreshUser()}
               onContinue={() => goToSection("nda")}

@@ -69,6 +69,7 @@ export type MockUser = {
   investor_segment?: InvestorSegment;
   /** RM-prepared accounts: the invitation is open until the investor sets a password. */
   invite_token?: string | null;
+  invitation_ready?: boolean;
   activated_at?: string | null;
   provisioned_by?: number;
   id: number;
@@ -4950,6 +4951,7 @@ export type CommunicationRouting = "direct" | "through_rm";
 export type CommunicationStatus = "draft" | "scheduled" | "sent";
 
 export type MockCommunication = {
+  created_by?: number;
   uploaded_attachments?: import("@/lib/file-upload").UploadedFile[];
   delivery_channels?: ("email" | "inbox")[];
   purpose?: string;
@@ -5231,6 +5233,15 @@ export type PublicUser = {
 };
 
 export function investorOnboardingComplete(profile: MockInvestorProfile, user: MockUser): boolean {
+  if (
+    profile.prepared_by_rm &&
+    (user.invite_token ||
+      !profile.prepared_by_rm.confirmed_at ||
+      (verificationDocumentsByInvestor[user.id] ?? []).some(
+        (d) => d.uploaded_by?.role === "rm" && !d.confirmed_at,
+      ))
+  )
+    return false;
   if (
     profile.skipped ||
     (profile.completed && user.nda_status === "signed" && user.kyc_status === "approved")

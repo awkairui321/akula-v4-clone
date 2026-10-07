@@ -1,3 +1,4 @@
+import { demoClientBook } from "@/lib/demo-client-book";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -16,9 +17,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const STAGE_ORDER: PreparationStage[] = ["invited", "reviewing", "verifying", "complete"];
+const STAGE_ORDER: PreparationStage[] = [
+  "preparing",
+  "invited",
+  "reviewing",
+  "verifying",
+  "pending_approval",
+  "complete",
+];
 
 const STAGE_TONE: Record<PreparationStage, string> = {
+  preparing: "text-muted-foreground",
+  pending_approval: "text-blue-700",
   invited: "text-amber-700",
   reviewing: "text-blue-700",
   verifying: "text-blue-700",
@@ -107,7 +117,7 @@ export default function RmOnboardingList() {
     queryFn: () => api<{ clients: AdminInvestor[] }>("/api/v1/rm/clients"),
   });
   const rank = { client: 0, luca: 1, none: 2 } as const;
-  const clients = (data?.clients ?? [])
+  const clients = demoClientBook(data?.clients ?? [])
     .map((c) => ({ client: c, stage: clientStage(c) }))
     .sort(
       (a, b) =>

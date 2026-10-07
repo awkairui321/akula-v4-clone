@@ -230,17 +230,25 @@ export default function ClientReviewPage() {
   const requestable = DOCUMENT_REQUEST_KINDS.filter(
     (k) => k.appliesTo === "both" || k.appliesTo === (entity ? "entity" : "individual"),
   );
-  const canApprove = identity === "verified" && accreditation === "accredited" && !closed;
+  const clientReady =
+    !data.prepared_by_rm ||
+    (data.checks.nda_signed &&
+      data.checks.consents_complete &&
+      data.checks.details_confirmed &&
+      data.checks.document_ownership_confirmed);
+  const canApprove =
+    identity === "verified" && accreditation === "accredited" && !closed && clientReady;
   const missing = [
     identity !== "verified" && "confirm identity",
     accreditation !== "accredited" && "confirm accredited status",
+    !clientReady && "await the client’s document ownership confirmation, NDA and consents",
   ].filter(Boolean);
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-8">
       <div className="space-y-4">
         <Link
-          to="/luca/clients?tab=onboarding"
+          to="/luca/compliance?tab=clients"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeftIcon className="size-4" />

@@ -1086,20 +1086,16 @@ test("Investment Team publishes only after Fund Manager approval and cannot acce
   assert.equal(w.currentVersion(1).id, version.id);
 });
 
-test("Fund Manager has RM recommendations and private follow-ups", () => {
+test("recommendations are retired while private follow-ups remain scoped", () => {
   w.command(manager(), { type: "note", id: 2, text: "Call about the offering", due: "2026-10-10" });
   assert.equal(w.view(manager()).notes.at(-1).text, "Call about the offering");
   assert.equal(w.view(investor()).notes.length, 0);
-  w.command(manager(), {
-    type: "highlight",
-    id: 2,
-    target: 1,
-    text: "Consider this published offering",
-  });
-  const recommendation = w.view(investor()).highlights.at(-1);
-  assert.equal(recommendation.staffId, manager().id);
-  w.command(investor(), { type: "open-highlight", id: recommendation.id });
-  assert.ok(w.view(manager()).highlights.find((h) => h.id === recommendation.id).openedAt);
+  for (const user of [manager(), rm(), investor()])
+    for (const type of ["highlight", "open-highlight"])
+      assert.throws(
+        () => w.command(user, { type, id: 2, target: 1, text: "Consider offering" }),
+        /retired/,
+      );
 });
 
 test("LUCA investor requests are email-only, while updates use email and inbox", async () => {
@@ -1242,7 +1238,7 @@ test("RM prepares an account that is assigned to them, invitation-only and audit
   assert.equal(created.role, "investor");
   assert.equal(created.password, "");
   assert.ok(created.invite_token);
-  assert.equal(client.stage, "invited");
+  assert.equal(client.stage, "preparing");
   assert.ok(w.clientsFor(rm()).includes(client.id));
   assert.ok(!w.clientsFor(db.users.find((u) => u.id === 8)).includes(client.id));
   assert.ok(db.adminInvestors().some((i) => i.id === client.id && i.prepared_by_rm));
@@ -1295,7 +1291,8 @@ test("RM-supplied documents are attributed, confirmed only by the investor and n
   assert.equal(row.confirmed_at, null);
   assert.equal(db.findAdminInvestorSeed(client.id).verification_status, "pending");
 
-  // Activate, then confirm as the investor.
+  // Issue the link after uploading, then activate and confirm as the investor.
+  await request(`rm/clients/${client.id}/invite`, rm(), "POST");
   const token = db.findUserById(client.id).invite_token;
   const activated = await request("public/activate", investor(), "POST", {
     token,
@@ -1340,6 +1337,7 @@ test("investor's own declarations stay with the investor; RM edits lock after co
 
   user.password = "a-long-password";
   user.invite_token = null;
+  user.invitation_ready = true;
   assert.equal(profile.prepared_by_rm.confirmed_at, null);
   await request("investor_profile", user, "PATCH", { investor_profile: { onboarding_step: 4 } });
   assert.ok(profile.prepared_by_rm.confirmed_at);
@@ -1598,4 +1596,98 @@ test("retired informal messaging rejects all roles without changing saved case h
     ).status,
     410,
   );
+});
+
+test("RM prepares files before issuing a unique client invitation", async () => {
+  const { client } = await (
+    await request("rm/clients", rm(), "POST", newClient({ defer_invite: true }))
+  ).json();
+  const user = db.findUserById(client.id);
+  assert.equal(client.stage, "preparing");
+  let detail = await (await request(`rm/clients/${client.id}/onboarding`, rm())).json();
+  assert.equal(detail.invite_path, null);
+  assert.equal(
+    (await request("public/activation?token=" + user.invite_token, investor())).status,
+    404,
+  );
+  assert.equal((await request(`rm/clients/${client.id}/invite`, rm(), "POST")).status, 422);
+  await request(`rm/clients/${client.id}/documents`, rm(), "POST", {
+    name: "passport.pdf",
+    kind: "passport",
+    file_data_url: PDF,
+  });
+  detail = await (await request(`rm/clients/${client.id}/invite`, rm(), "POST")).json();
+  assert.ok(detail.invite_path);
+  assert.equal(detail.client.stage, "invited");
+  const first = user.invite_token;
+  await request(`rm/clients/${client.id}/invite`, rm(), "POST");
+  assert.notEqual(user.invite_token, first);
+  assert.equal((await request("public/activation?token=" + first, investor())).status, 404);
+  assert.equal(db.findAdminInvestorSeed(client.id).verification_status, "pending");
+  assert.equal(user.nda_status, "not_started");
+});
+test("RM messages preserve attachments and cannot reach another RM's client", async () => {
+  const mine = w.clientsFor(rm())[0];
+  const foreign = db.adminInvestors().find((c) => !w.clientsFor(rm()).includes(c.id));
+  const payload = {
+    investor_id: mine,
+    subject: "Client documents",
+    body: "Please review.",
+    uploaded_attachments: [{ name: "document.pdf", file_data_url: PDF }],
+  };
+  const response = await request("rm/communications", rm(), "POST", payload);
+  assert.equal(response.status, 201);
+  const { communication } = await response.json();
+  assert.equal(communication.uploaded_attachments[0].file_data_url, PDF);
+  assert.equal(
+    (await request("rm/communications", rm(), "POST", { ...payload, investor_id: foreign.id }))
+      .status,
+    403,
+  );
+  assert.equal((await request("rm/communications", investor(), "POST", payload)).status, 403);
+  const other = db.users.find((u) => u.id === 8);
+  const list = await (await request("rm/communications", other)).json();
+  assert.equal(list.communications.length, 0);
+  const messages = await (await request("messages", db.findUserById(mine))).json();
+  assert.ok(messages.messages.some((m) => m.subject === payload.subject));
+});
+
+test("RM-prepared approval waits for client ownership confirmations, NDA and consents", async () => {
+  const { client } = await (await request("rm/clients", rm(), "POST", newClient())).json();
+  const me = db.findUserById(client.id);
+  const profile = db.findInvestorProfileByUserId(client.id);
+  const payload = { decision: "approve", identity: "verified", accreditation: "accredited" };
+  assert.equal(
+    (await request(`admin/investors/${client.id}/review`, manager(), "POST", payload)).status,
+    422,
+  );
+  assert.equal((await request("onboarding/skip", me, "POST")).status, 422);
+  await request(`rm/clients/${client.id}/documents`, rm(), "POST", {
+    name: "passport.pdf",
+    kind: "passport",
+    file_data_url: PDF,
+  });
+  me.invite_token = null;
+  me.invitation_ready = true;
+  profile.prepared_by_rm.confirmed_at = new Date().toISOString();
+  profile.eligibility_confirmed_at = new Date().toISOString();
+  profile.onboarding_step = 4;
+  me.nda_status = "signed";
+  me.kyc_status = "pending";
+  for (const consent of db.consentsForUser(client.id)) db.grantConsent(client.id, consent.id);
+  assert.equal(
+    (await request(`admin/investors/${client.id}/review`, manager(), "POST", payload)).status,
+    422,
+  );
+  const doc = db.documents.find((d) => d.owner_id === client.id);
+  const visible = await (await request("onboarding/documents", me)).json();
+  assert.equal(visible.documents[0].file_data_url, PDF);
+  await request(`onboarding/documents/${doc.id}/confirm`, me, "POST");
+  const detail = await (await request(`rm/clients/${client.id}/onboarding`, rm())).json();
+  assert.equal(detail.client.stage, "pending_approval");
+  assert.equal(
+    (await request(`admin/investors/${client.id}/review`, manager(), "POST", payload)).status,
+    200,
+  );
+  assert.equal(db.findAdminInvestorSeed(client.id).verification_status, "approved");
 });

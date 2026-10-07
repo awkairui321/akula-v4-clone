@@ -13,9 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { api, apiAsDemo } from "@/lib/api";
 import type { WorkflowView, WorkflowCommand, Version } from "@/lib/workflow-types";
-import type { Fund } from "@/lib/types";
 import { SECTOR_LABELS } from "@/lib/types";
-import DealOverviewPage from "@/components/deal-overview-page";
 import { Button } from "@/components/ui/button";
 import DemoResetButton from "@/components/demo-reset-button";
 import { Input } from "@/components/ui/input";
@@ -646,9 +644,6 @@ function RMOverview({
       setPage(0);
     }
   }, [reviewSignal]);
-  const clientCount = d.clients.filter(
-    (client) => client.type === "individual" && client.name !== "Newly Registered",
-  ).length;
   const clientActions = new Set(
     d.subscriptions
       .filter((subscription) => RM_ACTION_STATUSES.includes(subscription.status))
@@ -676,18 +671,13 @@ function RMOverview({
 
   return (
     <>
-      <Panel title="Your client book">
+      <Panel title="Client follow-ups">
         <p>
           Use this workspace to support assigned individual investors. Client signatures and
           transfers belong to the client; LUCA and Akula Ops handle their own review and processing
           steps.
         </p>
         <div className="wf-stats wf-clickable-stats">
-          <button onClick={() => onNavigate("Relationships")}>
-            <span>Assigned individual clients</span>
-            <strong>{clientCount}</strong>
-            <small>Open relationships →</small>
-          </button>
           <button onClick={onFollowUps}>
             <span>Client follow-ups</span>
             <strong>{clientActions}</strong>
@@ -820,13 +810,13 @@ function RMOverview({
             <span>Review the open LUCA shelf before advising clients.</span>
           </button>
           <button onClick={() => onNavigate("Relationships")}>
-            <strong>Find a client →</strong>
-            <span>Search your assigned client book and manage follow-ups.</span>
+            <strong>Client follow-ups →</strong>
+            <span>Search client actions and record private follow-up notes.</span>
           </button>
-          <button onClick={() => onNavigate("Reports")}>
-            <strong>View client reports →</strong>
-            <span>Check reported holding values and their as-of dates.</span>
-          </button>
+          <Link to="/rm/communications">
+            <strong>Communicate with a client →</strong>
+            <span>Send a message and attach documents.</span>
+          </Link>
         </div>
       </Panel>
     </>
@@ -834,15 +824,8 @@ function RMOverview({
 }
 
 function RMOpportunities({ data: d }: { data: WorkflowView }) {
-  const demoPersonaId = useContext(DemoPersonaContext);
   const [search, setSearch] = useState("");
   const [sector, setSector] = useState("all");
-  const [selectedFund, setSelectedFund] = useState<number | null>(null);
-  const { data: deal, isLoading: loadingDeal } = useQuery({
-    queryKey: ["rmDeal", selectedFund],
-    queryFn: () => personaApi<{ fund: Fund }>(demoPersonaId, `/api/v1/funds/${selectedFund}`),
-    enabled: selectedFund !== null,
-  });
   const openFunds = d.funds.filter((fund) => fund.state === "open");
   const filteredFunds = openFunds.filter(
     (fund) =>
@@ -852,36 +835,10 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
         .includes(search.trim().toLowerCase()),
   );
 
-  if (selectedFund !== null)
-    return (
-      <div className="space-y-3">
-        <Button variant="outline" size="sm" onClick={() => setSelectedFund(null)}>
-          ← Back to opportunities
-        </Button>
-        {loadingDeal ? (
-          <p>Loading the published overview…</p>
-        ) : deal?.fund ? (
-          <DealOverviewPage
-            key={deal.fund.id}
-            fund={deal.fund}
-            viewer="rm"
-            backTo="/workflows"
-            backLabel="Back to opportunities"
-            preview
-          />
-        ) : (
-          <p>Published overview unavailable.</p>
-        )}
-      </div>
-    );
-
   return (
     <>
       <Panel title="Published opportunities">
-        <p>
-          Browse open LUCA offerings to support client conversations. A recommendation does not
-          reserve an allocation or replace LUCA approval.
-        </p>
+        <p>Open a deal to view its published overview, terms and documents.</p>
         <label className="wf-field wf-search">
           <span>Search the opportunity shelf</span>
           <Input
@@ -932,9 +889,16 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
                 </div>
                 <p className="wf-opportunity-descriptor">{fund.descriptor}</p>
                 <p>{fund.hook}</p>
-                <Button variant="outline" size="sm" onClick={() => setSelectedFund(fund.id)}>
-                  View full deal overview →
-                </Button>
+                <Link
+                  to={
+                    d.actor.role === "rm"
+                      ? `/rm/opportunities/${fund.id}`
+                      : `/luca/deals/${fund.id}`
+                  }
+                  className="inline-flex rounded-md border px-3 py-2 text-sm"
+                >
+                  View deal →
+                </Link>
                 <div className="wf-opportunity-meta">
                   <span>Minimum</span>
                   <strong>{money(fund.minimum)}</strong>
@@ -950,29 +914,6 @@ function RMOpportunities({ data: d }: { data: WorkflowView }) {
                       ))}
                     </ul>
                   </details>
-                )}
-                {d.clients.some((client) => client.type === "individual") ? (
-                  <details className="wf-recommend">
-                    <summary>Share with a client</summary>
-                    <Action
-                      label="Save client recommendation"
-                      command={{ type: "highlight", target: fund.id }}
-                    >
-                      <Choice
-                        label="Individual client"
-                        name="id"
-                        items={d.clients.filter(
-                          (client) =>
-                            client.type === "individual" && client.name !== "Newly Registered",
-                        )}
-                      />
-                      <Field label="Note for the client" name="text" />
-                    </Action>
-                  </details>
-                ) : (
-                  <p className="wf-empty">
-                    No assigned individual clients are available to recommend this to.
-                  </p>
                 )}
               </article>
             ))}
@@ -1237,6 +1178,7 @@ function WorkflowPageContent({
   const requestedSurface = onSurfaceChange ? surface : searchParams.get("surface") || surface;
   const routeSurface =
     requestedSurface === "Support" ||
+    (q.data?.actor.role === "rm" && ["Documents", "Reports"].includes(requestedSurface ?? "")) ||
     (q.data?.actor.role === "luca" && requestedSurface === "Relationships")
       ? "Overview"
       : requestedSurface;
@@ -1247,7 +1189,7 @@ function WorkflowPageContent({
   const [documentHistory, setDocumentHistory] = useState(false);
   const [opsArchive, setOpsArchive] = useState(false);
   const [relationshipSearch, setRelationshipSearch] = useState("");
-  const [relationshipView, setRelationshipView] = useState("clients");
+  const [relationshipView, setRelationshipView] = useState("tasks");
   const [reviewSignal, setReviewSignal] = useState(0);
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
   const demoPersonaId = useContext(DemoPersonaContext);
@@ -1340,7 +1282,7 @@ function WorkflowPageContent({
           "Reporting",
         ]
       : rm
-        ? ["Overview", "Reports", "Opportunities", "Documents", "Relationships", "Partners"]
+        ? ["Overview", "Opportunities", "Relationships", "Partners"]
         : ops
           ? ["Overview", "Investments", "Documents", "Publication", "Demand", "Reporting"]
           : [
@@ -1568,28 +1510,6 @@ function WorkflowPageContent({
                   ))}
                 </div>
               </Panel>
-              {d.highlights.length > 0 && (
-                <Panel title="LUCA RM highlights · full shelf remains available">
-                  {d.highlights.map((h) => {
-                    const v = d.versions.find((v) => v.id === h.versionId);
-                    return (
-                      <article className="wf-record" key={h.id}>
-                        <h3>
-                          {v?.snapshot.codename} · v{v?.number}
-                        </h3>
-                        <p>{h.note}</p>
-                        {h.investorId === d.actor.id && (
-                          <Action
-                            label={h.openedAt ? "Reviewed" : "Record opening"}
-                            command={{ type: "open-highlight", id: h.id }}
-                          />
-                        )}
-                        <Link to={`/funds/${v?.fundId}`}>Review opportunity →</Link>
-                      </article>
-                    );
-                  })}
-                </Panel>
-              )}
               <Panel title="Demo controls">
                 <p>
                   All screens use the same records in this browser. Exports contain fictional demo
@@ -2211,32 +2131,8 @@ function WorkflowPageContent({
         )}
         {tab === "Relationships" && rm && !manager && (
           <>
-            <Panel
-              title={relationshipView === "tasks" ? "My client task list" : "Assigned clients"}
-            >
-              <p>
-                {relationshipView === "tasks"
-                  ? "Client actions and private RM notes are collected here. Expand a client only when you need to record a follow-up or share an opportunity."
-                  : "Search assigned investors by name or tag. Expand one client to share an opportunity or record a private follow-up."}
-              </p>
-              {rm && (
-                <div className="wf-view-switch">
-                  <Button
-                    variant={relationshipView === "clients" ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setRelationshipView("clients")}
-                  >
-                    Client book
-                  </Button>
-                  <Button
-                    variant={relationshipView === "tasks" ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setRelationshipView("tasks")}
-                  >
-                    Client follow-ups
-                  </Button>
-                </div>
-              )}
+            <Panel title="Client follow-ups">
+              <p>Client actions and private follow-up notes. Expand a client to record a note.</p>
               {rm && relationshipView === "tasks" && (
                 <div className="wf-task-summary">
                   {visibleClients.map((client) => {
@@ -2319,17 +2215,6 @@ function WorkflowPageContent({
                   </p>
                   {rm && (
                     <>
-                      <Action
-                        label="Highlight approved opportunity"
-                        command={{ type: "highlight", id: c.id }}
-                      >
-                        <Choice
-                          name="target"
-                          label="Opportunity"
-                          items={d.funds.filter((f) => f.state === "open")}
-                        />
-                        <Field name="text" label="Client-facing note" />
-                      </Action>
                       <Action label="Save private follow-up" command={{ type: "note", id: c.id }}>
                         <Field name="text" label="Internal note (not visible to investor)" />
                         <Field name="due" label="Follow-up date" type="date" required={false} />

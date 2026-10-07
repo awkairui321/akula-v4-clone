@@ -1,3 +1,5 @@
+import RmCommunications from "@/features/rm/communications";
+import RmDeal from "@/features/rm/deal";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -35,6 +37,7 @@ import AdminVehiclesPage from "@/features/admin/vehicles/vehicles";
 import ProjectPage from "@/features/admin/vehicles/project";
 import AdminVehicleOverviewPage from "@/features/admin/vehicles/vehicle-overview";
 import AdminSubscriptionsPage from "@/features/admin/subscription-inbox";
+import AllocationPage from "@/features/admin/allocation";
 import AdminSubscriptionHistoryPage from "@/features/admin/subscription-history";
 import AdminCompliancePage from "@/features/admin/compliance";
 import CommunicationsPage from "@/features/admin/communications";
@@ -228,6 +231,10 @@ function App() {
                         <Route path="/luca" element={<AdminDashboard />} />
                         <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />
                         <Route
+                          path="/luca/subscriptions/:id/allocate"
+                          element={<AllocationPage />}
+                        />
+                        <Route
                           path="/luca/subscriptions/history"
                           element={<AdminSubscriptionHistoryPage />}
                         />
@@ -305,15 +312,17 @@ function App() {
                       />
                       <Route
                         path="/rm/documents"
-                        element={<WorkflowPage surface="Documents" compact />}
+                        element={<Navigate to="/rm/communications" replace />}
                       />
+                      <Route path="/rm/communications" element={<RmCommunications />} />
+                      <Route path="/rm/opportunities/:id" element={<RmDeal />} />
                       <Route path="/rm/partners" element={<PartnerBookPage />} />
                       <Route path="/rm/partners/:firm" element={<PartnerPage />} />
+                      <Route path="/rm/reports" element={<Navigate to="/rm" replace />} />
                       <Route
-                        path="/rm/reports"
-                        element={<WorkflowPage surface="Reports" compact />}
+                        path="/rm/support"
+                        element={<Navigate to="/rm/communications" replace />}
                       />
-                      <Route path="/rm/support" element={<Navigate to="/rm/documents" replace />} />
                     </Route>
                   </Route>
                 </Route>

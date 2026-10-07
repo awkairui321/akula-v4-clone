@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { SECTOR_LABELS } from "@/lib/types";
+import { SECTOR_LABELS, DEAL_DOCUMENT_KINDS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
 import type { AdminDocument, SubscriptionsResponse } from "../types";
 import { formatPrice, formatPricePrecise } from "@/lib/currency";
@@ -19,7 +19,7 @@ import DealReview from "./deal-review";
 import DealVersions from "./deal-versions";
 import { usePublication } from "./use-publication";
 import { useAuth } from "@/contexts/auth-context";
-import { StateBadge, allocationOf, daysUntil, formatClose } from "./deal-status";
+import { StateBadge, daysUntil, formatClose } from "./deal-status";
 
 const TABS = ["review", "overview", "subscriptions", "documents", "versions"] as const;
 type DealTab = (typeof TABS)[number];
@@ -93,11 +93,13 @@ function DealWorkspace({ fund }: { fund: Fund }) {
     (s) => s.fund_id === fund.id,
   ).length;
   const documentCount = (docsData?.documents ?? []).filter(
-    (d) => d.fund_id === fund.id && d.subscription_id === null,
+    (d) =>
+      d.fund_id === fund.id &&
+      d.subscription_id === null &&
+      DEAL_DOCUMENT_KINDS.some((kind) => kind.value === d.kind),
   ).length;
 
   const days = daysUntil(fund.closes_at);
-  const { allocated, total, pct } = allocationOf(fund);
 
   return (
     <div className="flex w-full flex-col gap-8">
@@ -134,77 +136,12 @@ function DealWorkspace({ fund }: { fund: Fund }) {
             <Button variant="outline" size="sm" onClick={() => setPreview("investor")}>
               Preview as investor
             </Button>
-            <Button size="sm" onClick={() => setEditorOpen(true)}>
-              Edit working overview
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-8 gap-y-5 border-y py-5 lg:grid-cols-[2fr_1fr_1fr_1fr_1.3fr_1.3fr]">
-          <div className="col-span-2 lg:col-span-1">
-            <p className="text-xs text-muted-foreground">Committed</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums">
-              {formatPrice(allocated)}
-              {total !== null && (
-                <span className="text-sm font-normal text-muted-foreground">
-                  {" "}
-                  of {formatPrice(total)}
-                </span>
-              )}
-            </p>
-            {pct !== null && (
-              <div className="mt-2 flex items-center gap-3">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-                </div>
-                <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
-              </div>
-            )}
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Closes</p>
-            <p className="mt-1 text-xl font-semibold">
-              {fund.closes_at && days !== null && days > 0
-                ? new Date(fund.closes_at).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "short",
-                  })
-                : formatClose(days)}
-            </p>
-            {days !== null && days > 0 && (
-              <p className="mt-1 text-xs text-muted-foreground">in {formatClose(days)}</p>
-            )}
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Price / unit</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums">
-              {formatPricePrecise(fund.price)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Minimum</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums">
-              {formatPrice(fund.min_subscription)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Fees</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums">
-              {fund.subscription_fee_pct}% · {fund.management_fee_pct}% ·{" "}
-              {fund.carried_interest_pct}%
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">Subscription · management · carry</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Readiness</p>
-            <p className="mt-1 text-sm">
-              {fund.asset.risks.length} risks · {documentCount} documents
-            </p>
+            <PublicationBar fund={fund} actionsOnly />
           </div>
         </div>
       </div>
 
-      <PublicationBar fund={fund} />
+      <PublicationBar fund={fund} onEdit={() => setEditorOpen(true)} />
 
       <Tabs
         value={visibleTab}
@@ -265,6 +202,51 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           <DealDocuments fund={fund} />
         </TabsContent>
       </Tabs>
+      <section aria-label="Investment terms">
+        <h2 className="text-lg font-semibold">Investment terms</h2>{" "}
+        <div className="grid grid-cols-2 gap-x-8 gap-y-5 border-y py-5 lg:grid-cols-5">
+          <div>
+            <p className="text-xs text-muted-foreground">Closes</p>
+            <p className="mt-1 text-xl font-semibold">
+              {fund.closes_at && days !== null && days > 0
+                ? new Date(fund.closes_at).toLocaleDateString("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                  })
+                : formatClose(days)}
+            </p>
+            {days !== null && days > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">in {formatClose(days)}</p>
+            )}
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Price / unit</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              {formatPricePrecise(fund.price)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Minimum</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              {formatPrice(fund.min_subscription)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Fees</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              {fund.subscription_fee_pct}% · {fund.management_fee_pct}% ·{" "}
+              {fund.carried_interest_pct}%
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Subscription · management · carry</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Readiness</p>
+            <p className="mt-1 text-sm">
+              {fund.asset.risks.length} risks · {documentCount} documents
+            </p>
+          </div>
+        </div>
+      </section>
 
       <Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
         <DialogContent className="max-h-[94vh] max-w-[96vw] overflow-y-auto p-4 sm:max-w-6xl">

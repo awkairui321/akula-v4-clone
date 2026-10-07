@@ -1,6 +1,8 @@
+import FileDropzone from "@/components/file-dropzone";
+import { readUpload } from "@/lib/file-upload";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileTextIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { FileTextIcon, Trash2Icon } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
 import { DEAL_DOCUMENT_KINDS } from "@/lib/types";
@@ -34,35 +36,28 @@ export default function DealDocuments({ fund }: { fund: Fund }) {
   });
   // Deal-level materials only: investor-specific paperwork lives under that investor.
   const documents = (data?.documents ?? []).filter(
-    (d) => d.fund_id === fund.id && d.subscription_id === null,
+    (d) =>
+      d.fund_id === fund.id &&
+      d.subscription_id === null &&
+      DEAL_DOCUMENT_KINDS.some((kind) => kind.value === d.kind),
   );
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "documents"] });
 
   const upload = useMutation({
-    mutationFn: (file: File) =>
-      new Promise<void>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("Could not read the file"));
-        reader.onload = async () => {
-          try {
-            await api("/api/v1/admin/documents", {
-              method: "POST",
-              body: {
-                document: {
-                  name: file.name,
-                  kind,
-                  fund_id: fund.id,
-                  file_data_url: reader.result as string,
-                },
-              },
-            });
-            resolve();
-          } catch (err) {
-            reject(err as Error);
-          }
-        };
-        reader.readAsDataURL(file);
-      }),
+    mutationFn: async (file: File) => {
+      const upload = await readUpload(file);
+      await api("/api/v1/admin/documents", {
+        method: "POST",
+        body: {
+          document: {
+            name: upload.name,
+            kind,
+            fund_id: fund.id,
+            file_data_url: upload.file_data_url,
+          },
+        },
+      });
+    },
     onSuccess: () => {
       setError(null);
       refresh();
@@ -108,31 +103,16 @@ export default function DealDocuments({ fund }: { fund: Fund }) {
               </SelectContent>
             </Select>
           </div>
-          <label htmlFor={`deal-doc-upload-${fund.id}`}>
-            <span
-              className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 ${
-                upload.isPending ? "pointer-events-none opacity-60" : ""
-              }`}
-            >
-              <PlusIcon className="size-4" />
-              {upload.isPending ? "Adding..." : "Add document"}
-            </span>
-            <input
-              id={`deal-doc-upload-${fund.id}`}
-              type="file"
-              accept="application/pdf"
-              className="sr-only"
-              disabled={upload.isPending}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) upload.mutate(file);
-                e.target.value = "";
-              }}
-            />
-          </label>
         </div>
       </div>
 
+      <FileDropzone
+        label="Upload deal document"
+        disabled={upload.isPending}
+        onFiles={async (files) => {
+          await upload.mutateAsync(files[0]);
+        }}
+      />
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {isLoading ? (

@@ -244,10 +244,14 @@ function DecisionDialog({
 const GRID =
   "lg:grid-cols-[1.25rem_minmax(0,2fr)_minmax(0,1.4fr)_6.5rem_minmax(0,1.8fr)_4rem_21rem]";
 
-type StageFilter = "all" | (typeof SUBSCRIPTION_STAGES)[number]["key"];
+type StageFilter = "ready_allocation" | "all" | (typeof SUBSCRIPTION_STAGES)[number]["key"];
 
 const stageLabel = (key: StageFilter) =>
-  key === "all" ? "All stages" : (SUBSCRIPTION_STAGES.find((st) => st.key === key)?.label ?? key);
+  key === "ready_allocation"
+    ? "Ready to allocate"
+    : key === "all"
+      ? "All stages"
+      : (SUBSCRIPTION_STAGES.find((st) => st.key === key)?.label ?? key);
 
 export default function AdminSubscriptionsPage() {
   const queryClient = useQueryClient();
@@ -285,9 +289,16 @@ export default function AdminSubscriptionsPage() {
 
   // Links from other pages (dashboard, deals, investors) arrive pre-filtered.
   const urlStage: StageFilter = (() => {
-    const fromStatus = statusFromUrl ? stageOfStatus(statusFromUrl)?.key : undefined;
+    const fromStatus =
+      statusFromUrl === "allocation_pending"
+        ? "ready_allocation"
+        : statusFromUrl
+          ? stageOfStatus(statusFromUrl)?.key
+          : undefined;
     const key = (stageFromUrl as StageFilter | null) ?? fromStatus;
-    return key && SUBSCRIPTION_STAGES.some((st) => st.key === key) ? key : "all";
+    return key && (key === "ready_allocation" || SUBSCRIPTION_STAGES.some((st) => st.key === key))
+      ? key
+      : "all";
   })();
   const filteredByUrl = Boolean(statusFromUrl || stageFromUrl || dealFromUrl || queryFromUrl);
 
@@ -328,15 +339,24 @@ export default function AdminSubscriptionsPage() {
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = { all: scoped.length };
     for (const st of SUBSCRIPTION_STAGES) {
-      counts[st.key] = scoped.filter((s) => stageOfStatus(s.status)?.key === st.key).length;
+      counts[st.key] = scoped.filter(
+        (s) => s.status !== "allocation_pending" && stageOfStatus(s.status)?.key === st.key,
+      ).length;
     }
+    counts.ready_allocation = scoped.filter((s) => s.status === "allocation_pending").length;
     return counts;
   }, [scoped]);
 
   const rows = useMemo(
     () =>
       scoped
-        .filter((s) => stage === "all" || stageOfStatus(s.status)?.key === stage)
+        .filter(
+          (s) =>
+            stage === "all" ||
+            (stage === "ready_allocation"
+              ? s.status === "allocation_pending"
+              : s.status !== "allocation_pending" && stageOfStatus(s.status)?.key === stage),
+        )
         .sort((a, b) => ageInDays(b) - ageInDays(a)),
     [scoped, stage],
   );
@@ -383,9 +403,16 @@ export default function AdminSubscriptionsPage() {
       <div
         role="tablist"
         aria-label="Subscription stage"
-        className="flex flex-wrap gap-x-6 border-b"
+        className="grid grid-cols-2 gap-2 lg:grid-cols-7"
       >
-        {(["all", ...SUBSCRIPTION_STAGES.map((st) => st.key)] as StageFilter[]).map((key) => (
+        {(
+          [
+            "all",
+            ...SUBSCRIPTION_STAGES.slice(0, -1).map((st) => st.key),
+            "ready_allocation",
+            SUBSCRIPTION_STAGES.at(-1)!.key,
+          ] as StageFilter[]
+        ).map((key) => (
           <button
             key={key}
             role="tab"
@@ -396,15 +423,24 @@ export default function AdminSubscriptionsPage() {
               setSelected([]);
               clearUrl();
             }}
-            className={`-mb-px flex items-center gap-2 border-b-2 px-1 pb-3 text-sm transition-colors ${
+            className={`flex flex-col items-start gap-2 rounded-lg border p-3 text-left text-sm transition-colors ${
               stage === key
-                ? "border-primary font-medium text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "border-primary bg-primary/5 font-medium text-foreground"
+                : "border-border text-muted-foreground hover:bg-muted/30"
             }`}
           >
             {key === "all" ? "All in progress" : stageLabel(key)}
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
               {stageCounts[key]}
+            </span>
+            <span className="text-[11px] font-normal text-muted-foreground">
+              {key === "all"
+                ? "Complete pipeline"
+                : key === "ready_allocation" || key === "approval"
+                  ? "Fund Manager"
+                  : key === "signature" || key === "transfer"
+                    ? "Client action"
+                    : "Akula Ops"}
             </span>
           </button>
         ))}
@@ -452,7 +488,7 @@ export default function AdminSubscriptionsPage() {
               clearUrl();
             }}
           />
-          Waiting on me
+          Needs my decision
           <span className="text-muted-foreground tabular-nums">{mineCount}</span>
         </label>
         <p className="ml-auto text-sm text-muted-foreground tabular-nums">
@@ -623,8 +659,12 @@ export default function AdminSubscriptionsPage() {
                       </Button>
                     )}
                     {s.status === "allocation_pending" && (
-                      <Button size="sm" nativeButton={false} render={<Link to="/workflows" />}>
-                        Allocate in Workflows
+                      <Button
+                        size="sm"
+                        nativeButton={false}
+                        render={<Link to={`/luca/subscriptions/${s.id}/allocate`} />}
+                      >
+                        Review allocation
                       </Button>
                     )}
                     {s.status === "payment_unmatched" && (

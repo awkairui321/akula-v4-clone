@@ -1,5 +1,12 @@
+import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { http, HttpResponse } from "msw";
 import {
+  communications,
+  communicationRecipients,
+  nextCommunicationId,
+  nextCommunicationRecipientId,
+  adminInvestors,
+  allRequiredConsentsGranted,
   referenceFor,
   currentUser,
   users,
@@ -68,9 +75,22 @@ function rmName(user: MockUser) {
 
 function stageOf(user: MockUser): PreparationStage {
   const profile = findInvestorProfileByUserId(user.id)!;
+  if (user.invitation_ready === false) return "preparing";
   if (user.invite_token) return "invited";
   if (!profile.prepared_by_rm?.confirmed_at) return "reviewing";
-  return investorOnboardingComplete(profile, user) ? "complete" : "verifying";
+  if (
+    user.nda_status === "signed" &&
+    profile.eligibility_confirmed_at &&
+    allRequiredConsentsGranted(user.id) &&
+    preparedDocuments(user.id).every((d) => d.confirmed_at) &&
+    user.kyc_status === "pending"
+  )
+    return "pending_approval";
+  return investorOnboardingComplete(profile, user)
+    ? findAdminInvestorSeed(user.id)?.verification_status === "approved"
+      ? "complete"
+      : "pending_approval"
+    : "verifying";
 }
 
 function fullName(user: MockUser) {
@@ -127,7 +147,10 @@ function detail(user: MockUser): ClientPreparation {
       typical_ticket_size: profile.typical_ticket_size,
     },
     documents: documentsList,
-    invite_path: user.invite_token ? `/activate?token=${user.invite_token}` : null,
+    invite_path:
+      user.invitation_ready !== false && user.invite_token
+        ? `/activate?token=${user.invite_token}`
+        : null,
     editable: !profile.prepared_by_rm?.confirmed_at,
     checklist: [
       { label: "Client details entered", done: Boolean(profile.first_name), owner: "rm" },
@@ -190,6 +213,83 @@ function validateProfile(values: Record<string, string>) {
 }
 
 export const rmHandlers = [
+  http.get("*/api/v1/rm/communications", ({ request }) => {
+    const user = actor(request);
+    if (!user) return fail("RM access required.", 403);
+    return HttpResponse.json({
+      communications: communications
+        .filter((c) => c.created_by === user.id)
+        .map((c) => ({
+          ...c,
+          recipient_count: 1,
+          delivered_count: 1,
+          opened_count: communicationRecipients.filter(
+            (r) => r.communication_id === c.id && r.opened_at,
+          ).length,
+        })),
+    });
+  }),
+  http.post("*/api/v1/rm/communications", async ({ request }) => {
+    const user = actor(request);
+    if (!user) return fail("RM access required.", 403);
+    const body = (await request.json()) as {
+      investor_id?: number;
+      subject?: string;
+      body?: string;
+      uploaded_attachments?: UploadedFile[];
+    };
+    const investorId = Number(body.investor_id);
+    if (!mayAct(user, investorId)) return fail("This client belongs to another RM.", 403);
+    const client = adminInvestors().find((c) => c.id === investorId);
+    if (!client) return fail("Client not found.", 404);
+    if (
+      typeof body.subject !== "string" ||
+      !body.subject.trim() ||
+      typeof body.body !== "string" ||
+      !body.body.trim()
+    )
+      return fail("Enter a subject and message.");
+    const files = body.uploaded_attachments ?? [];
+    if (!Array.isArray(files) || files.length > 5 || !files.every(validUploadedFile))
+      return fail("Attach up to five PDF, PNG or JPEG files up to 2 MB each.");
+    const at = new Date().toISOString();
+    const id = nextCommunicationId();
+    const communication = {
+      id,
+      created_by: user.id,
+      subject: body.subject.trim(),
+      body: body.body.trim(),
+      purpose: "client_update",
+      audience_type: "individual" as const,
+      audience_description: client.full_name,
+      fund_id: null,
+      routing: "direct" as const,
+      attachment_document_ids: [],
+      uploaded_attachments: files,
+      delivery_channels: ["email", "inbox"] as ("email" | "inbox")[],
+      status: "sent" as const,
+      scheduled_at: null,
+      sent_at: at,
+      created_at: at,
+    };
+    communications.unshift(communication);
+    communicationRecipients.push({
+      id: nextCommunicationRecipientId(),
+      communication_id: id,
+      investor_id: client.id,
+      investor_name: client.full_name,
+      investor_email: client.email,
+      eam_firm: client.eam_firm,
+      routed_via: "investor",
+      email_status: "pending_integration",
+      delivered_at: at,
+      opened_at: null,
+      downloaded_document_ids: [],
+    });
+    recordAudit(user.id, "RM sent a client communication.");
+    persist();
+    return HttpResponse.json({ communication }, { status: 201 });
+  }),
   // GET /api/v1/rm/onboarding — accounts this RM has prepared
   http.get("*/api/v1/rm/onboarding", ({ request }) => {
     const user = actor(request);
@@ -239,6 +339,7 @@ export const rmHandlers = [
       _kycPollCount: 0,
       _ndaPollCount: 0,
       invite_token: newToken(id),
+      invitation_ready: false,
       activated_at: null,
       provisioned_by: rm.id,
     });
@@ -297,7 +398,7 @@ export const rmHandlers = [
     });
     assignClientToRm(id, rm.id);
     recordClientEvent(id, "registered", `${rmName(rm)} created the account.`, rmName(rm));
-    recordClientEvent(id, "invited", "Invitation sent to the client.", rmName(rm));
+
     // A partner named by the RM is tagged too; the RM stays the covering RM.
     if (partnerCode) attachReferral(id, partnerCode.code, "rm_invite", rm.id);
     else recordClientEvent(id, "referred", `Referred by ${rmName(rm)}.`, rmName(rm));
@@ -307,7 +408,7 @@ export const rmHandlers = [
     );
     logEvent(
       "status_change",
-      `${rmName(rm)} prepared an account for ${values.first_name} ${values.last_name}; invitation sent.`,
+      `${rmName(rm)} prepared an account for ${values.first_name} ${values.last_name}; documents prepared before invitation.`,
       { investorId: id },
     );
     persist();
@@ -447,6 +548,9 @@ export const rmHandlers = [
     if ("error" in found) return found.error;
     const { user, client } = found;
     if (!client.invite_token) return fail("This investor has already activated their account.");
+    if (client.invitation_ready === false && preparedDocuments(client.id).length === 0)
+      return fail("Upload the client documents before generating their invitation.");
+    client.invitation_ready = true;
     client.invite_token = newToken(client.id);
     recordAudit(user.id, `${rmName(user)} re-sent the invitation to ${fullName(client)}.`);
     persist();
@@ -458,7 +562,7 @@ export const rmHandlers = [
     const token = new URL(request.url).searchParams.get("token");
     const client = token ? users.find((u) => u.invite_token === token) : undefined;
     const profile = client && findInvestorProfileByUserId(client.id);
-    if (!client || !profile?.prepared_by_rm)
+    if (!client || client.invitation_ready === false || !profile?.prepared_by_rm)
       return fail("This invitation is no longer valid.", 404);
     return HttpResponse.json({
       email: client.email,
@@ -475,7 +579,8 @@ export const rmHandlers = [
       password_confirmation?: string;
     };
     const client = body.token ? users.find((u) => u.invite_token === body.token) : undefined;
-    if (!client) return fail("This invitation is no longer valid.", 404);
+    if (!client || client.invitation_ready === false)
+      return fail("This invitation is no longer valid.", 404);
     if (!body.password || body.password.length < 8)
       return fail("Choose a password of at least 8 characters.");
     if (body.password !== body.password_confirmation) return fail("The passwords do not match.");
