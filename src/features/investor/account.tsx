@@ -4,12 +4,20 @@ import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
 import { clientCode } from "@/lib/client-code";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { ConsentList } from "@/features/investor/consent-section";
 import { UserIcon, CheckCircleIcon, ShieldIcon } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type VerificationDocument = {
+  id: number;
+  document_type: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+};
 
 type InvestorProfile = {
   id: number;
@@ -323,113 +331,170 @@ function TwoFactorSection() {
 /* ─── Main Page ─── */
 export default function AccountPage() {
   const { user } = useAuth();
-  const [section, setSection] = useState("profile");
 
   const { data, isLoading } = useQuery({
     queryKey: ["investorProfile"],
     queryFn: () => api<{ investor_profile: InvestorProfile | null }>("/api/v1/investor_profile"),
   });
+  const { data: documentsData } = useQuery({
+    queryKey: ["verificationDocuments"],
+    queryFn: () => api<{ documents: VerificationDocument[] }>("/api/v1/onboarding/documents"),
+  });
 
   const profile = data?.investor_profile;
+  const documents = documentsData?.documents ?? [];
 
   return (
-    <div className="w-full max-w-5xl space-y-6">
+    <div className="w-full space-y-8">
       <div>
         <div className="text-3xl font-bold tracking-tight">Account</div>
         <p className="text-muted-foreground">
           Manage your profile, consent and privacy, and security.
         </p>
       </div>
-      <Tabs value={section} onValueChange={(value) => value && setSection(value)}>
-        <TabsList>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="privacy">Consent &amp; privacy</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-        </TabsList>
-      </Tabs>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
 
       {!isLoading && profile && (
-        <>
-          {section === "profile" && (
-            <div className="max-w-2xl space-y-8">
-              <div className="flex items-center gap-4">
-                <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-                  <UserIcon className="size-6 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-lg font-semibold">{displayName(profile)}</p>
-                  <p className="text-sm text-muted-foreground">{user?.email}</p>
-                </div>
-                <div className="ml-auto">
-                  {user?.verified ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary">
-                      <CheckCircleIcon className="size-3" />
-                      Verified
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                      Pending
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <section>
-                <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Application
-                </div>
-                <dl className="mt-2 divide-y border-y text-sm">
-                  <div className="flex items-center justify-between py-3">
-                    <dt className="text-muted-foreground">Reference</dt>
-                    <dd className="font-mono font-medium">
-                      AK-{new Date().getFullYear()}-{String(profile.id).padStart(4, "0")}
-                    </dd>
-                  </div>
-                  {user && (
-                    <div className="flex items-center justify-between py-3">
-                      <dt className="text-muted-foreground">Client tag</dt>
-                      <dd className="font-mono font-medium">{clientCode(user.id)}</dd>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-3">
-                    <dt className="text-muted-foreground">Verification status</dt>
-                    <dd className="font-medium">{user?.verified ? "Verified" : "Pending"}</dd>
-                  </div>
-                  <div className="flex items-center justify-between py-3">
-                    <dt className="text-muted-foreground">Account type</dt>
-                    <dd className="font-medium">Individual</dd>
-                  </div>
-                  <div className="flex items-center justify-between py-3">
-                    <dt className="text-muted-foreground">Country</dt>
-                    <dd className="font-medium">{profile.country}</dd>
-                  </div>
-                  <div className="flex items-center justify-between py-3">
-                    <dt className="text-muted-foreground">Nationality</dt>
-                    <dd className="font-medium">{profile.nationality}</dd>
-                  </div>
-                </dl>
-              </section>
+        <div className="space-y-10">
+          <section id="profile" className="scroll-mt-8 space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Profile</h2>
+              <p className="text-sm text-muted-foreground">
+                Your identity and application details.
+              </p>
             </div>
-          )}
+            <Card>
+              <CardContent className="space-y-6 pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                    <UserIcon className="size-6 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold">{displayName(profile)}</p>
+                    <p className="text-sm text-muted-foreground">{user?.email}</p>
+                  </div>
+                  <div className="ml-auto">
+                    {user?.verified ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary">
+                        <CheckCircleIcon className="size-3" />
+                        Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-          {section === "privacy" && (
-            <section className="max-w-2xl space-y-4">
+                <div>
+                  <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Application
+                  </div>
+                  <dl className="mt-2 divide-y border-y text-sm">
+                    <div className="flex items-center justify-between py-3">
+                      <dt className="text-muted-foreground">Reference</dt>
+                      <dd className="font-mono font-medium">
+                        AK-{new Date().getFullYear()}-{String(profile.id).padStart(4, "0")}
+                      </dd>
+                    </div>
+                    {user && (
+                      <div className="flex items-center justify-between py-3">
+                        <dt className="text-muted-foreground">Client tag</dt>
+                        <dd className="font-mono font-medium">{clientCode(user.id)}</dd>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between py-3">
+                      <dt className="text-muted-foreground">Verification status</dt>
+                      <dd className="font-medium">{user?.verified ? "Verified" : "Pending"}</dd>
+                    </div>
+                    <div className="flex items-center justify-between py-3">
+                      <dt className="text-muted-foreground">Account type</dt>
+                      <dd className="font-medium">Individual</dd>
+                    </div>
+                    <div className="flex items-center justify-between py-3">
+                      <dt className="text-muted-foreground">Country</dt>
+                      <dd className="font-medium">{profile.country}</dd>
+                    </div>
+                    <div className="flex items-center justify-between py-3">
+                      <dt className="text-muted-foreground">Nationality</dt>
+                      <dd className="font-medium">{profile.nationality}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          <section id="consent-privacy" className="scroll-mt-8 space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Consent &amp; privacy</h2>
               <p className="text-sm text-muted-foreground">
                 Review your account permissions and communication preferences.
               </p>
-              <ConsentList mode="management" />
-            </section>
-          )}
-
-          {section === "security" && (
-            <div className="max-w-lg divide-y [&>*]:py-8 [&>*:first-child]:pt-0">
-              <ChangePasswordSection />
-              <TwoFactorSection />
             </div>
-          )}
-        </>
+            <Card>
+              <CardContent className="pt-2">
+                <ConsentList mode="management" />
+              </CardContent>
+            </Card>
+          </section>
+
+          <section id="verification-documents" className="scroll-mt-8 space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Verification documents</h2>
+              <p className="text-sm text-muted-foreground">
+                Documents submitted as part of your identity verification.
+              </p>
+            </div>
+            <Card>
+              <CardContent className="divide-y pt-2">
+                {documents.length === 0 ? (
+                  <p className="py-4 text-sm text-muted-foreground">No documents on file.</p>
+                ) : (
+                  documents.map((document) => (
+                    <div key={document.id} className="flex items-center justify-between gap-4 py-4">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {document.document_type.replace(/_/g, " ")}
+                        </p>
+                        {document.notes && (
+                          <p className="text-sm text-muted-foreground">{document.notes}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm capitalize">{document.status.replace(/_/g, " ")}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(document.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </section>
+
+          <section id="security" className="scroll-mt-8 space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Security</h2>
+              <p className="text-sm text-muted-foreground">
+                Manage your password and sign-in protection.
+              </p>
+            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <ChangePasswordSection />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <TwoFactorSection />
+              </CardContent>
+            </Card>
+          </section>
+        </div>
       )}
     </div>
   );
