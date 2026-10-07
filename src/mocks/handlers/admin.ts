@@ -1,4 +1,5 @@
 import { canManageOfferingRequest } from "@/lib/permissions";
+import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { workflow, command, persist, recordDealChange } from "../workflow";
 import { http, HttpResponse } from "msw";
 import {
@@ -1185,6 +1186,7 @@ export const adminHandlers = [
       purpose?: string;
       delivery_channels?: ("email" | "inbox")[];
       attachment_document_ids?: number[];
+      uploaded_attachments?: UploadedFile[];
       send_at?: string | null;
       investor_ids?: number[];
     };
@@ -1195,6 +1197,16 @@ export const adminHandlers = [
       );
     }
 
+    if (
+      body.uploaded_attachments &&
+      (!Array.isArray(body.uploaded_attachments) ||
+        body.uploaded_attachments.length > 5 ||
+        !body.uploaded_attachments.every(validUploadedFile))
+    )
+      return HttpResponse.json(
+        { error: "Attach up to 5 PDF, PNG or JPEG files, up to 2 MB each." },
+        { status: 422 },
+      );
     const now = new Date();
     const sendAt = body.send_at ? new Date(body.send_at) : now;
     const status: CommunicationStatus = sendAt.getTime() > now.getTime() ? "scheduled" : "sent";
@@ -1235,12 +1247,14 @@ export const adminHandlers = [
       fund_id: body.fund_id ?? null,
       routing: body.routing ?? ("direct" as CommunicationRouting),
       attachment_document_ids: body.attachment_document_ids ?? [],
+      uploaded_attachments: body.uploaded_attachments ?? [],
       status,
       scheduled_at: status === "scheduled" ? sendAt.toISOString() : null,
       sent_at: status === "sent" ? now.toISOString() : null,
       created_at: now.toISOString(),
     };
     communications.unshift(communication);
+    persist();
     logEvent(
       "communication_sent",
       `"${communication.subject}" ${status === "sent" ? "sent" : "scheduled"} to ${body.investor_ids.length} investor(s).`,

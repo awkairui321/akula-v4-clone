@@ -1,15 +1,17 @@
 import DealOverviewPage from "@/components/deal-overview-page";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { WorkflowView } from "@/lib/workflow-types";
 import type { Document } from "@/lib/types";
-import { Badge } from "@/components/ui/badge";
+import FileDropzone from "@/components/file-dropzone";
+import { readUpload, type UploadedFile } from "@/lib/file-upload";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DOCUMENT_REQUEST_KINDS, documentKindLabel } from "@/lib/document-catalogue";
-import { DownloadIcon, FileTextIcon } from "lucide-react";
+import { DownloadIcon, FileTextIcon, ChevronRightIcon, SearchIcon } from "lucide-react";
 
 const KIND_LABELS: Record<string, string> = {
   agreement: "Agreement",
@@ -19,13 +21,6 @@ const KIND_LABELS: Record<string, string> = {
   memo: "Memo",
   tax: "Tax Document",
   statement: "Statement",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  issued: "Issued",
-  signed: "Signed",
-  available: "Available",
-  action_required: "Action required",
 };
 
 const ACCOUNT_DOCUMENTS_LABEL = "Account documents";
@@ -96,26 +91,51 @@ function DocumentRow({ doc }: { doc: Document }) {
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{doc.name}</p>
           <p className="text-xs text-muted-foreground">
-            {KIND_LABELS[doc.kind] ?? doc.kind} · {new Date(doc.created_at).toLocaleDateString()}
+            {doc.status === "signed" && doc.kind === "agreement"
+              ? "Signed subscription agreement"
+              : doc.status === "submitted" && doc.review_state === "filed"
+                ? "Reviewed by LUCA"
+                : doc.status === "submitted"
+                  ? "Awaiting LUCA review"
+                  : (KIND_LABELS[doc.kind] ?? documentKindLabel(doc.kind))}{" "}
+            ·{" "}
+            {new Date(doc.created_at).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
           </p>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Badge variant="secondary">{STATUS_LABELS[doc.status] ?? doc.status}</Badge>
-        {doc.has_file && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              window.open(
-                `${import.meta.env.VITE_API_URL ?? "http://localhost:3000"}/api/v1/documents/${doc.id}/download`,
-                "_blank",
-              );
-            }}
-          >
-            <DownloadIcon className="size-4" />
-          </Button>
+        {doc.status === "action_required" && (
+          <span className="text-xs font-medium text-amber-700">Action required</span>
         )}
+        {doc.has_file &&
+          (doc.file_data_url ? (
+            <a
+              href={doc.file_data_url}
+              download={doc.name}
+              aria-label={`Download ${doc.name}`}
+              className="rounded-md p-2 hover:bg-muted"
+            >
+              <DownloadIcon className="size-4" />
+            </a>
+          ) : (
+            <Button
+              aria-label={`Download ${doc.name}`}
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                window.open(
+                  `${import.meta.env.VITE_API_URL ?? "http://localhost:3000"}/api/v1/documents/${doc.id}/download`,
+                  "_blank",
+                );
+              }}
+            >
+              <DownloadIcon className="size-4" />
+            </Button>
+          ))}
       </div>
     </div>
   );
@@ -137,8 +157,8 @@ function RequestedFromYou() {
     queryFn: () => api<{ requests: DocumentRequest[] }>("/api/v1/document_requests"),
   });
   const upload = useMutation({
-    mutationFn: ({ id, filename }: { id: number; filename: string }) =>
-      api(`/api/v1/document_requests/${id}/upload`, { method: "POST", body: { filename } }),
+    mutationFn: ({ id, file }: { id: number; file: UploadedFile }) =>
+      api(`/api/v1/document_requests/${id}/upload`, { method: "POST", body: file }),
     onSuccess: () => {
       toast.success("Sent to LUCA for review.");
       queryClient.invalidateQueries({ queryKey: ["document-requests"] });
@@ -155,51 +175,46 @@ function RequestedFromYou() {
       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         Requested from you ({requests.length})
       </p>
-      <ul className="divide-y border-y">
+      <ul className="space-y-2">
         {requests.map((r) => {
           const overdue = r.due_at ? new Date(r.due_at).getTime() < Date.now() : false;
           const reason = DOCUMENT_REQUEST_KINDS.find((k) => k.key === r.kind)?.reason;
           return (
-            <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{documentKindLabel(r.kind)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {r.note ?? reason}
-                  {r.fund_name ? ` · for ${r.fund_name}` : ""}
-                </p>
-                {r.due_at && (
-                  <p
-                    className={`text-xs ${overdue ? "font-medium text-amber-700" : "text-muted-foreground"}`}
-                  >
-                    {overdue ? "Overdue · was due " : "Due "}
-                    {new Date(r.due_at).toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </p>
-                )}
-              </div>
-              <label>
-                <span
-                  className={`inline-flex h-8 cursor-pointer items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 ${
-                    upload.isPending ? "pointer-events-none opacity-60" : ""
-                  }`}
-                >
-                  Upload
-                </span>
-                <input
-                  type="file"
-                  accept="application/pdf,image/*"
-                  className="sr-only"
-                  aria-label={`Upload ${documentKindLabel(r.kind)}`}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) upload.mutate({ id: r.id, filename: file.name });
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+            <li key={r.id}>
+              <details className="group/request rounded-lg border">
+                <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+                  <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground group-open/request:rotate-90" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{documentKindLabel(r.kind)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {r.note ?? reason}
+                      {r.fund_name ? ` · for ${r.fund_name}` : ""}
+                    </p>
+                    {r.due_at && (
+                      <p
+                        className={`text-xs ${overdue ? "font-medium text-amber-700" : "text-muted-foreground"}`}
+                      >
+                        {overdue ? "Overdue · was due " : "Due "}
+                        {new Date(r.due_at).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs font-medium text-primary">Provide document</span>
+                </summary>
+                <div className="border-t p-4">
+                  <FileDropzone
+                    label={`Upload ${documentKindLabel(r.kind)}`}
+                    disabled={upload.isPending}
+                    onFiles={async ([file]) => {
+                      await upload.mutateAsync({ id: r.id, file: await readUpload(file) });
+                    }}
+                  />
+                </div>
+              </details>
             </li>
           );
         })}
@@ -209,20 +224,43 @@ function RequestedFromYou() {
 }
 
 export default function DocumentsPage() {
+  const [search, setSearch] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [kind, setKind] = useState("passport");
+  const [fundId, setFundId] = useState("");
+  const queryClient = useQueryClient();
+  const upload = useMutation({
+    mutationFn: (file: UploadedFile) =>
+      api("/api/v1/documents", {
+        method: "POST",
+        body: { ...file, kind, fund_id: fundId ? Number(fundId) : null },
+      }),
+    onSuccess: () => {
+      toast.success("Sent to LUCA for review.");
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
   const { data, isLoading } = useQuery({
     queryKey: ["documents"],
     queryFn: () => api<{ documents: Document[] }>("/api/v1/documents"),
   });
 
-  const documents = data?.documents ?? [];
+  const documents = useMemo(() => data?.documents ?? [], [data]);
 
   const groups = useMemo(() => {
-    const map = new Map<string, { label: string; docs: Document[] }>();
+    const map = new Map<string, { key: string; label: string; docs: Document[] }>();
     for (const doc of documents) {
+      if (
+        search.trim() &&
+        !`${doc.name} ${doc.fund_name ?? "Account documents"} ${documentKindLabel(doc.kind)}`
+          .toLowerCase()
+          .includes(search.trim().toLowerCase())
+      )
+        continue;
       const key = doc.fund_id !== null ? `fund-${doc.fund_id}` : "account";
       const label =
         doc.fund_id !== null ? (doc.fund_name ?? "Other fund") : ACCOUNT_DOCUMENTS_LABEL;
-      if (!map.has(key)) map.set(key, { label, docs: [] });
+      if (!map.has(key)) map.set(key, { key, label, docs: [] });
       map.get(key)!.docs.push(doc);
     }
     // Funds first (alphabetically), account documents last.
@@ -231,19 +269,92 @@ export default function DocumentsPage() {
       if (b.label === ACCOUNT_DOCUMENTS_LABEL) return -1;
       return a.label.localeCompare(b.label);
     });
-  }, [documents]);
+  }, [documents, search]);
 
   return (
     <div className="flex flex-col gap-6">
       <RequiredVersionReviews />
-      <div className="mb-2 space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Documents</h1>
-        <p className="text-muted-foreground">
-          Subscription agreements, statements, and account documents, grouped by fund.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">Documents</h1>
+          <p className="text-muted-foreground">
+            Subscription agreements, statements, and account documents, grouped by fund.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setUploadOpen(!uploadOpen)}
+          aria-expanded={uploadOpen}
+        >
+          Upload document
+        </Button>
       </div>
 
+      {uploadOpen && (
+        <section className="space-y-4 rounded-lg border p-4">
+          <div>
+            <h2 className="font-semibold">Submit a document to LUCA</h2>
+            <p className="text-xs text-muted-foreground">
+              Demo upload, saved in this browser for review. For an open request, use its upload
+              above.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1 text-sm">
+              <span className="block">Document type</span>
+              <select
+                className="h-9 w-full rounded-md border bg-background px-3"
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+              >
+                {DOCUMENT_REQUEST_KINDS.map((k) => (
+                  <option key={k.key} value={k.key}>
+                    {k.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="block">For</span>
+              <select
+                className="h-9 w-full rounded-md border bg-background px-3"
+                value={fundId}
+                onChange={(e) => setFundId(e.target.value)}
+              >
+                <option value="">Account documents</option>
+                {[
+                  ...new Map(
+                    documents.filter((d) => d.fund_id != null).map((d) => [d.fund_id, d.fund_name]),
+                  ).entries(),
+                ].map(([id, name]) => (
+                  <option key={id} value={String(id)}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <FileDropzone
+            label="Choose document"
+            disabled={upload.isPending}
+            onFiles={async ([file]) => {
+              await upload.mutateAsync(await readUpload(file));
+            }}
+          />
+        </section>
+      )}
+
       <RequestedFromYou />
+      <div className="relative max-w-sm">
+        <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label="Search documents"
+          placeholder="Search fund or document"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading documents...</p>}
 
@@ -257,22 +368,31 @@ export default function DocumentsPage() {
       )}
 
       {groups.length > 0 && (
-        <div className="flex flex-col gap-6">
+        <div className="space-y-3">
           {groups.map((group) => (
-            <div key={group.label} className="space-y-2">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                {group.label}
-              </p>
-              <Card className="p-0">
-                <CardContent className="divide-y p-0">
-                  {group.docs.map((doc) => (
-                    <DocumentRow key={doc.id} doc={doc} />
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
+            <details
+              key={group.key}
+              open={search.trim() ? true : undefined}
+              className="group/folder overflow-hidden rounded-lg border bg-background"
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-4 hover:bg-muted/30 [&::-webkit-details-marker]:hidden">
+                <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground group-open/folder:rotate-90" />
+                <span className="flex-1 text-sm font-semibold">{group.label}</span>
+                <span className="text-xs text-muted-foreground">
+                  {group.docs.length} {group.docs.length === 1 ? "document" : "documents"}
+                </span>
+              </summary>
+              <div className="divide-y border-t">
+                {group.docs.map((doc) => (
+                  <DocumentRow key={doc.id} doc={doc} />
+                ))}
+              </div>
+            </details>
           ))}
         </div>
+      )}
+      {!isLoading && documents.length > 0 && groups.length === 0 && (
+        <p className="py-8 text-sm text-muted-foreground">No documents match your search.</p>
       )}
     </div>
   );

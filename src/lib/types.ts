@@ -394,6 +394,7 @@ export const DEAL_DOCUMENT_KINDS: { value: string; label: string }[] = [
 ];
 
 export type Document = {
+  review_state?: "received" | "reviewing" | "on_hold" | "filed";
   id: number;
   fund_id: number | null;
   fund_name: string | null;

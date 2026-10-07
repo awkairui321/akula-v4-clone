@@ -14,7 +14,7 @@ import type {
 } from "./types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SummaryFigure } from "./summary-figure";
+
 import ComplianceClients from "./compliance-clients";
 import type { WorkflowView } from "@/lib/workflow-types";
 import { useAuth } from "@/contexts/auth-context";
@@ -26,13 +26,13 @@ import {
   requestLink,
 } from "./compliance-helpers";
 
-type Tab = "review" | "requests" | "expiring" | "filed" | "clients";
+type Tab = "review" | "requests" | "expiring" | "clients";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "review", label: "To review" },
   { key: "requests", label: "Requested from clients" },
   { key: "expiring", label: "Expiring" },
-  { key: "filed", label: "Filed" },
+
   { key: "clients", label: "By client" },
 ];
 
@@ -45,7 +45,9 @@ export default function AdminCompliancePage() {
     ? (requested as Tab)
     : searchParams.get("client")
       ? "clients"
-      : "review";
+      : requested === "filed"
+        ? "clients"
+        : "review";
   const [search, setSearch] = useState("");
 
   const { data: docsData, isLoading } = useQuery({
@@ -110,7 +112,7 @@ export default function AdminCompliancePage() {
     [docsData],
   );
   const toReview = compliance.filter((d) => d.review_state !== "filed");
-  const filed = compliance.filter((d) => d.review_state === "filed");
+
   const open = (requestsData?.requests ?? []).filter((r) => r.status === "requested");
   const openKeys = new Set(open.map((r) => `${r.investor_id}:${r.kind}`));
 
@@ -136,7 +138,7 @@ export default function AdminCompliancePage() {
     review: toReview.length,
     requests: open.length,
     expiring: expiringCount,
-    filed: filed.length,
+
     clients: (investorsData?.investors ?? []).length,
   };
 
@@ -158,17 +160,7 @@ export default function AdminCompliancePage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-8 gap-y-4 border-y py-5 sm:grid-cols-4">
-        <SummaryFigure label="To review" value={String(toReview.length)} />
-        <SummaryFigure
-          label="Requested from clients"
-          value={`${open.length}${overdue ? ` · ${overdue} overdue` : ""}`}
-        />
-        <SummaryFigure label="Expiring within 30 days" value={String(expiring30)} />
-        <SummaryFigure label="Filed" value={String(filed.length)} />
-      </div>
-
-      <div role="tablist" aria-label="Compliance" className="flex flex-wrap gap-x-6 border-b">
+      <div role="tablist" aria-label="Compliance" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -176,20 +168,22 @@ export default function AdminCompliancePage() {
             type="button"
             aria-selected={tab === t.key}
             onClick={() => setSearchParams({ tab: t.key })}
-            className={`-mb-px flex items-center gap-2 border-b-2 px-1 pb-3 text-sm transition-colors ${
-              tab === t.key
-                ? "border-primary font-medium text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
+            className={`rounded-lg border p-4 text-left transition-colors ${tab === t.key ? "border-primary bg-primary/5" : "hover:bg-muted/40"}`}
           >
-            {t.label}
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
-              {counts[t.key]}
+            <span className="block text-sm font-medium">{t.label}</span>
+            <span className="mt-2 block text-2xl font-semibold tabular-nums">{counts[t.key]}</span>
+            <span className="mt-1 block text-xs text-muted-foreground">
+              {t.key === "review"
+                ? "Awaiting LUCA review"
+                : t.key === "requests"
+                  ? `${overdue} overdue`
+                  : t.key === "expiring"
+                    ? `${expiring30} within 30 days · ${EXPIRY_WINDOW_DAYS}-day view`
+                    : "All client documents"}
             </span>
           </button>
         ))}
       </div>
-
       <div className="relative max-w-sm">
         <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -255,7 +249,7 @@ export default function AdminCompliancePage() {
           ].filter((x) => matches(x.investor.full_name))}
           openKeys={openKeys}
         />
-      ) : tab === "clients" ? (
+      ) : (
         <ComplianceClients
           investors={investorsData?.investors ?? []}
           docs={docsData?.documents ?? []}
@@ -272,12 +266,6 @@ export default function AdminCompliancePage() {
             remind: (id) => remind.mutate(id),
             withdraw: (id) => withdraw.mutate(id),
           }}
-        />
-      ) : (
-        <DocumentTable
-          docs={filed.filter((d) => matches(`${d.name} ${d.owner_name}`))}
-          empty="No filed documents yet."
-          actions={() => null}
         />
       )}
     </div>
@@ -315,7 +303,17 @@ function DocumentTable({
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 py-3 hover:bg-muted/40 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_7rem_8rem_12rem]"
           >
             <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">{d.name}</span>
+              {d.file_data_url ? (
+                <a
+                  href={d.file_data_url}
+                  download={d.name}
+                  className="block truncate text-sm font-medium text-primary underline underline-offset-2"
+                >
+                  {d.name}
+                </a>
+              ) : (
+                <span className="block truncate text-sm font-medium">{d.name}</span>
+              )}
               <span className="block truncate text-xs text-muted-foreground">
                 {documentKindLabel(d.kind)}
                 {d.uploaded_by?.role === "rm" &&

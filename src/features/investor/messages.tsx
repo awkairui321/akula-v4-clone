@@ -14,7 +14,7 @@ export type InboxMessage = {
   read: boolean;
   fund_id: number | null;
   fund_name: string | null;
-  attachments: { id: number; name: string }[];
+  attachments: { id: number; name: string; file_data_url?: string | null }[];
   requests: { id: number; kind: string; due_at: string | null; status: string }[];
 };
 
@@ -236,7 +236,17 @@ export default function MessagesPage() {
                     {selected.attachments.map((a) => (
                       <li key={a.id} className="flex items-center gap-2 py-2.5 text-sm">
                         <FileTextIcon className="size-4 text-muted-foreground" />
-                        {a.name}
+                        {a.file_data_url ? (
+                          <a
+                            href={a.file_data_url}
+                            download={a.name}
+                            className="underline underline-offset-2"
+                          >
+                            {a.name}
+                          </a>
+                        ) : (
+                          a.name
+                        )}
                       </li>
                     ))}
                   </ul>

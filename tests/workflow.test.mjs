@@ -7,6 +7,7 @@ import ts from "typescript";
 const out = path.resolve(".test-runtime");
 for (const file of [
   "src/lib/types.ts",
+  "src/lib/file-upload.ts",
   "src/lib/permissions.ts",
   "src/lib/investor-access.ts",
   "src/mocks/investor-access.ts",
@@ -66,6 +67,108 @@ const manager = () => db.users.find((u) => u.role === "luca"),
   rm = () => db.users.find((u) => u.id === 6),
   investor = () => db.users.find((u) => u.id === 2);
 const funded = () => db.subscriptions.find((s) => s.status === "allocation_pending");
+test("document uploads retain bytes, stay owner scoped and require LUCA review", async () => {
+  const file = { name: "Evidence.pdf", file_data_url: "data:application/pdf;base64,JVBERi0xLjQ=" };
+  const user = investor();
+  const before = db.documents.length;
+  assert.equal(
+    (
+      await request("documents", user, "POST", {
+        ...file,
+        kind: "passport",
+        file_data_url: "data:text/html;base64,AAAA",
+      })
+    ).status,
+    422,
+  );
+  assert.equal(db.documents.length, before);
+  const result = await request("documents", user, "POST", { ...file, kind: "passport" });
+  assert.equal(result.status, 200);
+  const { document } = await result.json();
+  assert.equal(document.owner_id, user.id);
+  assert.equal(document.review_state, "received");
+  assert.equal(document.file_data_url, file.file_data_url);
+  assert.ok(
+    !(
+      await (
+        await request(
+          "documents",
+          db.users.find((u) => u.id === 3),
+        )
+      ).json()
+    ).documents.some((d) => d.id === document.id),
+  );
+  const req = db.documentRequests.find(
+    (r) => r.investor_id === user.id && r.status === "requested",
+  );
+  assert.ok(req);
+  assert.equal(
+    (
+      await request(
+        `document_requests/${req.id}/upload`,
+        db.users.find((u) => u.id === 3),
+        "POST",
+        file,
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (await request(`document_requests/${req.id}/upload`, user, "POST", file)).status,
+    200,
+  );
+  assert.equal(
+    db.documents.find((d) => d.id === req.received_document_id).file_data_url,
+    file.file_data_url,
+  );
+  assert.equal(
+    (await request(`document_requests/${req.id}/upload`, user, "POST", file)).status,
+    409,
+  );
+});
+test("uploaded communication attachments reach only delivered recipients and persist", async () => {
+  const file = { name: "Update.pdf", file_data_url: "data:application/pdf;base64,JVBERi0xLjQ=" };
+  const payload = {
+    subject: "Critical update",
+    body: "See attached.",
+    purpose: "deal_update",
+    investor_ids: [investor().id],
+    uploaded_attachments: [file],
+  };
+  const count = db.communications.length;
+  assert.equal(
+    (
+      await request("admin/communications", manager(), "POST", {
+        ...payload,
+        uploaded_attachments: [{ ...file, file_data_url: "bad" }],
+      })
+    ).status,
+    422,
+  );
+  assert.equal(db.communications.length, count);
+  const { communication } = await (
+    await request("admin/communications", manager(), "POST", payload)
+  ).json();
+  const mine = (await (await request("messages", investor())).json()).messages.find(
+    (m) => m.id === communication.id,
+  );
+  assert.equal(mine.attachments[0].file_data_url, file.file_data_url);
+  assert.ok(
+    !(
+      await (
+        await request(
+          "messages",
+          db.users.find((u) => u.id === 3),
+        )
+      ).json()
+    ).messages.some((m) => m.id === communication.id),
+  );
+  assert.deepEqual(
+    db.exportDemoState().arrays.communications.find((c) => c.id === communication.id)
+      .uploaded_attachments,
+    [file],
+  );
+});
 test("client fund hierarchy keeps ownership, subscription-linked documents and empty clients", async () => {
   const { investors } = await (await request("admin/investors", manager())).json();
   const view = w.view(manager());
