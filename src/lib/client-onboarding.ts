@@ -103,7 +103,12 @@ export type ReviewBundle = {
   accreditation_documents: ReviewDocument[];
   other_documents: ReviewDocument[];
   open_requests: { id: number; kind: string; due_at: string | null; note: string | null }[];
-  checks: { nda_signed: boolean; consents_complete: boolean };
+  checks: {
+    nda_signed: boolean;
+    consents_complete: boolean;
+    details_confirmed?: boolean;
+    document_ownership_confirmed?: boolean;
+  };
   events: ClientEvent[];
 };
 

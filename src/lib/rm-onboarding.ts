@@ -34,15 +34,24 @@ export const RM_DOCUMENT_KINDS = [
 export const WHAT_INVESTOR_COMPLETES = [
   "Confirm eligibility",
   "Review and confirm the details your RM entered",
+  "Confirm that every uploaded document belongs to you",
   "Complete the identity check",
   "Sign the NDA",
   "Grant consents",
 ] as const;
 
-export type PreparationStage = "invited" | "reviewing" | "verifying" | "complete";
+export type PreparationStage =
+  | "preparing"
+  | "pending_approval"
+  | "invited"
+  | "reviewing"
+  | "verifying"
+  | "complete";
 
 export const PREPARATION_STAGE_LABELS: Record<PreparationStage, string> = {
-  invited: "Invitation sent",
+  preparing: "Preparing documents",
+  pending_approval: "Pending LUCA approval",
+  invited: "Invitation link ready",
   reviewing: "Investor reviewing",
   verifying: "Identity, NDA and consents",
   complete: "Onboarding complete",

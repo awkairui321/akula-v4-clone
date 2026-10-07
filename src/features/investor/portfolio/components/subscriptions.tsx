@@ -10,13 +10,6 @@ import { formatPrice, formatPricePrecise, numericValue } from "@/lib/currency";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
 /* ─── RM highlight (an adviser's recommendation for this investor) ─── */
-type RmHighlight = {
-  id: number;
-  fund_id: number;
-  fund_name: string;
-  rationale: string;
-  created_at: string;
-};
 
 function NavTrend({ nav, invested }: { nav: number; invested: number }) {
   const [range, setRange] = useState("All");
@@ -635,11 +628,6 @@ function LatestUpdates({
     queryKey: ["funds"],
     queryFn: () => api<{ funds: Fund[] }>("/api/v1/funds"),
   });
-  const { data: highlightsData } = useQuery({
-    queryKey: ["rmHighlights"],
-    queryFn: () => api<{ highlights: RmHighlight[] }>("/api/v1/rm_highlights"),
-  });
-
   const subscribedFundIds = new Set(activeSubs.map((s) => s.fund_id));
   const newPostings = (fundsData?.funds ?? [])
     .filter((f) => f.state === "open" && f.opened_at && !subscribedFundIds.has(f.id))
@@ -649,7 +637,6 @@ function LatestUpdates({
     })
     .slice(0, 3);
 
-  const highlights = highlightsData?.highlights ?? [];
   const held = holdings.filter((h) => h.state !== "realized");
 
   const openHolding = (holdingId: number) =>
@@ -682,14 +669,6 @@ function LatestUpdates({
       date: new Date(f.opened_at!),
       onSelect: () => navigate(`/funds/${f.id}`),
     })),
-    ...highlights.map((h) => ({
-      key: `highlight-${h.id}`,
-      kind: "Institution",
-      company: h.fund_name,
-      title: h.rationale,
-      date: new Date(h.created_at),
-      onSelect: () => navigate(`/funds/${h.fund_id}`),
-    })),
     ...placeholders,
   ]
     .sort((a, b) => b.date.getTime() - a.date.getTime())
@@ -701,7 +680,7 @@ function LatestUpdates({
     <div className="flex h-full flex-col">
       <p className="text-sm font-medium">Company & investment updates</p>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        Recent news and recommendations on your holdings.
+        Company news and newly opened investments.
       </p>
       <ul className="mt-3 divide-y">
         {items.map((item) => (

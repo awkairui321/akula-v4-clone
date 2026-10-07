@@ -17,7 +17,15 @@ const formatDate = (iso: string) =>
  * Investment Team: prepare and submit. Fund Manager: review, approve (which publishes) or send back.
  * Akula Ops edits show to the Investment Team only; the Fund Manager sees what the team submits.
  */
-export default function PublicationBar({ fund }: { fund: Fund }) {
+export default function PublicationBar({
+  fund,
+  actionsOnly = false,
+  onEdit,
+}: {
+  fund: Fund;
+  actionsOnly?: boolean;
+  onEdit?: () => void;
+}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
@@ -55,6 +63,52 @@ export default function PublicationBar({ fund }: { fund: Fund }) {
     (c) => c.fundId === fund.id && c.byRole === "ops" && c.includedInVersion === undefined,
   );
 
+  if (actionsOnly)
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {isTeam && !open && (
+          <Button
+            size="sm"
+            disabled={run.isPending}
+            onClick={() => run.mutate({ type: "prepare", id: fund.id })}
+          >
+            Prepare draft version
+          </Button>
+        )}
+        {isTeam && open?.status === "draft" && (
+          <>
+            <Input
+              aria-label="Note for the Fund Manager"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Note for the Fund Manager (optional)"
+              className="w-72"
+            />
+            <Button
+              size="sm"
+              disabled={run.isPending}
+              onClick={() => run.mutate({ type: "review", id: open.id, text: note })}
+            >
+              Submit to Fund Manager
+            </Button>
+          </>
+        )}
+        {isManager && !open && working && (
+          <Button
+            size="sm"
+            disabled={run.isPending}
+            onClick={() =>
+              run.mutate(
+                { type: "stage", id: fund.id },
+                { onSuccess: () => setSearchParams({ tab: "review" }) },
+              )
+            }
+          >
+            Review and publish my edits
+          </Button>
+        )}
+      </div>
+    );
   return (
     <section className="space-y-3 border-y py-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -114,50 +168,16 @@ export default function PublicationBar({ fund }: { fund: Fund }) {
             </p>
           )}
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {isTeam && !open && (
-            <Button
-              size="sm"
-              disabled={run.isPending}
-              onClick={() => run.mutate({ type: "prepare", id: fund.id })}
-            >
-              Prepare draft version
-            </Button>
-          )}
-          {isTeam && open?.status === "draft" && (
-            <>
-              <Input
-                aria-label="Note for the Fund Manager"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Note for the Fund Manager (optional)"
-                className="w-72"
-              />
-              <Button
-                size="sm"
-                disabled={run.isPending}
-                onClick={() => run.mutate({ type: "review", id: open.id, text: note })}
-              >
-                Submit to Fund Manager
-              </Button>
-            </>
-          )}
-          {isManager && !open && working && (
-            <Button
-              size="sm"
-              disabled={run.isPending}
-              onClick={() =>
-                run.mutate(
-                  { type: "stage", id: fund.id },
-                  { onSuccess: () => setSearchParams({ tab: "review" }) },
-                )
-              }
-            >
-              Review and publish my edits
-            </Button>
-          )}
-        </div>
+        {onEdit && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isTeam && open?.status === "review"}
+            onClick={onEdit}
+          >
+            Edit working overview
+          </Button>
+        )}{" "}
       </div>
     </section>
   );

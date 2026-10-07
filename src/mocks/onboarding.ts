@@ -261,6 +261,10 @@ export function reviewBundle(investorId: number): ReviewBundle | null {
       .map((r) => ({ id: r.id, kind: r.kind, due_at: r.due_at, note: r.note })),
     checks: {
       nda_signed: user?.nda_status === "signed",
+      details_confirmed: !profile?.prepared_by_rm || Boolean(profile.prepared_by_rm.confirmed_at),
+      document_ownership_confirmed: own.every(
+        (d) => d.uploaded_by?.role !== "rm" || d.confirmed_at,
+      ),
       consents_complete: db.allRequiredConsentsGranted(investorId),
     },
     events: db.clientEvents
@@ -292,6 +296,24 @@ export function applyReview(
   const user = db.findUserById(investorId);
 
   if (input.decision === "approve") {
+    const profile = db.findInvestorProfileByUserId(investorId);
+    if (
+      profile?.prepared_by_rm &&
+      (!user ||
+        user.invite_token ||
+        !profile.prepared_by_rm.confirmed_at ||
+        !profile.eligibility_confirmed_at ||
+        user.nda_status !== "signed" ||
+        !db.allRequiredConsentsGranted(investorId) ||
+        (db.verificationDocumentsByInvestor[investorId] ?? []).some(
+          (d) => d.uploaded_by?.role === "rm" && !d.confirmed_at,
+        ))
+    )
+      return {
+        ok: false,
+        error:
+          "The client must confirm their details and document ownership, sign the NDA and grant consents before approval.",
+      };
     if (input.identity !== "verified" || input.accreditation !== "accredited")
       return { ok: false, error: "Verify identity and accreditation before approving." };
     const expires = input.accreditation_expires_at

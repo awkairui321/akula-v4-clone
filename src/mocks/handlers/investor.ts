@@ -198,7 +198,13 @@ export const investorHandlers = [
   http.get("*/api/v1/onboarding/documents", ({ request }) => {
     const user = currentUser(request);
     if (!user?.has_investor_profile) return unauthorized();
-    return HttpResponse.json({ documents: verificationDocumentsByInvestor[user.id] ?? [] });
+    return HttpResponse.json({
+      documents: (verificationDocumentsByInvestor[user.id] ?? []).map((doc) => ({
+        ...doc,
+        file_data_url:
+          documents.find((d) => d.id === doc.id && d.owner_id === user.id)?.file_data_url ?? null,
+      })),
+    });
   }),
   // The investor confirms a document their RM supplied on their behalf.
   http.post("*/api/v1/onboarding/documents/:id/confirm", ({ request, params }) => {
@@ -820,6 +826,12 @@ export const investorHandlers = [
   http.post("*/api/v1/onboarding/skip", ({ request }) => {
     const user = currentUser(request);
     if (!user) return unauthorized();
+
+    if (findInvestorProfileByUserId(user.id)?.prepared_by_rm)
+      return HttpResponse.json(
+        { error: "Complete the client confirmation and LUCA approval first." },
+        { status: 422 },
+      );
     const profile = findInvestorProfileByUserId(user.id);
     if (profile) profile.skipped = true;
     return HttpResponse.json({});

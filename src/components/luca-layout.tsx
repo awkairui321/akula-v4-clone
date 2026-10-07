@@ -47,12 +47,11 @@ export default function LucaLayout() {
   const navItems = isRm
     ? [
         { to: "/rm", label: "Overview", icon: LayoutDashboard },
-        { to: "/rm/clients", label: "Clients and follow ups", icon: UserCheckIcon },
+        { to: "/rm/clients", label: "Client follow-ups", icon: UserCheckIcon },
         { to: "/rm/onboarding", label: "Client onboarding", icon: UserPlusIcon },
         { to: "/rm/opportunities", label: "Opportunities", icon: TrendingUp },
         { to: "/rm/partners", label: "Partner client book", icon: Building2Icon },
-        { to: "/rm/documents", label: "Documents", icon: ShieldCheckIcon },
-        { to: "/rm/reports", label: "Reports", icon: TrendingUp },
+        { to: "/rm/communications", label: "Communications", icon: MailIcon },
       ]
     : isTeam
       ? NAV_ITEMS.filter((item) => ["/luca/deals", "/luca/publication"].includes(item.to))

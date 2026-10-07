@@ -964,35 +964,12 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       );
       break;
     }
-    case "highlight": {
-      role("rm", "luca");
-      requireValue(clientsFor(user).includes(c.id!), "Client not assigned.");
-      const targetInvestor = db.findUserById(c.id!);
-      requireValue(
-        targetInvestor && mayDiscover(targetInvestor, c.target!),
-        "This deal is unavailable under the client's investor profile.",
+    case "highlight":
+    case "open-highlight":
+      throw new Error(
+        "Client recommendations have been retired. Open the published deal page instead.",
       );
-      const v = currentVersion(c.target!);
-      requireValue(
-        v && db.findFundById(v.fundId)?.state === "open",
-        "Choose a published open offering.",
-      );
-      workflow.highlights.push({
-        id: id(),
-        investorId: c.id!,
-        staffId: user.id,
-        versionId: v.id,
-        note: text(),
-        at: now(),
-      });
-      break;
-    }
-    case "open-highlight": {
-      const h = view(user).highlights.find((h) => h.id === c.id && h.investorId === user.id);
-      requireValue(h, "Highlight not found.");
-      h.openedAt ||= now();
-      break;
-    }
+
     case "note": {
       role("rm", "luca");
       requireValue(clientsFor(user).includes(c.id!), "Client not assigned.");

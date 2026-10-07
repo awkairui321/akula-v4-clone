@@ -160,7 +160,7 @@ function GlanceRow({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function Hero({ fund }: { fund: Fund }) {
+function Hero({ fund, hideSupply = false }: { fund: Fund; hideSupply?: boolean }) {
   const { asset } = fund;
   const allocated = parseFloat(fund.supply_allocated);
   const total = fund.supply_total ? parseFloat(fund.supply_total) : null;
@@ -217,7 +217,7 @@ function Hero({ fund }: { fund: Fund }) {
         </dl>
       </div>
 
-      {total !== null && (
+      {!hideSupply && total !== null && (
         <div className="space-y-2 rounded-lg border bg-card p-4">
           <div className="flex justify-between text-sm">
             <span className="font-medium">
@@ -946,7 +946,7 @@ export default function DealOverviewPage({
         </div>
       )}
 
-      <Hero fund={fund} />
+      <Hero fund={fund} hideSupply={embedded} />
 
       <ChipNav sections={sections} active={active} />
 
@@ -958,33 +958,39 @@ export default function DealOverviewPage({
             title="How the company creates value"
             standfirst={`What problem ${asset.name} solves, what it provides and who uses it.`}
           >
-            <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <div
+              className={`grid min-w-0 grid-cols-1 gap-6 ${embedded ? "" : "lg:grid-cols-[minmax(0,1fr)_260px]"}`}
+            >
               <OverviewSection asset={asset} />
-              <div className="space-y-4 lg:sticky lg:top-8 lg:self-start">
-                <TermsPanel fund={fund} showFees={viewer !== "luca" && viewer !== "ops"} />
-                {viewer === "investor" && !preview ? (
-                  <SubscribeCalculator fund={fund} />
-                ) : preview ? (
-                  <div className="rounded-lg border bg-muted/30 p-4 text-sm">
-                    <p className="font-medium">
-                      {viewer === "eam"
-                        ? "Adviser-facing opportunity"
-                        : viewer === "rm"
-                          ? "RM opportunity overview"
-                          : "Investor opportunity access"}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Read-only preview. No allocation or subscription is created.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                    {viewer === "eam" || viewer === "rm"
-                      ? "Adviser access is read-only. Investors can review and subscribe from their own workspace."
-                      : "Investors see a subscribe calculator here. LUCA sees deal terms only."}
-                  </div>
-                )}
-              </div>
+              {!embedded && (
+                <div className="space-y-4 lg:sticky lg:top-8 lg:self-start">
+                  {!embedded && (
+                    <TermsPanel fund={fund} showFees={viewer !== "luca" && viewer !== "ops"} />
+                  )}
+                  {viewer === "investor" && !preview ? (
+                    <SubscribeCalculator fund={fund} />
+                  ) : preview ? (
+                    <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                      <p className="font-medium">
+                        {viewer === "eam"
+                          ? "Adviser-facing opportunity"
+                          : viewer === "rm"
+                            ? "RM opportunity overview"
+                            : "Investor opportunity access"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Read-only preview. No allocation or subscription is created.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                      {viewer === "eam" || viewer === "rm"
+                        ? "Adviser access is read-only. Investors can review and subscribe from their own workspace."
+                        : "Investors see a subscribe calculator here. LUCA sees deal terms only."}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <LeadershipSection asset={asset} />
           </SectionShell>
