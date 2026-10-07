@@ -38,43 +38,14 @@
   background: linear-gradient(125deg, #e3edf0, #cfdee3 55%, #b5cbd3);
   color: #193548;
 }
-.opportunity-card-art[data-theme="energy"] {
-  background:
-    radial-gradient(ellipse at 80% 10%, #f4e5b4, transparent 65%),
-    linear-gradient(125deg, #e3ede5, #a8c7b2);
-  color: #254d3b;
+.opportunity-card:nth-child(4n + 2) .opportunity-card-art {
+  background: linear-gradient(125deg, #e9ebe0, #d8dfce 55%, #bfceb8);
 }
-.opportunity-card-art[data-theme="space"] {
-  background:
-    radial-gradient(circle at 12% 22%, #fff 0.7px, transparent 1.4px),
-    radial-gradient(circle at 29% 78%, #dbe8ff 0.8px, transparent 1.6px),
-    radial-gradient(circle at 43% 18%, #fff 0.7px, transparent 1.4px),
-    radial-gradient(circle at 55% 83%, #e5d4ff 0.8px, transparent 1.6px),
-    radial-gradient(circle at 88% 22%, #fff 0.7px, transparent 1.4px),
-    radial-gradient(
-      ellipse at 73% 45%,
-      transparent 0 13%,
-      #e7a8f328 14%,
-      transparent 19%,
-      #94baf343 21%,
-      transparent 29%,
-      #bd72d53b 36%,
-      transparent 49%
-    ),
-    radial-gradient(ellipse at 72% 45%, #f4d4ff, #b56bd8 4%, #594d94 16%, transparent 38%),
-    linear-gradient(130deg, #10172b, #382549 58%, #172f49);
-  color: #edf4f8;
+.opportunity-card:nth-child(4n + 3) .opportunity-card-art {
+  background: linear-gradient(125deg, #ece4dc, #dfd2c4 55%, #cdb9a9);
 }
-.opportunity-card-art[data-theme="robotics"] {
-  background:
-    repeating-linear-gradient(0deg, transparent 0 23px, #3156680b 23px 24px),
-    repeating-linear-gradient(90deg, transparent 0 23px, #3156680b 23px 24px),
-    linear-gradient(125deg, #e6eaf1, #b4c7dc);
-  color: #29445e;
-}
-.opportunity-card-art[data-theme="finance"] {
-  background: linear-gradient(125deg, #e9e5f0, #bbb8d0);
-  color: #453e65;
+.opportunity-card:nth-child(4n + 4) .opportunity-card-art {
+  background: linear-gradient(125deg, #e2e5ed, #ced5e2 55%, #b8c4d6);
 }
 .opportunity-card-art::after {
   position: absolute;
@@ -94,17 +65,6 @@
   font-family: "Source Serif 4", Georgia, serif;
   font-size: 64px;
   line-height: 0.9;
-}
-.opportunity-card-art[data-theme="space"]::after {
-  right: -28px;
-  top: -86px;
-  width: 245px;
-  height: 245px;
-  border-color: #ecd0ff42;
-  background: radial-gradient(ellipse at 50% 65%, #d08ae51f, transparent 65%);
-  box-shadow:
-    0 0 0 18px #d7a7f017,
-    0 0 0 40px #90c1f010;
 }
 .opportunity-card > div:not(.opportunity-card-art) {
   padding-left: 20px;

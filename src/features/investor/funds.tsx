@@ -34,16 +34,6 @@ function formatCountdown(dateString: string | null): string | null {
 }
 
 function FundCard({ fund }: { fund: Fund }) {
-  const theme =
-    fund.asset.sector === "space_satellites"
-      ? "space"
-      : fund.asset.sector === "climate_energy"
-        ? "energy"
-        : fund.asset.sector === "robotics_automation"
-          ? "robotics"
-          : fund.asset.sector === "fintech_payments"
-            ? "finance"
-            : "company";
   const countdown = formatCountdown(fund.closes_at);
   const allocated = parseFloat(fund.supply_allocated);
   const total = fund.supply_total ? parseFloat(fund.supply_total) : null;
@@ -53,7 +43,7 @@ function FundCard({ fund }: { fund: Fund }) {
   return (
     <Link to={`/funds/${fund.id}`} className="opportunity-link">
       <Card className="opportunity-card flex h-full flex-col transition-shadow hover:ring-2 hover:ring-primary/20">
-        <div className="opportunity-card-art" data-theme={theme} aria-hidden="true">
+        <div className="opportunity-card-art" aria-hidden="true">
           <span>{fund.asset.name.slice(0, 1)}</span>
         </div>
         <CardHeader>
