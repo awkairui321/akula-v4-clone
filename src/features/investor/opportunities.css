@@ -46,10 +46,23 @@
 }
 .opportunity-card-art[data-theme="space"] {
   background:
-    radial-gradient(circle at 30% 22%, #ffffff99 1px, transparent 2px),
-    radial-gradient(circle at 58% 70%, #ffffff80 1px, transparent 2px),
-    radial-gradient(circle at 72% 16%, #ffffffaa 1px, transparent 2px),
-    linear-gradient(125deg, #142b46, #2b5273 65%, #5e7f91);
+    radial-gradient(circle at 12% 22%, #fff 0.7px, transparent 1.4px),
+    radial-gradient(circle at 29% 78%, #dbe8ff 0.8px, transparent 1.6px),
+    radial-gradient(circle at 43% 18%, #fff 0.7px, transparent 1.4px),
+    radial-gradient(circle at 55% 83%, #e5d4ff 0.8px, transparent 1.6px),
+    radial-gradient(circle at 88% 22%, #fff 0.7px, transparent 1.4px),
+    radial-gradient(
+      ellipse at 73% 45%,
+      transparent 0 13%,
+      #e7a8f328 14%,
+      transparent 19%,
+      #94baf343 21%,
+      transparent 29%,
+      #bd72d53b 36%,
+      transparent 49%
+    ),
+    radial-gradient(ellipse at 72% 45%, #f4d4ff, #b56bd8 4%, #594d94 16%, transparent 38%),
+    linear-gradient(130deg, #10172b, #382549 58%, #172f49);
   color: #edf4f8;
 }
 .opportunity-card-art[data-theme="robotics"] {
@@ -82,21 +95,16 @@
   font-size: 64px;
   line-height: 0.9;
 }
-.opportunity-card-art .opportunity-banner-icon {
-  position: absolute;
-  right: 24px;
-  top: 24px;
-  z-index: 1;
-  width: 76px;
-  height: 76px;
-  opacity: 0.55;
-}
 .opportunity-card-art[data-theme="space"]::after {
-  border-color: #b4d4e53b;
-  background: radial-gradient(circle at 35% 65%, #769bb54d, #c9e4ee08 60%);
+  right: -28px;
+  top: -86px;
+  width: 245px;
+  height: 245px;
+  border-color: #ecd0ff42;
+  background: radial-gradient(ellipse at 50% 65%, #d08ae51f, transparent 65%);
   box-shadow:
-    0 0 0 22px #e1eff808,
-    0 0 0 48px #e1eff807;
+    0 0 0 18px #d7a7f017,
+    0 0 0 40px #90c1f010;
 }
 .opportunity-card > div:not(.opportunity-card-art) {
   padding-left: 20px;

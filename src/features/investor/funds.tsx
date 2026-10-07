@@ -18,17 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { formatPrice, formatPriceCompact, formatPricePrecise } from "@/lib/currency";
-import {
-  ArrowRightIcon,
-  ClockIcon,
-  SearchIcon,
-  CompassIcon,
-  SatelliteIcon,
-  BotIcon,
-  SunIcon,
-  LandmarkIcon,
-  Building2Icon,
-} from "lucide-react";
+import { ArrowRightIcon, ClockIcon, SearchIcon, CompassIcon } from "lucide-react";
 import "./opportunities.css";
 
 function formatCountdown(dateString: string | null): string | null {
@@ -54,16 +44,6 @@ function FundCard({ fund }: { fund: Fund }) {
           : fund.asset.sector === "fintech_payments"
             ? "finance"
             : "company";
-  const BannerIcon =
-    theme === "space"
-      ? SatelliteIcon
-      : theme === "energy"
-        ? SunIcon
-        : theme === "robotics"
-          ? BotIcon
-          : theme === "finance"
-            ? LandmarkIcon
-            : Building2Icon;
   const countdown = formatCountdown(fund.closes_at);
   const allocated = parseFloat(fund.supply_allocated);
   const total = fund.supply_total ? parseFloat(fund.supply_total) : null;
@@ -75,7 +55,6 @@ function FundCard({ fund }: { fund: Fund }) {
       <Card className="opportunity-card flex h-full flex-col transition-shadow hover:ring-2 hover:ring-primary/20">
         <div className="opportunity-card-art" data-theme={theme} aria-hidden="true">
           <span>{fund.asset.name.slice(0, 1)}</span>
-          <BannerIcon className="opportunity-banner-icon" strokeWidth={1} />
         </div>
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
@@ -160,6 +139,7 @@ function isClosingSoon(fund: Fund): boolean {
 export default function FundsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [industryFilter, setIndustryFilter] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["funds"],
@@ -194,8 +174,23 @@ export default function FundsPage() {
       result = result.filter((f) => f.state === "open" && isClosingSoon(f));
     }
 
+    if (industryFilter) result = result.filter((f) => f.asset.sector === industryFilter);
+
     return result;
-  }, [funds, search, statusFilter]);
+  }, [funds, search, statusFilter, industryFilter]);
+
+  const industryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const fund of funds) {
+      if (statusFilter === "live" && fund.state !== "open") continue;
+      if (statusFilter === "closing_soon" && (fund.state !== "open" || !isClosingSoon(fund)))
+        continue;
+      counts[fund.asset.sector] = (counts[fund.asset.sector] ?? 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) =>
+      (SECTOR_LABELS[a[0]] ?? a[0]).localeCompare(SECTOR_LABELS[b[0]] ?? b[0]),
+    );
+  }, [funds, statusFilter]);
 
   return (
     <div className="opportunities-view flex flex-col gap-4">
@@ -236,6 +231,29 @@ export default function FundsPage() {
             </Button>
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2" aria-label="Filter by industry">
+        <Button
+          variant={industryFilter === null ? "secondary" : "outline"}
+          aria-pressed={industryFilter === null}
+          onClick={() => setIndustryFilter(null)}
+          className="h-9 rounded-full text-sm"
+        >
+          All industries
+        </Button>
+        {industryCounts.map(([industry, count]) => (
+          <Button
+            key={industry}
+            variant={industryFilter === industry ? "secondary" : "outline"}
+            aria-pressed={industryFilter === industry}
+            onClick={() => setIndustryFilter(industryFilter === industry ? null : industry)}
+            className="h-9 rounded-full text-sm"
+          >
+            {SECTOR_LABELS[industry] ?? industry}{" "}
+            <span className="text-muted-foreground">{count}</span>
+          </Button>
+        ))}
       </div>
 
       {/* Summary line */}
