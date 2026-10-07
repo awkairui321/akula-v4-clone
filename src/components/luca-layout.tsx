@@ -78,7 +78,8 @@ export default function LucaLayout() {
     navItems.find(
       (item) =>
         location.pathname === item.to ||
-        (item.to !== home && location.pathname.startsWith(`${item.to}/`)),
+        (item.to !== home && location.pathname.startsWith(`${item.to}/`)) ||
+        (item.to === "/luca/deals" && location.pathname.startsWith("/luca/projects/")),
     ) ?? (location.pathname === home ? navItems[0] : undefined);
 
   const initials = user?.email ? user.email[0].toUpperCase() : "~";

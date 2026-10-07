@@ -32,6 +32,7 @@ import DiscoverPage from "@/features/investor/discover";
 import DiscoverDetailPage from "@/features/investor/discover-detail";
 import AdminDashboard from "@/features/admin/dashboard";
 import AdminVehiclesPage from "@/features/admin/vehicles/vehicles";
+import ProjectPage from "@/features/admin/vehicles/project";
 import AdminVehicleOverviewPage from "@/features/admin/vehicles/vehicle-overview";
 import AdminSubscriptionsPage from "@/features/admin/subscription-inbox";
 import AdminSubscriptionHistoryPage from "@/features/admin/subscription-history";
@@ -213,6 +214,7 @@ function App() {
                   <Route element={<LucaRoute />}>
                     <Route element={<LucaLayout />}>
                       <Route path="/luca/deals" element={<AdminVehiclesPage />} />
+                      <Route path="/luca/projects/:assetId" element={<ProjectPage />} />
                       <Route path="/luca/deals/:id" element={<AdminVehicleOverviewPage />} />
                       <Route element={<TeamRoute />}>
                         <Route

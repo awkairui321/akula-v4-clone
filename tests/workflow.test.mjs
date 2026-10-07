@@ -1236,3 +1236,64 @@ test("Fund Manager stages their own edits for review in one step, and only they 
   w.command(manager(), { type: "approve", id: staged.id });
   assert.equal(w.currentVersion(1).snapshot.hook, "Manager headline");
 });
+
+test("a project holds several funds that share the company; only the new fund starts as a draft", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  const helios = db.funds.filter((f) => f.asset.id === db.findFundById(1).asset.id);
+  assert.ok(helios.length >= 2);
+  assert.ok(helios.every((f) => f.codename === "Project Helios"));
+  // A draft sibling is invisible to investors.
+  const shelf = await (await request("funds", investor())).json();
+  assert.ok(!shelf.funds.some((f) => f.id !== 1 && f.asset.id === db.findFundById(1).asset.id));
+  assert.equal(
+    (await request(`funds/${helios.find((f) => f.id !== 1).id}`, investor())).status,
+    404,
+  );
+  // Add a fund to the project.
+  const added = await request("funds", team, "POST", {
+    fund: { project_fund_id: 1, fund_label: "SPV III", target_amount: 2000000 },
+  });
+  assert.equal(added.status, 200);
+  const fund = (await added.json()).fund;
+  assert.equal(fund.name, "Solara Grid SPV III");
+  assert.equal(fund.asset.id, db.findFundById(1).asset.id);
+  assert.equal(fund.state, "draft");
+  assert.equal(fund.supply_allocated, "0");
+  assert.equal(
+    (await request("funds", team, "POST", { fund: { project_fund_id: 1 } })).status,
+    422,
+  );
+  assert.equal(
+    (
+      await request("funds", investor(), "POST", {
+        fund: { project_fund_id: 1, fund_label: "x", target_amount: 1 },
+      })
+    ).status,
+    401,
+  );
+  // Company information is shared across the project's funds.
+  await request("funds/1", team, "PATCH", { fund: { asset: { tagline: "Shared tagline" } } });
+  assert.equal(db.findFundById(fund.id).asset.tagline, "Shared tagline");
+});
+
+test("each fund has one fee schedule, edited with the fund and shown the same to every investor", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  assert.equal(db.investorPricing.length, 0);
+  assert.equal(
+    (await request("funds/1", team, "PATCH", { fund: { management_fee_pct: "101" } })).status,
+    422,
+  );
+  assert.equal(
+    (
+      await request("funds/1", team, "PATCH", {
+        fund: { subscription_fee_pct: "3", management_fee_pct: "2", carried_interest_pct: "20" },
+      })
+    ).status,
+    200,
+  );
+  const fund = db.findFundById(1);
+  assert.deepEqual(
+    [fund.subscription_fee_pct, fund.management_fee_pct, fund.carried_interest_pct],
+    ["3", "2", "20"],
+  );
+});

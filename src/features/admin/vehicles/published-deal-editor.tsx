@@ -483,6 +483,9 @@ function payloadFrom(draft: Draft): Record<string, unknown> {
       supply_total: orNull(draft.supply_total),
       min_subscription: draft.min_subscription,
       max_subscription: orNull(draft.max_subscription),
+      subscription_fee_pct: draft.subscription_fee_pct.trim(),
+      management_fee_pct: draft.management_fee_pct.trim(),
+      carried_interest_pct: draft.carried_interest_pct.trim(),
       opened_at: draft.opened_at === "" ? null : new Date(draft.opened_at).toISOString(),
       holding_period_note: orNull(draft.holding_period_note),
       implied_valuation: orNull(draft.implied_valuation),
@@ -1098,6 +1101,41 @@ export default function PublishedDealEditor({
                 </Select>
               </Field>
             </div>
+          </EditorSection>
+
+          <EditorSection label="Fees">
+            <p className="text-sm text-muted-foreground">
+              This fund has one fee schedule. It applies to every investor in it and is published
+              with the rest of the offering. Existing applications keep the fees they were made at.
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <TextField
+                label="Subscription fee %"
+                type="number"
+                value={draft.subscription_fee_pct}
+                onChange={(v) => set("subscription_fee_pct", v)}
+              />
+              <TextField
+                label="Annual management fee %"
+                type="number"
+                value={draft.management_fee_pct}
+                onChange={(v) => set("management_fee_pct", v)}
+              />
+              <TextField
+                label="Carried interest %"
+                type="number"
+                value={draft.carried_interest_pct}
+                onChange={(v) => set("carried_interest_pct", v)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Partner-referred investors pay a {draft.subscription_fee_pct || "0"}% subscription
+              fee. Independent investors pay{" "}
+              {Number.isFinite(Number(draft.subscription_fee_pct))
+                ? Number(draft.subscription_fee_pct) + 1
+                : "—"}
+              %, one percentage point more.
+            </p>
           </EditorSection>
 
           <EditorSection label="Company and opportunity narrative">

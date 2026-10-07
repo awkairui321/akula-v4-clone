@@ -930,8 +930,52 @@ export const adminHandlers = [
     const user = requireAdmin(request);
     if (!user) return unauthorized();
     const body = (await request.json()) as {
-      fund?: { company_name?: string; codename?: string; sector?: string; target_amount?: number };
+      fund?: {
+        company_name?: string;
+        codename?: string;
+        sector?: string;
+        target_amount?: number;
+        /** Add a fund to the project that this fund belongs to. */
+        project_fund_id?: number;
+        fund_label?: string;
+      };
     };
+    const projectFund =
+      body.fund?.project_fund_id !== undefined
+        ? findFundById(Number(body.fund.project_fund_id))
+        : undefined;
+    if (body.fund?.project_fund_id !== undefined) {
+      const label = body.fund.fund_label?.trim();
+      const target = Number(body.fund.target_amount);
+      if (!projectFund) return HttpResponse.json({ error: "Project not found" }, { status: 404 });
+      if (!label || !(target > 0))
+        return HttpResponse.json(
+          { error: "Fund name and target amount are required" },
+          { status: 422 },
+        );
+      // The new fund shares the project's company and codename and starts with its fee schedule.
+      const sibling: Fund = {
+        ...structuredClone(projectFund),
+        id: Math.max(...funds.map((f) => f.id), 0) + 1,
+        name: `${projectFund.asset.name} ${label}`,
+        descriptor: "",
+        hook: projectFund.hook,
+        state: "draft",
+        supply_total: String(target),
+        supply_allocated: "0",
+        opened_at: null,
+        closes_at: null,
+        activities: [],
+        share_class: {
+          ...projectFund.share_class,
+          id: Math.max(...funds.map((f) => f.share_class.id), 0) + 1,
+        },
+      };
+      funds.push(sibling);
+      recordDealChange(user, sibling.id, ["new fund"]);
+      persist();
+      return HttpResponse.json({ fund: sibling });
+    }
     const { company_name, codename, sector, target_amount } = body.fund ?? {};
     if (!company_name?.trim() || !codename?.trim() || !target_amount || target_amount <= 0) {
       return HttpResponse.json(
@@ -1085,6 +1129,15 @@ export const adminHandlers = [
     }
     if (patch.asset && typeof patch.asset === "object") {
       Object.assign(fund.asset, patch.asset);
+      // The company belongs to the project, so its funds share one description of it.
+      for (const sibling of funds.filter((f) => f.id !== fund.id && f.asset.id === fund.asset.id)) {
+        Object.assign(sibling.asset, structuredClone(patch.asset));
+        recordDealChange(
+          user,
+          sibling.id,
+          Object.keys(patch.asset as object).map((key) => `asset.${key}`),
+        );
+      }
     }
     if (patch.share_class && typeof patch.share_class === "object") {
       Object.assign(fund.share_class, patch.share_class);

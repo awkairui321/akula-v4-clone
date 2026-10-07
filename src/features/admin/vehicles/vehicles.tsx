@@ -5,10 +5,11 @@ import { api } from "@/lib/api";
 import { SECTOR_LABELS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
 import type { Version } from "@/lib/workflow-types";
-import { daysUntil, formatClose, allocationOf, StateBadge } from "./deal-status";
+import { daysUntil, formatClose, StateBadge } from "./deal-status";
 import { usePublication, publicationStatus } from "./use-publication";
+import { groupProjects, fundLabel, type Project } from "./projects";
 import { useAuth } from "@/contexts/auth-context";
-import { formatPrice, formatPriceCompact, formatPricePrecise } from "@/lib/currency";
+import { formatPrice } from "@/lib/currency";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,89 +25,76 @@ import {
 } from "@/components/ui/select";
 import { ArrowRightIcon, ClockIcon, PlusIcon, SearchIcon } from "lucide-react";
 
-/** Last reported round valuation is free text on the asset (e.g. "$157B"). */
-function lastRoundValuation(fund: Fund): string {
-  const rounds = fund.asset.funding_rounds;
-  return rounds.length > 0 ? rounds[rounds.length - 1].valuation : "—";
-}
-
-/** Whole card is the link: click anywhere to open the deal. */
-function VehicleCard({ fund, status }: { fund: Fund; status?: string | null }) {
-  const days = daysUntil(fund.closes_at);
-  const { allocated, total, pct } = allocationOf(fund);
+/** Whole card is the link: click anywhere to open the project and see its funds. */
+function ProjectCard({ project, status }: { project: Project; status?: string | null }) {
+  const lead = project.funds[0];
+  const closeDays = project.nextClose ? daysUntil(project.nextClose) : null;
+  const pct =
+    project.target && project.target > 0
+      ? Math.min(100, Math.round((project.committed / project.target) * 100))
+      : null;
 
   return (
     <Link
-      to={`/luca/deals/${fund.id}`}
-      aria-label={`Open ${fund.codename}`}
+      to={`/luca/projects/${project.key}`}
+      aria-label={`Open ${project.codename}`}
       className="group block h-full rounded-xl focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
     >
       <Card className="flex h-full flex-col transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
         <CardContent className="flex flex-1 flex-col gap-3 pt-6">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="truncate text-lg font-semibold">{fund.codename}</p>
+              <p className="truncate text-lg font-semibold">{project.codename}</p>
               <p className="truncate text-sm text-muted-foreground">
-                {fund.asset.name} · {fund.fund_manager.name}
+                {project.company} · {SECTOR_LABELS[project.sector] ?? project.sector}
               </p>
             </div>
-            <StateBadge fund={fund} />
+            <Badge variant="secondary" className="shrink-0 text-[10px]">
+              {project.funds.length} fund{project.funds.length === 1 ? "" : "s"}
+            </Badge>
           </div>
           {status && <p className="text-xs font-medium text-amber-700">{status}</p>}
 
           <p className="line-clamp-2 text-sm text-muted-foreground">
-            {fund.hook || fund.asset.description}
+            {lead.hook || lead.asset.description}
           </p>
 
-          <div className="flex flex-wrap gap-1.5">
-            <Badge variant="secondary" className="text-[10px]">
-              {SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}
-            </Badge>
-            <Badge variant="outline" className="text-[10px]">
-              {fund.deal_type === "primary" ? "Primary" : "Secondary"}
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-            <span className="text-muted-foreground">Company valuation</span>
-            <span className="text-right font-medium">{lastRoundValuation(fund)}</span>
-            <span className="text-muted-foreground">Acquired valuation</span>
-            <span className="text-right font-medium">
-              {fund.implied_valuation ? formatPriceCompact(fund.implied_valuation) : "—"}
-            </span>
-            <span className="text-muted-foreground">Price / share</span>
-            <span className="text-right font-medium">{formatPricePrecise(fund.price)}</span>
-            <span className="text-muted-foreground">Minimum</span>
-            <span className="text-right font-medium">{formatPrice(fund.min_subscription)}</span>
-          </div>
+          <ul className="space-y-1 text-sm">
+            {project.funds.map((fund) => (
+              <li key={fund.id} className="flex items-center justify-between gap-3">
+                <span className="truncate">{fundLabel(fund)}</span>
+                <StateBadge fund={fund} />
+              </li>
+            ))}
+          </ul>
 
           <div className="mt-auto space-y-2 pt-1">
-            {pct !== null && total !== null ? (
+            {pct !== null && project.target !== null ? (
               <div className="space-y-1">
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted-foreground/20">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
                 </div>
                 <div className="flex justify-between text-[11px] text-muted-foreground">
                   <span>
-                    {formatPrice(allocated)} of {formatPrice(total)} committed
+                    {formatPrice(project.committed)} of {formatPrice(project.target)} committed
                   </span>
                   <span>{pct}%</span>
                 </div>
               </div>
             ) : (
               <p className="text-[11px] text-muted-foreground">
-                {formatPrice(allocated)} committed · no cap set
+                {formatPrice(project.committed)} committed · no cap set
               </p>
             )}
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <ClockIcon className="size-3.5" />
-                {fund.closes_at && days !== null && days > 0
-                  ? `Closes ${formatCloseDate(fund.closes_at)} · ${formatClose(days)}`
-                  : formatClose(days)}
+                {project.nextClose && closeDays !== null && closeDays > 0
+                  ? `Next close ${formatCloseDate(project.nextClose)} · ${formatClose(closeDays)}`
+                  : "No open close date"}
               </span>
               <span className="flex items-center gap-1 text-primary group-hover:underline">
-                Open deal
+                Open project
                 <ArrowRightIcon className="size-3.5" />
               </span>
             </div>
@@ -197,8 +185,8 @@ function NewDealDialog({
       <DialogContent className="max-w-md">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="tracking-wide text-muted-foreground uppercase">New deal</p>
-            <DialogTitle className="mt-1">Add a deal under LUCA's terms</DialogTitle>
+            <p className="tracking-wide text-muted-foreground uppercase">New project</p>
+            <DialogTitle className="mt-1">Add a project under LUCA's terms</DialogTitle>
           </div>
         </div>
 
@@ -299,10 +287,10 @@ function ApprovalBand({ waiting, funds }: { waiting: Version[]; funds: Fund[] })
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">
-                    {fund?.codename ?? `Offering ${version.fundId}`}
+                    {fund?.name ?? `Offering ${version.fundId}`}
                     <span className="font-normal text-muted-foreground">
                       {" "}
-                      · {fund?.asset.name} · version {version.number}
+                      · {fund?.codename} · version {version.number}
                     </span>
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
@@ -330,6 +318,22 @@ function ApprovalBand({ waiting, funds }: { waiting: Version[]; funds: Fund[] })
   );
 }
 
+/** One line for a project: how many of its funds are waiting on someone. */
+function projectStatus(
+  project: Project,
+  versions: Version[],
+  unpublished: { fundId: number; fields: string[] }[],
+): string | null {
+  const labels = project.funds
+    .map((f) => publicationStatus(f.id, versions, unpublished)?.key)
+    .filter(Boolean);
+  const waiting = labels.filter((k) => k === "update_waiting" || k === "awaiting_first").length;
+  if (waiting) return `${waiting} fund${waiting === 1 ? "" : "s"} awaiting approval`;
+  const team = labels.filter((k) => k === "with_team").length;
+  if (team) return `${team} fund${team === 1 ? "" : "s"} with the Investment Team`;
+  return labels.length ? "Unpublished edits" : null;
+}
+
 export default function AdminVehiclesPage() {
   const navigate = useNavigate();
   const [newDealOpen, setNewDealOpen] = useState(false);
@@ -346,53 +350,58 @@ export default function AdminVehiclesPage() {
   const { user } = useAuth();
   const publication = usePublication();
 
+  const projects = useMemo(() => groupProjects(funds), [funds]);
+
   const filtered = useMemo(() => {
-    let result = funds;
+    let result = projects;
     if (search.trim()) {
       const q = search.toLowerCase();
-      result = result.filter((f) => {
-        const sectorLabel = SECTOR_LABELS[f.asset.sector] ?? f.asset.sector;
+      result = result.filter((project) => {
+        const sectorLabel = SECTOR_LABELS[project.sector] ?? project.sector;
         return (
-          f.name.toLowerCase().includes(q) ||
-          f.codename.toLowerCase().includes(q) ||
-          f.asset.name.toLowerCase().includes(q) ||
+          project.codename.toLowerCase().includes(q) ||
+          project.company.toLowerCase().includes(q) ||
           sectorLabel.toLowerCase().includes(q) ||
-          f.hook?.toLowerCase().includes(q)
+          project.funds.some(
+            (f) => f.name.toLowerCase().includes(q) || f.hook?.toLowerCase().includes(q),
+          )
         );
       });
     }
     if (statusFilter === "live") {
-      result = result.filter((f) => f.state === "open");
+      result = result.filter((p) => p.funds.some((f) => f.state === "open"));
     } else if (statusFilter === "closing_soon") {
-      result = result.filter((f) => f.state === "open" && isClosingSoon(f));
+      result = result.filter((p) => p.funds.some((f) => f.state === "open" && isClosingSoon(f)));
     }
     if (sectorFilter) {
-      result = result.filter((f) => f.asset.sector === sectorFilter);
+      result = result.filter((p) => p.sector === sectorFilter);
     }
-    return [...result].sort(compareByClosing);
-  }, [funds, search, statusFilter, sectorFilter]);
+    // A project sorts by its most urgent fund.
+    const lead = (p: Project) => [...p.funds].sort(compareByClosing)[0];
+    return [...result].sort((a, b) => compareByClosing(lead(a), lead(b)));
+  }, [projects, search, statusFilter, sectorFilter]);
 
   const sectorCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const f of funds) {
-      counts[f.asset.sector] = (counts[f.asset.sector] ?? 0) + 1;
+    for (const project of projects) {
+      counts[project.sector] = (counts[project.sector] ?? 0) + 1;
     }
     return counts;
-  }, [funds]);
+  }, [projects]);
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="tracking-wide text-muted-foreground uppercase">Deal state management</p>
-          <h1 className="text-3xl tracking-tight">Vehicles and opportunities</h1>
+          <p className="tracking-wide text-muted-foreground uppercase">Deals</p>
+          <h1 className="text-3xl tracking-tight">Projects and funds</h1>
           <p className="text-muted-foreground">
-            Prepare the canonical opportunity review and materials shared with EAMs and investors.
+            Each project is one company. Open a project to see the funds raising into it.
           </p>
         </div>
         <Button onClick={() => setNewDealOpen(true)}>
           <PlusIcon className="size-4" />
-          New deal
+          New project
         </Button>
       </div>
 
@@ -437,7 +446,7 @@ export default function AdminVehiclesPage() {
           className="h-9 rounded-full text-sm"
         >
           All sectors
-          <span className="ml-1.5 text-muted-foreground">{funds.length}</span>
+          <span className="ml-1.5 text-muted-foreground">{projects.length}</span>
         </Button>
         {Object.entries(sectorCounts)
           .sort((a, b) => b[1] - a[1])
@@ -454,25 +463,23 @@ export default function AdminVehiclesPage() {
           ))}
       </div>
 
-      {isLoading && <p className="py-12 text-center text-muted-foreground">Loading vehicles...</p>}
+      {isLoading && <p className="py-12 text-center text-muted-foreground">Loading projects...</p>}
 
       {!isLoading && funds.length === 0 && (
-        <p className="py-12 text-center text-muted-foreground">No vehicles found.</p>
+        <p className="py-12 text-center text-muted-foreground">No projects found.</p>
       )}
 
       {!isLoading && funds.length > 0 && filtered.length === 0 && (
-        <p className="py-12 text-center text-muted-foreground">No vehicles match your filters.</p>
+        <p className="py-12 text-center text-muted-foreground">No projects match your filters.</p>
       )}
 
       {filtered.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((fund) => (
-            <VehicleCard
-              key={fund.id}
-              fund={fund}
-              status={
-                publicationStatus(fund.id, publication.versions, publication.unpublished)?.label
-              }
+          {filtered.map((project) => (
+            <ProjectCard
+              key={project.key}
+              project={project}
+              status={projectStatus(project, publication.versions, publication.unpublished)}
             />
           ))}
         </div>

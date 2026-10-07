@@ -2051,6 +2051,25 @@ for (const spec of dealSpecs) {
   });
 }
 
+// A second vehicle under Project Helios, so a project that holds several funds can be shown.
+// Illustrative placeholder only: it is a draft, so investors never see it.
+{
+  const helios = funds.find((f) => f.id === 1)!;
+  funds.push({
+    ...structuredClone(helios),
+    id: Math.max(...funds.map((f) => f.id)) + 1,
+    name: "Solara Grid SPV II",
+    descriptor: "Second vehicle (illustrative placeholder)",
+    state: "draft",
+    supply_total: "3000000",
+    supply_allocated: "0",
+    opened_at: null,
+    closes_at: daysFromNow(60),
+    share_class: { ...helios.share_class, id: Math.max(...funds.map((f) => f.share_class.id)) + 1 },
+    activities: [],
+  });
+}
+
 export function findFundById(id: number): Fund | undefined {
   return funds.find((f) => f.id === id);
 }
@@ -2117,57 +2136,7 @@ export function findFundById(id: number): Fund | undefined {
   ask(2, "bank_details", 2, 14);
 }
 
-// Made-up per-investor terms so the investor-pricing view has examples.
-investorPricing.push(
-  {
-    id: nextInvestorPricingId(),
-    fund_id: 1,
-    investor_id: 11,
-    price: "178.00",
-    subscription_fee_pct: "2.5",
-    management_fee_pct: "1.25",
-    carried_interest_pct: "12.5",
-    implied_valuation: "1780000000",
-    note: "Founding-adviser terms agreed with Meridian Capital Advisors.",
-    updated_at: daysAgo(12),
-  },
-  {
-    id: nextInvestorPricingId(),
-    fund_id: 1,
-    investor_id: 14,
-    price: null,
-    subscription_fee_pct: "3",
-    management_fee_pct: null,
-    carried_interest_pct: null,
-    implied_valuation: null,
-    note: "Fee concession for a repeat investor.",
-    updated_at: daysAgo(9),
-  },
-  {
-    id: nextInvestorPricingId(),
-    fund_id: 2,
-    investor_id: 16,
-    price: "92.00",
-    subscription_fee_pct: "3",
-    management_fee_pct: "1.25",
-    carried_interest_pct: "15",
-    implied_valuation: null,
-    note: "Volume commitment across two vehicles.",
-    updated_at: daysAgo(6),
-  },
-  {
-    id: nextInvestorPricingId(),
-    fund_id: 8,
-    investor_id: 2,
-    price: "205.50",
-    subscription_fee_pct: "3.5",
-    management_fee_pct: null,
-    carried_interest_pct: null,
-    implied_valuation: "6000000000",
-    note: null,
-    updated_at: daysAgo(3),
-  },
-);
+// Every fund has one fee schedule; per-investor terms are no longer seeded.
 
 // ---------------------------------------------------------------------------
 // Discover companies (no live Akula vehicle)

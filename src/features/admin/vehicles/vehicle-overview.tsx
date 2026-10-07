@@ -14,7 +14,6 @@ import DealOverviewPage from "@/components/deal-overview-page";
 import PublishedDealEditor from "@/features/admin/vehicles/published-deal-editor";
 import DealDocuments from "./deal-documents";
 import DealSubscriptions from "./deal-subscriptions";
-import DealFees from "./deal-fees";
 import PublicationBar from "./publication-bar";
 import DealReview from "./deal-review";
 import DealVersions from "./deal-versions";
@@ -22,7 +21,7 @@ import { usePublication } from "./use-publication";
 import { useAuth } from "@/contexts/auth-context";
 import { StateBadge, allocationOf, daysUntil, formatClose } from "./deal-status";
 
-const TABS = ["review", "overview", "subscriptions", "documents", "fees", "versions"] as const;
+const TABS = ["review", "overview", "subscriptions", "documents", "versions"] as const;
 type DealTab = (typeof TABS)[number];
 
 function Count({ n }: { n: number }) {
@@ -56,12 +55,12 @@ function OpsVehicleOverview({ fund }: { fund: Fund }) {
   );
 }
 
-/** Offering workspace: overview, documents and fees; client subscriptions are manager-only. */
+/** One fund's workspace: overview (fees included), documents and versions; subscriptions are manager-only. */
 function DealWorkspace({ fund }: { fund: Fund }) {
   const { user } = useAuth();
   const manager = user?.role === "luca";
   const [searchParams, setSearchParams] = useSearchParams();
-  const requested = searchParams.get("tab") === "pricing" ? "fees" : searchParams.get("tab");
+  const requested = searchParams.get("tab");
   const tab: DealTab = (TABS as readonly string[]).includes(requested ?? "")
     ? (requested as DealTab)
     : "overview";
@@ -111,28 +110,24 @@ function DealWorkspace({ fund }: { fund: Fund }) {
 
       <div className="space-y-6">
         <Link
-          to="/luca/deals"
+          to={`/luca/projects/${fund.asset.id}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeftIcon className="size-4" />
-          All deals
+          {fund.codename}
         </Link>
 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight">{fund.codename}</h1>
+              <h1 className="text-3xl font-bold tracking-tight">{fund.name}</h1>
               <StateBadge fund={fund} />
             </div>
             <p className="mt-1 text-muted-foreground">
-              {fund.asset.name} · {SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector} ·{" "}
-              {fund.name}
+              {fund.codename} · {SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setSearchParams({ tab: "fees" })}>
-              Configure fees
-            </Button>
             <Button variant="outline" size="sm" onClick={() => setPreview("eam")}>
               Preview as EAM
             </Button>
@@ -145,7 +140,7 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-8 gap-y-5 border-y py-5 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-5 border-y py-5 lg:grid-cols-[2fr_1fr_1fr_1fr_1.3fr_1.3fr]">
           <div className="col-span-2 lg:col-span-1">
             <p className="text-xs text-muted-foreground">Committed</p>
             <p className="mt-1 text-xl font-semibold tabular-nums">
@@ -193,6 +188,14 @@ function DealWorkspace({ fund }: { fund: Fund }) {
             </p>
           </div>
           <div>
+            <p className="text-xs text-muted-foreground">Fees</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              {fund.subscription_fee_pct}% · {fund.management_fee_pct}% ·{" "}
+              {fund.carried_interest_pct}%
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Subscription · management · carry</p>
+          </div>
+          <div>
             <p className="text-xs text-muted-foreground">Readiness</p>
             <p className="mt-1 text-sm">
               {fund.asset.risks.length} risks · {documentCount} documents
@@ -232,9 +235,6 @@ function DealWorkspace({ fund }: { fund: Fund }) {
               Documents <Count n={documentCount} />
             </span>
           </TabsTrigger>
-          <TabsTrigger value="fees" className="flex-none">
-            <span className="flex items-center gap-2">Fees</span>
-          </TabsTrigger>
           <TabsTrigger value="versions" className="flex-none">
             Versions
           </TabsTrigger>
@@ -263,12 +263,6 @@ function DealWorkspace({ fund }: { fund: Fund }) {
         </TabsContent>
         <TabsContent value="documents" className="pt-6">
           <DealDocuments fund={fund} />
-        </TabsContent>
-        <TabsContent value="fees" className="pt-6">
-          <DealFees
-            key={`${fund.id}-${fund.subscription_fee_pct}-${fund.management_fee_pct}-${fund.carried_interest_pct}`}
-            fund={fund}
-          />
         </TabsContent>
       </Tabs>
 
