@@ -936,3 +936,42 @@ test("restoring an existing demo adds the Investment Team without resetting clie
   assert.equal(db.users.find((u) => u.id === 2).email, "preserved@example.com");
   assert.equal(db.users.filter((u) => u.role === "investment_team").length, 1);
 });
+
+test("Ops publishes Investment Team materials only after exact-version manager approval", () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  w.command(team, { type: "prepare", id: 1 });
+  const version = w.workflow.versions.at(-1);
+  w.command(team, { type: "review", id: version.id });
+  assert.throws(() => w.command(ops(), { type: "approve", id: version.id }));
+  assert.throws(() => w.command(ops(), { type: "publish", id: version.id }));
+  w.command(manager(), { type: "approve", id: version.id });
+  w.command(ops(), { type: "publish", id: version.id });
+  assert.equal(w.currentVersion(1).id, version.id);
+});
+
+test("RM can route processing support to Ops and the investor sees the resolution", () => {
+  w.command(rm(), {
+    type: "case",
+    target: investor().id,
+    status: "ops",
+    text: "Please investigate the investor's receipt",
+  });
+  const supportCase = w.workflow.cases.at(-1);
+  assert.ok(w.view(ops()).cases.some((c) => c.id === supportCase.id));
+  w.command(ops(), { type: "reply", id: supportCase.id, text: "Receipt reconciled" });
+  w.command(ops(), { type: "resolve", id: supportCase.id });
+  const visible = w.view(investor()).cases.find((c) => c.id === supportCase.id);
+  assert.equal(visible.status, "resolved");
+  assert.equal(visible.messages.at(-1).text, "Receipt reconciled");
+});
+
+test("restoring a demo without Ops preserves client data and restores operational access", () => {
+  const saved = db.exportDemoState();
+  saved.arrays.users = saved.arrays.users.filter((u) => u.role !== "ops");
+  saved.arrays.users.find((u) => u.id === 2).email = "preserved@example.com";
+  db.restoreDemoState(saved);
+  assert.equal(ops().email, "ops@akula.vc");
+  assert.equal(investor().email, "preserved@example.com");
+  db.restoreDemoState(db.exportDemoState());
+  assert.equal(db.users.filter((u) => u.role === "ops").length, 1);
+});

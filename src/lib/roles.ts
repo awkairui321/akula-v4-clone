@@ -15,7 +15,7 @@ export function landingPathForRole(user: UserLike, activeProfile?: ActiveProfile
 
   if (user.role === "investment_team") return "/luca/deals";
   if (user.role === "rm") return "/rm";
-  if (user.role === "ops") return "/workflows";
+  if (user.role === "ops") return "/ops";
 
   if (user.role === "luca") return "/luca";
 
