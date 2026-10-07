@@ -164,6 +164,7 @@ users.push(
   ].map((u) => ({ ...users[0], ...u })),
 );
 
+const opsSeed = structuredClone(users.find((user) => user.role === "ops")!);
 const investmentTeamSeed = structuredClone(users.find((user) => user.role === "investment_team")!);
 
 export function findUserByEmail(email: string): MockUser | undefined {
@@ -5099,6 +5100,7 @@ export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
     const target = demoArrays[key] as unknown[];
     target.splice(0, target.length, ...structuredClone(savedRows));
   }
+  if (!users.some((user) => user.role === "ops")) users.push(structuredClone(opsSeed));
   if (!users.some((user) => user.role === "investment_team"))
     users.push(structuredClone(investmentTeamSeed));
   consentGrants.clear();

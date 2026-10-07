@@ -8,6 +8,19 @@ import "./workflow.css";
 type Persona = { id: number; label: string; surfaces: string[] };
 const personas: Persona[] = [
   {
+    id: 7,
+    label: "Akula Ops",
+    surfaces: [
+      "Overview",
+      "Investments",
+      "Documents",
+      "Publication",
+      "Demand",
+      "Reporting",
+      "Support",
+    ],
+  },
+  {
     id: 2,
     label: "Investor · Elena Cross",
     surfaces: ["Overview", "Investments", "Documents", "Support", "Reporting", "Company requests"],
@@ -111,6 +124,7 @@ export default function LiveComparePage() {
     { personaId: 9000, surface: "Publication" },
     { personaId: 6, surface: "Overview" },
     { personaId: 1, surface: "Overview" },
+    { personaId: 7, surface: "Overview" },
   ]);
   const updatePersona = (index: number, personaId: number) => {
     const persona = personas.find((item) => item.id === personaId)!;
@@ -175,10 +189,10 @@ export default function LiveComparePage() {
       <header className="live-top">
         <div>
           <p className="wf-eyebrow">SIMULATION CONTROL ROOM</p>
-          <h1>Watch four platforms work together</h1>
+          <h1>Watch five interfaces work together</h1>
           <p>
             Choose a persona and workspace surface for each pane. Simulated actions refresh across
-            the shared records in all four views.
+            the shared records in all five views.
           </p>
         </div>
         <div className="live-tools">

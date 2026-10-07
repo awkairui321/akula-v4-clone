@@ -177,6 +177,7 @@ function App() {
                 <Route element={<AuthRequired />}>
                   <Route path="/workflows" element={<WorkflowPage />} />
                   <Route element={<OpsRoute />}>
+                    <Route path="/ops" element={<WorkflowPage />} />
                     <Route path="/ops/publication/:id" element={<AdminVehicleOverviewPage ops />} />
                   </Route>
                   <Route path="/live-demo" element={<LiveComparePage />} />

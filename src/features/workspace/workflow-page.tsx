@@ -1570,7 +1570,10 @@ function WorkflowPageContent({
           >
             {rm || ops ? (
               <>
-                <Link to="/workflows" className={`rm-brand ${collapsed ? "justify-center" : ""}`}>
+                <Link
+                  to={ops ? "/ops" : "/workflows"}
+                  className={`rm-brand ${collapsed ? "justify-center" : ""}`}
+                >
                   <Circle className="size-5 shrink-0" />
                   {!collapsed && (
                     <span>{ops ? "AKULA · OPERATIONS" : "LUCA · RELATIONSHIP MANAGER"}</span>
@@ -2305,7 +2308,7 @@ function WorkflowPageContent({
             <Panel title="Offering preparation">
               <p>
                 The Investment Team prepares and submits the offering. The Fund Manager approves the
-                exact version; the Investment Team then publishes the approved content.
+                exact version; the Investment Team or Akula Ops then publishes the approved content.
               </p>
               <div className="wf-publication-grid">
                 {d.funds.map((fund) => (

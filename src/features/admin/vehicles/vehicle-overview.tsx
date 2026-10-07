@@ -44,7 +44,7 @@ function OpsVehicleOverview({ fund }: { fund: Fund }) {
         key={fund.id}
         fund={fund}
         viewer="ops"
-        backTo="/workflows"
+        backTo="/ops?surface=Publication"
         backLabel="Back to Ops publication"
         onEditDeal={() => setEditorOpen(true)}
       />
@@ -275,7 +275,7 @@ export default function AdminVehicleOverviewPage({ ops = false }: { ops?: boolea
     return (
       <div className="py-12 text-center">
         <p className="text-muted-foreground">Deal not found.</p>
-        <Link to={ops ? "/workflows" : "/luca/deals"}>
+        <Link to={ops ? "/ops?surface=Publication" : "/luca/deals"}>
           <Button variant="outline" size="sm" className="mt-4">
             <ArrowLeftIcon className="mr-1 size-4" />
             Back to deals

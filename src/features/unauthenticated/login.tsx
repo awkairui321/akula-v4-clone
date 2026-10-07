@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Onboarding and checkout are intentionally left out of this tour for now —
-// all four demo accounts below are already fully set up, so signing in
+// all demo accounts below are already fully set up, so signing in
 // with one lands straight on that party's platform interface. The
 // newinvestor@akula.vc seed account (fresh onboarding) still works if signed
 // in manually, it's just not featured here.
@@ -20,6 +20,7 @@ const DEMO_ACCOUNTS = [
   { email: "luca@akula.vc", label: "LUCA (fund manager)" },
   { email: "investment@akula.vc", label: "LUCA investment team" },
   { email: "rm@akula.vc", label: "LUCA relationship manager" },
+  { email: "ops@akula.vc", label: "Akula Ops" },
 ];
 
 export default function LoginPage() {
