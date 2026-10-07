@@ -33,7 +33,6 @@ const NAV_ITEMS = [
   { to: "/luca/subscriptions", label: "Subscriptions", icon: CreditCard },
   { to: "/luca/clients", label: "Clients", icon: UserCheckIcon },
   { to: "/luca/partners", label: "Partner client book", icon: Building2Icon },
-  { to: "/luca/support", label: "Support", icon: MailIcon },
   { to: "/luca/compliance", label: "Compliance", icon: ShieldCheckIcon },
   { to: "/luca/communications", label: "Communications", icon: MailIcon },
 ];
@@ -54,7 +53,6 @@ export default function LucaLayout() {
         { to: "/rm/partners", label: "Partner client book", icon: Building2Icon },
         { to: "/rm/documents", label: "Documents", icon: ShieldCheckIcon },
         { to: "/rm/reports", label: "Reports", icon: TrendingUp },
-        { to: "/rm/support", label: "Support", icon: MailIcon },
       ]
     : isTeam
       ? NAV_ITEMS.filter((item) => ["/luca/deals", "/luca/publication"].includes(item.to))

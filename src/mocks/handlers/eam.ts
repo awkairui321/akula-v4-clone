@@ -1,4 +1,3 @@
-import { workflow } from "../workflow";
 import { mayDiscover } from "../investor-access";
 import { findUserById } from "../db";
 import { partnerOnboarding } from "../onboarding";
@@ -12,7 +11,6 @@ import {
   highlights,
   nextHighlightId,
   discussions,
-  nextDiscussionMessageId,
   funds,
   findFundById,
   holdings,
@@ -506,54 +504,11 @@ export const eamHandlers = [
     return HttpResponse.json({});
   }),
 
-  // GET /api/v1/eam/discussions?client_id=:id
-  http.get("*/api/v1/eam/discussions", ({ request }) => {
-    const user = currentUser(request);
-    if (!user) return unauthorized();
-    const url = new URL(request.url);
-    const clientId = url.searchParams.get("client_id");
-    const clientIds = myClients(user.id).map((c) => c.id);
-    let mine = discussions.filter((d) => clientIds.includes(d.adviser_client_id));
-    if (clientId) mine = mine.filter((d) => d.adviser_client_id === Number(clientId));
-    return HttpResponse.json(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      mine.map(({ messages, ...rest }) => rest),
-    );
-  }),
-
-  // GET /api/v1/eam/discussions/:id
-  http.get("*/api/v1/eam/discussions/:id", ({ params, request }) => {
-    const discussion = discussions.find((d) => d.id === Number(params.id));
-    const user = currentUser(request);
-    if (!user) return unauthorized();
-    if (!discussion || !myClients(user.id).some((c) => c.id === discussion.adviser_client_id))
-      return HttpResponse.json({ error: "Discussion not found" }, { status: 404 });
-    return HttpResponse.json(discussion);
-  }),
-
-  // POST /api/v1/eam/discussions/:id/messages
-  http.post("*/api/v1/eam/discussions/:id/messages", async ({ params, request }) => {
-    const discussion = discussions.find((d) => d.id === Number(params.id));
-    const user = currentUser(request);
-    if (!user) return unauthorized();
-    if (!discussion || !myClients(user.id).some((c) => c.id === discussion.adviser_client_id))
-      return HttpResponse.json({ error: "Discussion not found" }, { status: 404 });
-    const body = (await request.json()) as { message?: { sender_role?: string; body?: string } };
-    const message = {
-      id: nextDiscussionMessageId(),
-      sender_role: "adviser",
-      body: body.message?.body ?? "",
-      created_at: new Date().toISOString(),
-    };
-    if (!message.body.trim())
-      return HttpResponse.json({ error: "Write a message" }, { status: 422 });
-    discussion.messages.push(message);
-    const linked = workflow.cases.find((c) => c.discussionId === discussion.id);
-    if (linked) {
-      linked.messages.push({ actorId: user.id, text: message.body, at: message.created_at });
-      linked.status = "open";
-    }
-    discussion.updated_at = message.created_at;
-    return HttpResponse.json({ message });
-  }),
+  // Retired informal discussions; stored history is preserved but no longer interactive.
+  http.all("*/api/v1/eam/discussions", () =>
+    HttpResponse.json({ error: "Informal discussions have been retired." }, { status: 410 }),
+  ),
+  http.all("*/api/v1/eam/discussions/*", () =>
+    HttpResponse.json({ error: "Informal discussions have been retired." }, { status: 410 }),
+  ),
 ];

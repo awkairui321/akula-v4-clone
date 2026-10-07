@@ -193,7 +193,9 @@ export default function AdminCompliancePage() {
       <div className="relative max-w-sm">
         <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search client or document"
+          placeholder={
+            tab === "clients" ? "Search client name or reference" : "Search client or document"
+          }
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"

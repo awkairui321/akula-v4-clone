@@ -350,12 +350,6 @@ export default function SubscriptionActivity() {
           )}
         </section>
       )}
-
-      <div>
-        <Button variant="outline" size="sm" onClick={() => navigate("/support?topic=allocation")}>
-          Report an allocation or funding issue
-        </Button>
-      </div>
     </div>
   );
 }

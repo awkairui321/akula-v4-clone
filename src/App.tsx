@@ -26,7 +26,6 @@ import FundDetailPage from "@/features/investor/fund-detail";
 import CheckoutPage from "@/features/investor/checkout";
 import PortfolioPage from "@/features/investor/portfolio";
 import AccountPage from "@/features/investor/account";
-import SupportPage from "@/features/investor/support";
 import MessagesPage from "@/features/investor/messages";
 import DocumentsPage from "@/features/investor/documents";
 import DiscoverPage from "@/features/investor/discover";
@@ -57,7 +56,6 @@ import EamProfilePage from "@/features/eam/profile";
 import EamRevenuePage from "@/features/eam/revenue";
 import EamOpportunityDetailPage from "@/features/eam/opportunity-detail";
 import EamDocumentsPage from "@/features/eam/documents";
-import EamSupportPage from "@/features/eam/support";
 import EamReportsPage from "@/features/eam/reports";
 
 // Instrumented <Routes> for named route traces.
@@ -209,7 +207,7 @@ function App() {
                       <Route path="/documents" element={<DocumentsPage />} />
                       <Route path="/messages" element={<MessagesPage />} />
                       <Route path="/account" element={<AccountPage />} />
-                      <Route path="/support" element={<SupportPage />} />
+                      <Route path="/support" element={<Navigate to="/messages" replace />} />
                     </Route>
                   </Route>
                 </Route>
@@ -265,7 +263,7 @@ function App() {
                         />
                         <Route
                           path="/luca/support"
-                          element={<WorkflowPage surface="Support" compact />}
+                          element={<Navigate to="/luca/communications" replace />}
                         />
                         <Route
                           path="/luca/client-documents"
@@ -315,10 +313,7 @@ function App() {
                         path="/rm/reports"
                         element={<WorkflowPage surface="Reports" compact />}
                       />
-                      <Route
-                        path="/rm/support"
-                        element={<WorkflowPage surface="Support" compact />}
-                      />
+                      <Route path="/rm/support" element={<Navigate to="/rm/documents" replace />} />
                     </Route>
                   </Route>
                 </Route>
@@ -332,7 +327,7 @@ function App() {
                       <Route path="/eam/opportunities" element={<EamOpportunitiesPage />} />
                       <Route path="/eam/opportunities/:id" element={<EamOpportunityDetailPage />} />
                       <Route path="/eam/documents" element={<EamDocumentsPage />} />
-                      <Route path="/eam/support" element={<EamSupportPage />} />
+                      <Route path="/eam/support" element={<Navigate to="/eam" replace />} />
                       <Route path="/eam/reports" element={<EamReportsPage />} />
                       <Route path="/eam/revenue" element={<EamRevenuePage />} />
                       <Route path="/eam/profile" element={<EamProfilePage />} />

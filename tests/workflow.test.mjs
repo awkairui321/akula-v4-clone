@@ -267,7 +267,7 @@ test("EAM cannot read another institution discussion or delete their highlight",
   const foreign = db.discussions.find(
     (d) => db.adviserClients.find((c) => c.id === d.adviser_client_id)?.eam_user_id !== 5,
   );
-  assert.equal((await request(`eam/discussions/${foreign.id}`, user)).status, 404);
+  assert.equal((await request(`eam/discussions/${foreign.id}`, user)).status, 410);
   const h = db.highlights.find(
     (h) => db.adviserClients.find((c) => c.id === h.adviser_client_id)?.eam_user_id !== 5,
   );
@@ -278,16 +278,6 @@ test("refund API creates a cancellation/obligation without claiming money return
   const r = await request(`subscriptions/${s.id}/refund_request`, investor(), "POST");
   assert.equal(r.status, 200);
   assert.equal(s.status, "cancelled");
-});
-test("support persists a scoped reference and actual staff reply", () => {
-  w.command(investor(), { type: "case", text: "Where is my issuance?" });
-  const c = w.workflow.cases.at(-1);
-  assert.ok(c.id);
-  assert.equal(c.owner, "rm");
-  assert.equal(w.view(rm()).cases.at(-1).id, c.id);
-  w.command(rm(), { type: "reply", id: c.id, text: "We are checking registry evidence." });
-  assert.equal(w.view(investor()).cases.at(-1).messages.length, 2);
-  assert.equal(w.view(db.users.find((u) => u.id === 3)).cases.length, 0);
 });
 test("exact approved publication retains earlier signed snapshots", () => {
   const f = db.funds[0];
@@ -388,24 +378,6 @@ test("signed acknowledgments are immutable and profile patch cannot change ident
   assert.equal(db.findInvestorProfileByUserId(2).first_name, "Demo");
   assert.notEqual(db.findInvestorProfileByUserId(2).id, 999);
   assert.equal(db.findInvestorProfileByUserId(2).onboarding_step, 4);
-});
-
-test("legacy EAM discussions and shared cases exchange the same messages", async () => {
-  const user = db.users.find((u) => u.id === 4),
-    discussion = db.discussions[0];
-  const linked = w.workflow.cases.find((c) => c.discussionId === discussion.id);
-  assert.ok(linked);
-  assert.equal(
-    (
-      await request(`eam/discussions/${discussion.id}/messages`, user, "POST", {
-        message: { body: "Checking documents" },
-      })
-    ).status,
-    200,
-  );
-  assert.equal(linked.messages.at(-1).text, "Checking documents");
-  w.command(user, { type: "reply", id: linked.id, text: "Shared servicing reply" });
-  assert.equal(discussion.messages.at(-1).body, "Shared servicing reply");
 });
 
 test("drafts stay hidden, require manager approval, and appear only after Ops publication", async () => {
@@ -610,37 +582,6 @@ test("reassigning an RM is recorded and an RM only sees their own clients", asyn
   assert.equal((await request(`rm/clients/${mine.id}/status`, rm())).status, 403);
   assert.equal((await request(`rm/clients/${mine.id}/status`, other)).status, 200);
 });
-test("adviser cases may link an owned holding but reject another client's holding", () => {
-  const adviser = db.users.find((user) => user.id === 4);
-  const own = db.holdings.find((holding) =>
-    db.adviserClients.some(
-      (client) => client.eam_user_id === adviser.id && client.investor_id === holding.investor_id,
-    ),
-  );
-  assert.ok(own);
-  w.command(adviser, {
-    type: "case",
-    target: own.investor_id,
-    holdingId: own.id,
-    status: "ops",
-    text: "Please check this holding",
-  });
-  assert.equal(w.workflow.cases.at(-1).holdingId, own.id);
-  const foreign = db.holdings.find((holding) => holding.investor_id !== own.investor_id);
-  assert.ok(foreign);
-  assert.throws(
-    () =>
-      w.command(adviser, {
-        type: "case",
-        target: own.investor_id,
-        holdingId: foreign.id,
-        status: "ops",
-        text: "Wrong record",
-      }),
-    /Holding not found/,
-  );
-});
-
 test("institution review and information-response loop respect client ownership and holds", async () => {
   const adviser = db.users.find((u) => u.id === 4);
   const sub = db.subscriptions.find(
@@ -1019,23 +960,6 @@ test("Fund Manager has RM recommendations and private follow-ups", () => {
   assert.ok(w.view(manager()).highlights.find((h) => h.id === recommendation.id).openedAt);
 });
 
-test("Investor support rejects alternate routing and missing RM assignments without creating cases", () => {
-  const count = w.workflow.cases.length;
-  for (const status of ["luca", "ops", "eam"]) {
-    assert.throws(
-      () => w.command(investor(), { type: "case", text: "Investment question", status }),
-      /assigned LUCA RM/,
-    );
-  }
-  assert.equal(w.workflow.cases.length, count);
-  w.workflow.assignments = w.workflow.assignments.filter((a) => a.investorId !== investor().id);
-  assert.throws(
-    () => w.command(investor(), { type: "case", text: "Investment question" }),
-    /No RM assigned/,
-  );
-  assert.equal(w.workflow.cases.length, count);
-});
-
 test("LUCA investor requests are email-only, while updates use email and inbox", async () => {
   for (const purpose of ["request", "remind_sign", "remind_fund", "update"]) {
     const response = await request("admin/communications", manager(), "POST", {
@@ -1143,22 +1067,6 @@ test("while a version is with the Fund Manager only the Fund Manager can edit it
   );
   w.command(manager(), { type: "approve", id: version.id });
   assert.equal(w.currentVersion(1).snapshot.hook, "Manager wording");
-});
-
-test("RM can route processing support to Ops and the investor sees the resolution", () => {
-  w.command(rm(), {
-    type: "case",
-    target: investor().id,
-    status: "ops",
-    text: "Please investigate the investor's receipt",
-  });
-  const supportCase = w.workflow.cases.at(-1);
-  assert.ok(w.view(ops()).cases.some((c) => c.id === supportCase.id));
-  w.command(ops(), { type: "reply", id: supportCase.id, text: "Receipt reconciled" });
-  w.command(ops(), { type: "resolve", id: supportCase.id });
-  const visible = w.view(investor()).cases.find((c) => c.id === supportCase.id);
-  assert.equal(visible.status, "resolved");
-  assert.equal(visible.messages.at(-1).text, "Receipt reconciled");
 });
 
 test("restoring a demo without Ops preserves client data and restores operational access", () => {
@@ -1515,4 +1423,37 @@ test("fees link up: schedule frozen on the application, allocation fee, partner 
         0.01,
     );
   }
+});
+
+test("retired informal messaging rejects all roles without changing saved case history", async () => {
+  const before = structuredClone(w.workflow.cases);
+  for (const user of [investor(), rm(), manager(), ops(), db.users.find((u) => u.id === 4)]) {
+    for (const type of ["case", "reply", "resolve"])
+      assert.throws(
+        () =>
+          w.command(user, { type, target: investor().id, id: before[0]?.id, text: "Check supply" }),
+        /retired/,
+      );
+  }
+  assert.deepEqual(w.workflow.cases, before);
+  assert.equal(
+    (
+      await request(
+        "eam/discussions",
+        db.users.find((u) => u.id === 4),
+      )
+    ).status,
+    410,
+  );
+  assert.equal(
+    (
+      await request(
+        "eam/discussions/1/messages",
+        db.users.find((u) => u.id === 4),
+        "POST",
+        { message: { body: "Check supply" } },
+      )
+    ).status,
+    410,
+  );
 });

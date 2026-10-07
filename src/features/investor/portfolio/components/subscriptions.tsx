@@ -1006,19 +1006,6 @@ export default function Subscriptions() {
           )}
         </div>
       )}
-
-      {holdings.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-6 text-sm text-muted-foreground">
-          <p className="max-w-3xl">
-            <strong className="text-foreground">Need to exit a holding?</strong> Akula may attempt
-            to facilitate a private transfer to another verified accredited investor. A buyer,
-            required consents and an agreed price are not guaranteed.
-          </p>
-          <Button variant="outline" size="sm" onClick={() => navigate("/support?topic=early-exit")}>
-            Request an early-exit review
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

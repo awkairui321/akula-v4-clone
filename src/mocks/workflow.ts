@@ -4,7 +4,6 @@ import type {
   WorkflowState,
   WorkflowCommand,
   WorkflowView,
-  StaffRole,
   DiffRow,
   Version,
 } from "../lib/workflow-types";
@@ -647,6 +646,10 @@ export function view(user: db.MockUser): WorkflowView {
   };
 }
 export function command(user: db.MockUser, c: WorkflowCommand) {
+  requireValue(
+    !["case", "reply", "resolve"].includes(c.type),
+    "Informal case messaging has been retired. Use document requests or critical updates through communications.",
+  );
   if (c.currency) {
     requireValue(/^[A-Z]{3}$/.test(c.currency), "Use a three-letter uppercase currency.");
   }
@@ -939,82 +942,6 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       for (const a of workflow.allocations.filter((a) => a.subscriptionId === s.id))
         a.voided = true;
       ensureReturns(s);
-      break;
-    }
-    case "case": {
-      const iid = staff(user) || user.has_eam_profile ? c.target : user.id;
-      requireValue(iid && clientsFor(user).includes(iid), "Client not found.");
-      const investorInitiated = !staff(user) && !user.has_eam_profile;
-      requireValue(
-        !investorInitiated || !c.status || c.status === "rm",
-        "Investor support goes to the assigned LUCA RM.",
-      );
-      const owner = (investorInitiated ? "rm" : c.status || "luca") as StaffRole | "eam";
-      requireValue(["luca", "ops", "rm", "eam"].includes(owner), "Choose a case owner.");
-      if (owner === "rm")
-        requireValue(
-          workflow.assignments.some((a) => a.investorId === iid),
-          "No RM assigned.",
-        );
-      if (owner === "eam")
-        requireValue(
-          db.adviserClients.some((a) => a.investor_id === iid),
-          "No external institution assigned.",
-        );
-      if (c.id)
-        requireValue(
-          db.subscriptions.some((s) => s.id === c.id && s.investor_id === iid),
-          "Investment not found.",
-        );
-      if (c.holdingId)
-        requireValue(
-          db.holdings.some((holding) => holding.id === c.holdingId && holding.investor_id === iid),
-          "Holding not found.",
-        );
-      const body = text();
-      workflow.cases.push({
-        id: id(),
-        investorId: iid,
-        subscriptionId: c.id,
-        holdingId: c.holdingId,
-        subject: body.slice(0, 90),
-        owner,
-        status: "open",
-        at: now(),
-        messages: [{ actorId: user.id, text: body, at: now() }],
-      });
-      break;
-    }
-    case "reply":
-    case "resolve": {
-      const sc = view(user).cases.find((s) => s.id === c.id);
-      requireValue(sc, "Case not found.");
-      const stored = workflow.cases.find((s) => s.id === sc.id)!;
-      if (c.type === "reply") {
-        const body = text();
-        stored.messages.push({ actorId: user.id, text: body, at: now() });
-        stored.status = "open";
-        if (stored.discussionId) {
-          const discussion = db.discussions.find((d) => d.id === stored.discussionId);
-          if (discussion) {
-            discussion.messages.push({
-              id: db.nextDiscussionMessageId(),
-              sender_role: user.id === stored.investorId ? "investor" : "adviser",
-              body,
-              created_at: now(),
-            });
-            discussion.updated_at = now();
-            discussion.status = "open";
-          }
-        }
-      } else {
-        role("luca", "ops", stored.owner);
-        stored.status = "resolved";
-        if (stored.discussionId) {
-          const discussion = db.discussions.find((d) => d.id === stored.discussionId);
-          if (discussion) discussion.status = "resolved";
-        }
-      }
       break;
     }
     case "assign": {
