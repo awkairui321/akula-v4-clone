@@ -207,7 +207,7 @@ export default function LiveComparePage() {
       <div
         ref={gridRef}
         className="live-split"
-        aria-label="Four live platform views"
+        aria-label="Five live platform views"
         style={{ "--live-pane-height": `${paneHeight}px` } as React.CSSProperties}
       >
         {panes.map((pane, index) => (
