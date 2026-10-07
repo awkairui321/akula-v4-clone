@@ -1,4 +1,5 @@
 import { useParams } from "react-router-dom";
+import { useLayoutEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Fund } from "@/lib/types";
@@ -6,6 +7,10 @@ import DealOverviewPage from "@/components/deal-overview-page";
 
 export default function FundDetailPage() {
   const { id } = useParams<{ id: string }>();
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [id]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["fund", Number(id)],

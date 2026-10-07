@@ -38,14 +38,30 @@
   background: linear-gradient(125deg, #e3edf0, #cfdee3 55%, #b5cbd3);
   color: #193548;
 }
-.opportunity-card:nth-child(4n + 2) .opportunity-card-art {
-  background: linear-gradient(125deg, #e9ebe0, #d8dfce 55%, #bfceb8);
+.opportunity-card-art[data-theme="energy"] {
+  background:
+    radial-gradient(ellipse at 80% 10%, #f4e5b4, transparent 65%),
+    linear-gradient(125deg, #e3ede5, #a8c7b2);
+  color: #254d3b;
 }
-.opportunity-card:nth-child(4n + 3) .opportunity-card-art {
-  background: linear-gradient(125deg, #ece4dc, #dfd2c4 55%, #cdb9a9);
+.opportunity-card-art[data-theme="space"] {
+  background:
+    radial-gradient(circle at 30% 22%, #ffffff99 1px, transparent 2px),
+    radial-gradient(circle at 58% 70%, #ffffff80 1px, transparent 2px),
+    radial-gradient(circle at 72% 16%, #ffffffaa 1px, transparent 2px),
+    linear-gradient(125deg, #142b46, #2b5273 65%, #5e7f91);
+  color: #edf4f8;
 }
-.opportunity-card:nth-child(4n + 4) .opportunity-card-art {
-  background: linear-gradient(125deg, #e2e5ed, #ced5e2 55%, #b8c4d6);
+.opportunity-card-art[data-theme="robotics"] {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 23px, #3156680b 23px 24px),
+    repeating-linear-gradient(90deg, transparent 0 23px, #3156680b 23px 24px),
+    linear-gradient(125deg, #e6eaf1, #b4c7dc);
+  color: #29445e;
+}
+.opportunity-card-art[data-theme="finance"] {
+  background: linear-gradient(125deg, #e9e5f0, #bbb8d0);
+  color: #453e65;
 }
 .opportunity-card-art::after {
   position: absolute;
@@ -66,12 +82,21 @@
   font-size: 64px;
   line-height: 0.9;
 }
-.opportunity-card-art small {
+.opportunity-card-art .opportunity-banner-icon {
+  position: absolute;
+  right: 24px;
+  top: 24px;
   z-index: 1;
-  border: 1px solid #19354822;
-  border-radius: 99px;
-  padding: 5px 9px;
-  font-size: 10px;
+  width: 76px;
+  height: 76px;
+  opacity: 0.55;
+}
+.opportunity-card-art[data-theme="space"]::after {
+  border-color: #b4d4e53b;
+  background: radial-gradient(circle at 35% 65%, #769bb54d, #c9e4ee08 60%);
+  box-shadow:
+    0 0 0 22px #e1eff808,
+    0 0 0 48px #e1eff807;
 }
 .opportunity-card > div:not(.opportunity-card-art) {
   padding-left: 20px;
@@ -95,7 +120,7 @@
   box-shadow: 0 7px 22px #18354812;
 }
 .opportunities-view h1 {
-  color: #193548;
+  color: var(--foreground);
 }
 @media (max-width: 640px) {
   .opportunity-filters {
