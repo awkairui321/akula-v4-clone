@@ -765,7 +765,7 @@ function HoldingCard({
           className={
             realized
               ? "flex flex-wrap items-center justify-between gap-4"
-              : "grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1fr)_6rem_8rem_3rem_3.5rem]"
+              : "grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_7rem_9rem_3rem_3.5rem]"
           }
         >
           <div
@@ -958,7 +958,7 @@ export default function Subscriptions() {
       {holdings.length > 0 && (
         <div
           className={
-            held.length ? "grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : ""
+            held.length ? "grid items-start gap-0 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : ""
           }
         >
           <section className="min-w-0 space-y-3">
@@ -966,7 +966,7 @@ export default function Subscriptions() {
               Issued holdings
             </div>
             {held.length > 0 && (
-              <div className="hidden grid-cols-[minmax(0,1fr)_6rem_8rem_3rem_3.5rem] gap-x-3 text-xs text-muted-foreground sm:grid">
+              <div className="hidden grid-cols-[minmax(0,1fr)_7rem_9rem_3rem_3.5rem] gap-x-4 text-xs text-muted-foreground sm:grid">
                 <span>Company</span>
                 <span className="text-right">Reported value</span>
                 <span className="text-right">Unrealized gain</span>
