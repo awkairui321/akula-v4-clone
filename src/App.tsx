@@ -40,10 +40,12 @@ import AdminCompliancePage from "@/features/admin/compliance";
 import CommunicationsPage from "@/features/admin/communications";
 import ComposeCommunicationPage from "@/features/admin/communications/compose";
 import CommunicationDetailPage from "@/features/admin/communications/detail";
-import LucaOnboardingPage from "@/features/admin/onboarding";
+import ClientsPage from "@/features/admin/clients";
+import AnalyticsPage from "@/features/admin/analytics";
 import AdminInvestorDetailPage from "@/features/admin/investors/investor-detail";
 
-import AdminPartnerDetailPage from "@/features/admin/partners/partner-detail";
+import PartnerBookPage from "@/features/partners/partner-book";
+import PartnerPage from "@/features/partners/partner-page";
 import EamLayout from "@/components/eam-layout";
 import EamDashboard from "@/features/eam/dashboard";
 import EamClientsPage from "@/features/eam/clients/index";
@@ -229,31 +231,30 @@ function App() {
                           path="/luca/subscriptions/history"
                           element={<AdminSubscriptionHistoryPage />}
                         />
-                        <Route path="/luca/onboarding" element={<LucaOnboardingPage />} />
+                        <Route
+                          path="/luca/onboarding"
+                          element={<Navigate to="/luca/clients?tab=onboarding" replace />}
+                        />
                         <Route
                           path="/luca/fund-search"
-                          element={<Navigate to="/luca/onboarding?mode=funds" replace />}
+                          element={<Navigate to="/luca/deals" replace />}
                         />
                         <Route
                           path="/luca/eam-search"
-                          element={<Navigate to="/luca/onboarding?mode=entities" replace />}
+                          element={<Navigate to="/luca/partners" replace />}
                         />
                         <Route path="/luca/investors/:id" element={<AdminInvestorDetailPage />} />
-                        <Route
-                          path="/luca/partners"
-                          element={<WorkflowPage surface="Partners" compact />}
-                        />
-                        <Route
-                          path="/luca/clients"
-                          element={<WorkflowPage surface="Relationships" compact />}
-                        />
+                        <Route path="/luca/partners" element={<PartnerBookPage />} />
+                        <Route path="/luca/partners/:firm" element={<PartnerPage />} />
+                        <Route path="/luca/clients" element={<ClientsPage />} />
+                        <Route path="/luca/analytics" element={<AnalyticsPage />} />
                         <Route
                           path="/luca/opportunities"
-                          element={<WorkflowPage surface="Opportunities" compact />}
+                          element={<Navigate to="/luca/deals" replace />}
                         />
                         <Route
                           path="/luca/reports"
-                          element={<WorkflowPage surface="Reports" compact />}
+                          element={<Navigate to="/luca/partners" replace />}
                         />
                         <Route
                           path="/luca/reporting"
@@ -265,9 +266,8 @@ function App() {
                         />
                         <Route
                           path="/luca/client-documents"
-                          element={<WorkflowPage surface="Documents" compact />}
+                          element={<Navigate to="/luca/compliance?tab=clients" replace />}
                         />
-                        <Route path="/luca/partners/:id" element={<AdminPartnerDetailPage />} />
                         <Route path="/luca/compliance" element={<AdminCompliancePage />} />
                         <Route
                           path="/luca/documents"
@@ -305,10 +305,8 @@ function App() {
                         path="/rm/documents"
                         element={<WorkflowPage surface="Documents" compact />}
                       />
-                      <Route
-                        path="/rm/partners"
-                        element={<WorkflowPage surface="Partners" compact />}
-                      />
+                      <Route path="/rm/partners" element={<PartnerBookPage />} />
+                      <Route path="/rm/partners/:firm" element={<PartnerPage />} />
                       <Route
                         path="/rm/reports"
                         element={<WorkflowPage surface="Reports" compact />}

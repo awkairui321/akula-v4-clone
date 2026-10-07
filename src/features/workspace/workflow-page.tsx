@@ -1,4 +1,3 @@
-import PartnerBook from "./partner-book";
 import FundingShortfall from "@/components/funding-shortfall";
 import InvestorSegmentControl from "@/components/investor-segment-control";
 import {
@@ -2201,9 +2200,6 @@ function WorkflowPageContent({
               </>
             )}
           </>
-        )}
-        {tab === "Partners" && rm && (
-          <PartnerBook data={d} onClients={() => chooseTab("Relationships")} />
         )}
         {tab === "Support" && <Cases data={d} />}
         {tab === "Documents" && (

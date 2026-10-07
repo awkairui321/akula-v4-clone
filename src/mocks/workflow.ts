@@ -596,6 +596,8 @@ export function view(user: db.MockUser): WorkflowView {
       .map((f) => ({
         id: f.id,
         name: f.codename || f.name,
+        fundName: f.name,
+        assetId: f.asset.id,
         state: f.state,
         company: f.asset.name,
         sector: f.asset.sector,

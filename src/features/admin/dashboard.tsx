@@ -587,7 +587,7 @@ export default function AdminDashboard() {
               {expiring.map((band) => (
                 <Link
                   key={band.days}
-                  to="/luca/onboarding"
+                  to="/luca/compliance?tab=expiring"
                   className="px-3 py-3 transition-colors first:pl-0 hover:bg-muted/50"
                 >
                   <p className="text-xl font-semibold tabular-nums">{band.count}</p>

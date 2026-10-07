@@ -15,40 +15,37 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SummaryFigure } from "./summary-figure";
+import ComplianceClients from "./compliance-clients";
+import type { WorkflowView } from "@/lib/workflow-types";
+import { useAuth } from "@/contexts/auth-context";
+import {
+  EXPIRY_WINDOW_DAYS,
+  daysBetween,
+  dueLabel,
+  formatDate,
+  requestLink,
+} from "./compliance-helpers";
 
-type Tab = "review" | "requests" | "expiring" | "filed";
+type Tab = "review" | "requests" | "expiring" | "filed" | "clients";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "review", label: "To review" },
   { key: "requests", label: "Requested from clients" },
   { key: "expiring", label: "Expiring" },
   { key: "filed", label: "Filed" },
+  { key: "clients", label: "By client" },
 ];
-
-const DAY = 24 * 60 * 60 * 1000;
-const EXPIRY_WINDOW_DAYS = 90;
-
-const daysBetween = (from: number, to: number) => Math.round((to - from) / DAY);
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-
-/** "Due in 4d" / "Overdue 6d" / "No due date". */
-function dueLabel(dueAt: string | null): { text: string; overdue: boolean } {
-  if (!dueAt) return { text: "No due date", overdue: false };
-  const days = daysBetween(Date.now(), new Date(dueAt).getTime());
-  if (days < 0) return { text: `Overdue ${-days}d`, overdue: true };
-  return { text: days === 0 ? "Due today" : `Due in ${days}d`, overdue: false };
-}
-
-const requestLink = (investorId: number, docs: string) =>
-  `/luca/communications/new?audience=investor:${investorId}&purpose=request&docs=${docs}`;
 
 /** Compliance: what to review, what we are waiting for, and what is about to expire. */
 export default function AdminCompliancePage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = searchParams.get("tab");
-  const tab: Tab = TABS.some((t) => t.key === requested) ? (requested as Tab) : "review";
+  const tab: Tab = TABS.some((t) => t.key === requested)
+    ? (requested as Tab)
+    : searchParams.get("client")
+      ? "clients"
+      : "review";
   const [search, setSearch] = useState("");
 
   const { data: docsData, isLoading } = useQuery({
@@ -63,6 +60,14 @@ export default function AdminCompliancePage() {
     queryKey: ["admin", "investors", "all"],
     queryFn: () => api<InvestorsResponse>("/api/v1/admin/investors"),
   });
+
+  const { user } = useAuth();
+  const { data: workflowData } = useQuery({
+    queryKey: ["workflows", user?.id],
+    queryFn: () => api<WorkflowView>("/api/v1/workflows"),
+    staleTime: 0,
+  });
+  const focusId = Number(searchParams.get("client")) || undefined;
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["admin", "documents"] });
@@ -132,6 +137,7 @@ export default function AdminCompliancePage() {
     requests: open.length,
     expiring: expiringCount,
     filed: filed.length,
+    clients: (investorsData?.investors ?? []).length,
   };
 
   return (
@@ -140,7 +146,8 @@ export default function AdminCompliancePage() {
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">Compliance</h1>
           <p className="text-muted-foreground">
-            Client documents to review, documents we are waiting for, and approvals about to expire.
+            Documents to review, documents we are waiting for and approvals about to expire. Open By
+            client to see everything held for one client.
           </p>
         </div>
         <Button
@@ -245,6 +252,24 @@ export default function AdminCompliancePage() {
             ...expiring.map((x) => ({ ...x, lapsed: false })),
           ].filter((x) => matches(x.investor.full_name))}
           openKeys={openKeys}
+        />
+      ) : tab === "clients" ? (
+        <ComplianceClients
+          investors={investorsData?.investors ?? []}
+          docs={docsData?.documents ?? []}
+          requests={requestsData?.requests ?? []}
+          signatures={workflowData?.signatures ?? []}
+          subscriptions={workflowData?.subscriptions ?? []}
+          versions={workflowData?.versions ?? []}
+          search={search}
+          focusId={focusId}
+          actions={{
+            approve: (id) => setState.mutate({ id, to: "filed" }),
+            hold: (id) => setState.mutate({ id, to: "on_hold" }),
+            release: (id) => setState.mutate({ id, to: "reviewing" }),
+            remind: (id) => remind.mutate(id),
+            withdraw: (id) => withdraw.mutate(id),
+          }}
         />
       ) : (
         <DocumentTable

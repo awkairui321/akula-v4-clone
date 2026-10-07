@@ -551,7 +551,10 @@ export default function AdminSubscriptionsPage() {
                     </Link>
                     <span className="block truncate text-xs text-muted-foreground">
                       {firmId ? (
-                        <Link to={`/luca/partners/${firmId}`} className="hover:underline">
+                        <Link
+                          to={`/luca/partners/${encodeURIComponent(s.eam_firm ?? "")}`}
+                          className="hover:underline"
+                        >
                           {s.eam_firm}
                         </Link>
                       ) : (

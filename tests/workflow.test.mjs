@@ -12,6 +12,8 @@ for (const file of [
   "src/mocks/investor-access.ts",
   "src/lib/client-code.ts",
   "src/lib/rm-onboarding.ts",
+  "src/features/partners/partner-data.ts",
+  "src/features/admin/analytics-data.ts",
   "src/lib/document-catalogue.ts",
   "src/mocks/db.ts",
   "src/mocks/workflow.ts",
@@ -44,6 +46,9 @@ for (const file of [
 const db = await import("../.test-runtime/src/mocks/db.mjs");
 const w = await import("../.test-runtime/src/mocks/workflow.mjs");
 const { handlers } = await import("../.test-runtime/src/mocks/handlers/index.mjs");
+const { buildAnalytics } = await import("../.test-runtime/src/features/admin/analytics-data.mjs");
+const { buildPartnerBook } =
+  await import("../.test-runtime/src/features/partners/partner-data.mjs");
 w.seedWorkflow();
 const initialDb = db.exportDemoState(),
   initial = structuredClone(w.workflow);
@@ -1296,4 +1301,57 @@ test("each fund has one fee schedule, edited with the fund and shown the same to
     [fund.subscription_fee_pct, fund.management_fee_pct, fund.carried_interest_pct],
     ["3", "2", "20"],
   );
+});
+
+test("partner book adds up: partner = projects = funds = clients, and an RM only sees their own clients", () => {
+  const { partners, direct } = buildPartnerBook(w.view(manager()));
+  assert.ok(partners.length >= 2);
+  for (const p of partners) {
+    const sum = (rows, key) => Math.round(rows.reduce((n, r) => n + r[key], 0));
+    for (const key of ["committed", "funded", "allocated"]) {
+      assert.equal(sum(p.projects, key), Math.round(p[key]));
+      assert.equal(sum(p.clients, key), Math.round(p[key]));
+      for (const project of p.projects)
+        assert.equal(sum(project.funds, key), Math.round(project[key]));
+    }
+    // Cash can only be confirmed against a live commitment, and allocation only against cash.
+    assert.ok(p.funded <= p.committed + 0.01);
+  }
+  assert.ok(direct.clientCount >= 0);
+  const mine = buildPartnerBook(w.view(rm()));
+  const everyone = new Set(partners.flatMap((p) => p.clients.map((c) => c.id)));
+  for (const p of mine.partners) for (const c of p.clients) assert.ok(everyone.has(c.id));
+  assert.ok(
+    mine.partners.reduce((n, p) => n + p.clientCount, 0) <=
+      partners.reduce((n, p) => n + p.clientCount, 0),
+  );
+});
+
+test("analytics are calculated from the records and stay consistent across periods", () => {
+  const input = {
+    investors: db.adminInvestors(),
+    subscriptions: db.subscriptions.map(db.toAdminSubscription),
+    funds: db.funds,
+    workflow: w.view(manager()),
+    partners: [],
+  };
+  const all = buildAnalytics(input, "all");
+  const sum = (rows, key) => Math.round(rows.reduce((n, r) => n + r[key], 0));
+  for (const key of ["committed", "funded", "allocated"])
+    assert.equal(sum(all.capital, key), Math.round(all.totals[key]));
+  assert.ok(all.totals.funded <= all.totals.committed + 0.01);
+  assert.equal(all.funnel[0].count, input.investors.length);
+  assert.ok(all.funnel.every((stage) => stage.count <= all.funnel[0].count));
+  assert.equal(sum(all.sources, "committed"), Math.round(all.totals.committed));
+  assert.ok(
+    all.concentration.top1 <= all.concentration.top5 &&
+      all.concentration.top5 <= all.concentration.top10,
+  );
+  assert.ok(all.concentration.top10 <= 1.0001);
+  // A shorter period can only ever show less.
+  const recent = buildAnalytics(input, "30d");
+  assert.ok(sum(recent.series, "amount") <= sum(all.series, "amount"));
+  assert.ok(recent.funnel[0].count <= all.funnel[0].count);
+  assert.ok(recent.fees.earned <= all.fees.earned + 0.01);
+  for (const s of all.speed) assert.ok(s.median === null || s.median >= 0);
 });

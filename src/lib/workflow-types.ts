@@ -203,6 +203,10 @@ export type WorkflowView = WorkflowState & {
   funds: {
     id: number;
     name: string;
+    /** The fund's own name within its project, for example "Solara Grid SPV I". */
+    fundName?: string;
+    /** The company's id; every fund in one project shares it. */
+    assetId?: number;
     state: string;
     company: string;
     sector: string;

@@ -98,11 +98,11 @@ export default function AdminInvestorDetailPage() {
   return (
     <div className="mx-auto w-full max-w-5xl">
       <Link
-        to="/luca/onboarding"
+        to="/luca/clients"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeftIcon className="size-4" />
-        Back to onboarding
+        Back to clients
       </Link>
 
       {/* Unified header */}
@@ -274,7 +274,10 @@ function IdentityPanel({
           label="Institution / EAM"
           value={
             investor.eam_firm && eamPartner ? (
-              <Link to={`/luca/partners/${eamPartner.id}`} className="underline underline-offset-2">
+              <Link
+                to={`/luca/partners/${encodeURIComponent(investor.eam_firm)}`}
+                className="underline underline-offset-2"
+              >
                 {investor.eam_firm}
               </Link>
             ) : (
