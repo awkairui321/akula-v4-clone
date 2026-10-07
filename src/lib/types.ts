@@ -82,6 +82,8 @@ export type FundStatus =
 
 export type Fund = {
   investor_access?: InvestorAccess;
+  /** Published audience for this fund variant; historical investments retain access. */
+  eligible_segments?: import("./investor-access").InvestorSegment[];
   id: number;
   name: string;
   codename: string;

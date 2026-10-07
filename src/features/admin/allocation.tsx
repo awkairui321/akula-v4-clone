@@ -65,7 +65,7 @@ export default function AllocationPage() {
           {sub.investor_name} · {sub.asset_name}
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Subscription #{sub.id} · {sub.currency}
+          {sub.fund_name} · Subscription #{sub.id} · {sub.currency}
         </p>
         <dl className="mt-4 grid gap-4 sm:grid-cols-3">
           <div>

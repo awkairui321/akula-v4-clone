@@ -1049,6 +1049,18 @@ export const adminHandlers = [
 
     const body = (await request.json()) as { fund?: Record<string, unknown> };
     const patch = body.fund ?? {};
+    if (
+      patch.eligible_segments !== undefined &&
+      (!Array.isArray(patch.eligible_segments) ||
+        patch.eligible_segments.length === 0 ||
+        patch.eligible_segments.some(
+          (segment) => !["independent", "partner_referred"].includes(segment),
+        ))
+    )
+      return HttpResponse.json(
+        { error: "Choose at least one valid client class." },
+        { status: 422 },
+      );
     if (user.role === "investment_team" && patch.state && patch.state !== fund.state)
       return HttpResponse.json(
         {

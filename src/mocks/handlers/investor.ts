@@ -159,7 +159,7 @@ export const investorHandlers = [
       return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
     if (!mayDiscover(user, fund.id) && !hasInvestmentHistory(user, fund.id))
       return HttpResponse.json(
-        { error: "This opportunity is available to partner-referred investors." },
+        { error: "This fund variant is not available to your client class." },
         { status: 403 },
       );
     return HttpResponse.json({

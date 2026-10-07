@@ -173,6 +173,7 @@ export type WorkflowView = WorkflowState & {
     investor_id: number;
     investor_name: string;
     fund_id: number;
+    fund_name: string;
     asset_name: string;
     amount: string;
     subscription_fee: string;

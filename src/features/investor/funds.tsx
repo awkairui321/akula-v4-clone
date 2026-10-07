@@ -1,4 +1,5 @@
 import InvestorSegmentControl from "@/components/investor-segment-control";
+import { fundAudienceLabel } from "@/lib/investor-access";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -50,9 +51,10 @@ function FundCard({ fund }: { fund: Fund }) {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <CardTitle className="truncate">{fund.codename}</CardTitle>
-              <CardDescription className="truncate">
-                {fund.asset.name} · {fund.fund_manager.name}
-              </CardDescription>
+              <CardDescription className="truncate">{fund.name}</CardDescription>
+              {fund.eligible_segments && (
+                <p className="mt-1 text-xs text-muted-foreground">{fundAudienceLabel(fund)}</p>
+              )}
             </div>
             <div className="flex shrink-0 gap-1.5">
               <Badge variant="outline" className="text-[10px]">
@@ -85,6 +87,12 @@ function FundCard({ fund }: { fund: Fund }) {
             <span className="text-right font-medium">{formatPricePrecise(fund.price)}</span>
             <span className="text-muted-foreground">Min. ticket</span>
             <span className="text-right font-medium">{formatPrice(fund.min_subscription)}</span>
+            {fund.eligible_segments && (
+              <>
+                <span className="text-muted-foreground">Subscription fee</span>
+                <span className="text-right font-medium">{fund.subscription_fee_pct}%</span>
+              </>
+            )}
           </div>
         </CardContent>
         <CardFooter className="flex-col gap-2">
