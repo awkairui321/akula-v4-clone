@@ -13,6 +13,7 @@ for (const file of [
   "src/lib/client-onboarding.ts",
   "src/lib/rm-onboarding.ts",
   "src/features/partners/partner-data.ts",
+  "src/features/admin/client-funds-data.ts",
   "src/features/admin/analytics-data.ts",
   "src/lib/document-catalogue.ts",
   "src/mocks/db.ts",
@@ -51,6 +52,8 @@ const { handlers } = await import("../.test-runtime/src/mocks/handlers/index.mjs
 const { buildAnalytics } = await import("../.test-runtime/src/features/admin/analytics-data.mjs");
 const { buildPartnerBook } =
   await import("../.test-runtime/src/features/partners/partner-data.mjs");
+const { buildClientFunds } =
+  await import("../.test-runtime/src/features/admin/client-funds-data.mjs");
 w.seedWorkflow();
 const initialDb = db.exportDemoState(),
   initial = structuredClone(w.workflow);
@@ -63,6 +66,42 @@ const manager = () => db.users.find((u) => u.role === "luca"),
   rm = () => db.users.find((u) => u.id === 6),
   investor = () => db.users.find((u) => u.id === 2);
 const funded = () => db.subscriptions.find((s) => s.status === "allocation_pending");
+test("client fund hierarchy keeps ownership, subscription-linked documents and empty clients", async () => {
+  const { investors } = await (await request("admin/investors", manager())).json();
+  const view = w.view(manager());
+  const sub = view.subscriptions[0];
+  const other = investors.find((i) => i.id !== sub.investor_id);
+  const doc = {
+    id: 99001,
+    owner_id: sub.investor_id,
+    kind: "agreement",
+    fund_id: null,
+    subscription_id: sub.id,
+    name: "Subscription-linked agreement",
+  };
+  const account = { ...doc, id: 99002, kind: "identity", subscription_id: null };
+  const rows = buildClientFunds(investors, view, [doc, account], []);
+  const client = rows.find((r) => r.investor.id === sub.investor_id);
+  assert.equal(rows.length, investors.length);
+  assert.deepEqual(
+    client.funds.find((f) => f.id === sub.fund_id).docs.map((d) => d.id),
+    [doc.id],
+  );
+  assert.deepEqual(
+    client.accountDocs.map((d) => d.id),
+    [account.id],
+  );
+  assert.equal(rows.find((r) => r.investor.id === other.id).funds.flatMap((f) => f.docs).length, 0);
+  assert.equal(new Set(client.funds.map((f) => f.id)).size, client.funds.length);
+  const expected = buildPartnerBook(view).all.clients.find((c) => c.id === sub.investor_id);
+  assert.equal(client.capital.committed, expected.committed);
+  const noInvestment = { ...other, id: 99999, full_name: "No investments" };
+  assert.equal(buildClientFunds([noInvestment], view, [], [])[0].funds.length, 0);
+  const rmView = w.view(rm());
+  const allowed = investors.filter((i) => rmView.clients.some((c) => c.id === i.id));
+  const scoped = buildClientFunds(allowed, rmView, [doc], []);
+  assert.ok(scoped.every((r) => rmView.clients.some((c) => c.id === r.investor.id)));
+});
 test("commercial profiles filter discovery and new subscriptions, preserving historic access and fees", async () => {
   const user = investor();
   const base = Number(w.currentVersion(1).snapshot.subscription_fee_pct);

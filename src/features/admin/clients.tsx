@@ -6,8 +6,7 @@ import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
 import type { WorkflowView } from "@/lib/workflow-types";
 import { useAuth } from "@/contexts/auth-context";
-import { usePartnerBook } from "@/features/partners/use-partner-book";
-import { ByProject, CapitalHeader, useOpenSet } from "@/features/partners/capital-tree";
+import ClientFunds from "./client-funds";
 import type { AdminInvestor, InvestorsResponse } from "./types";
 import { clientStage, PIPELINE, type ClientStage, type StageKey } from "./client-stage";
 import { useRms } from "./use-rms";
@@ -17,7 +16,7 @@ import { Input } from "@/components/ui/input";
 
 type Tab = "projects" | "directory" | "onboarding";
 const TABS: { key: Tab; label: string }[] = [
-  { key: "projects", label: "Projects" },
+  { key: "projects", label: "Funds & documents" },
   { key: "directory", label: "Directory" },
   { key: "onboarding", label: "Onboarding" },
 ];
@@ -141,7 +140,7 @@ export default function ClientsPage() {
       </div>
 
       {tab === "projects" ? (
-        <ProjectsTab />
+        <ClientFunds investors={data?.investors ?? []} workflow={workflow} isLoading={isLoading} />
       ) : isLoading ? (
         <p className="py-12 text-center text-muted-foreground">Loading clients...</p>
       ) : tab === "directory" ? (
@@ -150,43 +149,6 @@ export default function ClientsPage() {
         <OnboardingTab rows={rows} />
       )}
     </div>
-  );
-}
-
-/** Project, then each fund in it, then which clients are in that fund and for how much. */
-function ProjectsTab() {
-  const { book, isLoading } = usePartnerBook();
-  const { open, toggle } = useOpenSet();
-  if (isLoading || !book)
-    return <p className="py-12 text-center text-muted-foreground">Loading projects...</p>;
-  const projects = book.all.projects;
-  return (
-    <section className="space-y-3">
-      <div className="space-y-1">
-        <h2 className={SECTION}>Clients by project and fund</h2>
-        <p className="text-sm text-muted-foreground">
-          Committed is subscribed and still live, funded is cash received after fees, allocated is
-          what LUCA has allocated. Open a fund to see who is in it.
-        </p>
-      </div>
-      {projects.length === 0 ? (
-        <p className="border-y py-12 text-center text-sm text-muted-foreground">
-          No client has subscribed to a project yet.
-        </p>
-      ) : (
-        <div className="border-y">
-          <CapitalHeader first="Project, fund, client" />
-          <div className="divide-y">
-            <ByProject
-              projects={projects}
-              open={open}
-              toggle={toggle}
-              clientHref={(id) => `/luca/investors/${id}`}
-            />
-          </div>
-        </div>
-      )}
-    </section>
   );
 }
 

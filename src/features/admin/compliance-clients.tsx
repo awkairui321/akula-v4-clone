@@ -367,7 +367,7 @@ function Group({
   );
 }
 
-function DocRow({ doc, actions }: { doc: AdminDocument; actions: ClientActions }) {
+export function DocRow({ doc, actions }: { doc: AdminDocument; actions: ClientActions }) {
   return (
     <li>
       <details className="py-2 text-sm">
@@ -405,7 +405,7 @@ function DocRow({ doc, actions }: { doc: AdminDocument; actions: ClientActions }
   );
 }
 
-function RequestRow({ req, actions }: { req: DocumentRequestRow; actions: ClientActions }) {
+export function RequestRow({ req, actions }: { req: DocumentRequestRow; actions: ClientActions }) {
   const due = dueLabel(req.due_at);
   return (
     <li>
