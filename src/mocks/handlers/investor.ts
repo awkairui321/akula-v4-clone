@@ -9,6 +9,7 @@ import {
   command,
   portfolioHistory,
   persist,
+  recordAudit,
   ownedSubscription,
   recordSignature,
   requestWithdrawal,
@@ -188,6 +189,21 @@ export const investorHandlers = [
     const user = currentUser(request);
     if (!user?.has_investor_profile) return unauthorized();
     return HttpResponse.json({ documents: verificationDocumentsByInvestor[user.id] ?? [] });
+  }),
+  // The investor confirms a document their RM supplied on their behalf.
+  http.post("*/api/v1/onboarding/documents/:id/confirm", ({ request, params }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    const doc = (verificationDocumentsByInvestor[user.id] ?? []).find(
+      (d) => d.id === Number(params.id) && d.uploaded_by?.role === "rm",
+    );
+    if (!doc) return HttpResponse.json({ error: "Document not found" }, { status: 404 });
+    doc.confirmed_at ??= new Date().toISOString();
+    const row = documents.find((d) => d.id === doc.id);
+    if (row) row.confirmed_at = doc.confirmed_at;
+    recordAudit(user.id, `Investor ${user.email} confirmed a document supplied by their RM.`);
+    persist();
+    return HttpResponse.json({ document: doc });
   }),
   http.post("*/api/v1/onboarding/documents", async ({ request }) => {
     const user = currentUser(request);
@@ -875,6 +891,13 @@ async function upsertProfile(request: Request) {
 
   if (patch.channel !== undefined && patch.channel !== "direct" && patch.channel !== "eam_referred")
     return HttpResponse.json({ error: "Invalid investor channel" }, { status: 422 });
+  // An account referred by a LUCA RM is partner-referred and tagged to that RM; the client
+  // cannot switch to the independent (direct) schedule, and no partner code is needed.
+  if (profile.prepared_by_rm && patch.channel === "direct")
+    return HttpResponse.json(
+      { error: "Your account was referred by your LUCA RM, so it stays partner-referred." },
+      { status: 422 },
+    );
   const referralCodes: Record<string, number> = { MERIDIAN: 1, "STRAITS-FO": 2 };
   const nextChannel = patch.channel ?? profile.channel;
   const code = String(patch.referral_code ?? profile.referral_code ?? "")
@@ -883,6 +906,7 @@ async function upsertProfile(request: Request) {
   if (
     nextChannel === "eam_referred" &&
     !profile.eam_firm &&
+    !profile.prepared_by_rm &&
     (patch.channel !== undefined || patch.referral_code !== undefined)
   ) {
     const partner = partners.find((p) => p.id === referralCodes[code]);
@@ -953,6 +977,19 @@ async function upsertProfile(request: Request) {
   // onboarding_step should only ever move forward.
   if (typeof patch.onboarding_step === "number") {
     profile.onboarding_step = Math.max(previousStep, patch.onboarding_step);
+  }
+  // Finishing personal information is the investor's confirmation of what their RM entered.
+  if (
+    profile.prepared_by_rm &&
+    !profile.prepared_by_rm.confirmed_at &&
+    profile.onboarding_step >= 4
+  ) {
+    profile.prepared_by_rm.confirmed_at = new Date().toISOString();
+    recordAudit(
+      user.id,
+      `Investor ${user.email} reviewed and confirmed the details their RM entered.`,
+    );
+    persist();
   }
 
   return HttpResponse.json({

@@ -71,7 +71,16 @@ function PendingRow({ investor, onOpen }: { investor: AdminInvestor; onOpen: () 
     >
       <div className="min-w-0">
         <p className="truncate font-medium">{investor.full_name}</p>
-        <p className="truncate text-xs text-muted-foreground">{investor.email}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {investor.email}
+          {investor.prepared_by_rm && (
+            <>
+              {" "}
+              · Referred and prepared by {investor.prepared_by_rm}
+              {investor.invite_pending && " · invitation not yet opened"}
+            </>
+          )}
+        </p>
       </div>
       <Badge variant="outline" className="shrink-0 text-[10px]">
         {investor.verification_status === "in_review" ? "In review" : "Pending"}

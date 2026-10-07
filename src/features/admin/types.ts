@@ -143,6 +143,9 @@ export type AdminInvestor = {
   committed_amount: string;
   open_subscriptions: number;
   created_at: string;
+  /** Name of the LUCA RM who prepared this account, if it was RM-prepared. */
+  prepared_by_rm?: string | null;
+  invite_pending?: boolean;
 };
 
 export type InvestorsResponse = {
@@ -199,6 +202,10 @@ export type AdminDocument = {
   owner_name: string;
   owner_email: string;
   created_at: string;
+  /** Who supplied the file when it was not the owner themselves (an RM acting for a client). */
+  uploaded_by?: { id: number; role: "rm" | "investor"; name: string };
+  /** When the owner confirmed an RM-supplied document. */
+  confirmed_at?: string | null;
 };
 
 export type DocumentsResponse = {

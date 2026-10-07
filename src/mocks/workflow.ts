@@ -277,6 +277,14 @@ export function restore() {
       "Saved demo could not be restored. It has been retained; export or explicitly reset before continuing.";
   }
 }
+/** Used by the RM onboarding handlers: assignment and an attributable audit entry. */
+export function assignClientToRm(investorId: number, staffId: number) {
+  workflow.assignments = workflow.assignments.filter((a) => a.investorId !== investorId);
+  workflow.assignments.push({ investorId, staffId });
+}
+export function recordAudit(actorId: number, label: string) {
+  workflow.events.push({ id: id(), actorId, label, at: now() });
+}
 export function resetDemo() {
   localStorage.removeItem(KEY);
   location.reload();

@@ -5,6 +5,7 @@ import { publicHandlers } from "./public";
 import { investorHandlers } from "./investor";
 import { adminHandlers } from "./admin";
 import { eamHandlers } from "./eam";
+import { rmHandlers } from "./rm";
 
 export const handlers = [
   ...guardHandlers,
@@ -14,4 +15,5 @@ export const handlers = [
   ...investorHandlers,
   ...adminHandlers,
   ...eamHandlers,
+  ...rmHandlers,
 ];

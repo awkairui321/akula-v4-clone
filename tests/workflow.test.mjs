@@ -11,12 +11,15 @@ for (const file of [
   "src/lib/investor-access.ts",
   "src/mocks/investor-access.ts",
   "src/lib/client-code.ts",
+  "src/lib/rm-onboarding.ts",
+  "src/lib/document-catalogue.ts",
   "src/mocks/db.ts",
   "src/mocks/workflow.ts",
   "src/mocks/handlers/workflow.ts",
   "src/mocks/handlers/guard.ts",
   "src/mocks/handlers/investor.ts",
   "src/mocks/handlers/eam.ts",
+  "src/mocks/handlers/rm.ts",
   "src/mocks/handlers/admin.ts",
   "src/mocks/handlers/auth.ts",
   "src/mocks/handlers/public.ts",
@@ -974,4 +977,160 @@ test("restoring a demo without Ops preserves client data and restores operationa
   assert.equal(investor().email, "preserved@example.com");
   db.restoreDemoState(db.exportDemoState());
   assert.equal(db.users.filter((u) => u.role === "ops").length, 1);
+});
+
+const PDF = "data:application/pdf;base64,JVBERi0xLjQK";
+const newClient = (overrides = {}) => ({
+  email: "client.one@example.com",
+  first_name: "Clara",
+  last_name: "Weston",
+  nationality: "British",
+  date_of_birth: "1980-02-03",
+  country: "United Kingdom",
+  ...overrides,
+});
+
+test("RM prepares an account that is assigned to them, invitation-only and audited", async () => {
+  const before = w.workflow.events.length;
+  const res = await request("rm/clients", rm(), "POST", newClient());
+  assert.equal(res.status, 201);
+  const { client } = await res.json();
+  const created = db.findUserById(client.id);
+  assert.equal(created.role, "investor");
+  assert.equal(created.password, "");
+  assert.ok(created.invite_token);
+  assert.equal(client.stage, "invited");
+  assert.ok(w.clientsFor(rm()).includes(client.id));
+  assert.ok(!w.clientsFor(db.users.find((u) => u.id === 8)).includes(client.id));
+  assert.ok(db.adminInvestors().some((i) => i.id === client.id && i.prepared_by_rm));
+  assert.ok(w.workflow.events.length > before);
+  // The password-less account cannot sign in until the client activates it.
+  const login = await request("login", investor(), "POST", {
+    user: { email: "client.one@example.com", password: "anything" },
+  });
+  assert.equal(login.status, 401);
+});
+
+test("RM onboarding rejects other roles, duplicates, other RMs' clients and invalid input", async () => {
+  assert.equal((await request("rm/clients", investor(), "POST", newClient())).status, 403);
+  assert.equal((await request("rm/clients", ops(), "POST", newClient())).status, 403);
+  assert.equal(
+    (await request("rm/clients", rm(), "POST", newClient({ email: "bad" }))).status,
+    422,
+  );
+  assert.equal(
+    (await request("rm/clients", rm(), "POST", newClient({ date_of_birth: "2015-01-01" }))).status,
+    422,
+  );
+  assert.equal(
+    (await request("rm/clients", rm(), "POST", newClient({ email: "investor@akula.vc" }))).status,
+    422,
+  );
+  const { client } = await (await request("rm/clients", rm(), "POST", newClient())).json();
+  const other = db.users.find((u) => u.id === 8);
+  assert.equal((await request(`rm/clients/${client.id}/onboarding`, other)).status, 403);
+  assert.equal((await request("rm/clients", rm(), "POST", newClient())).status, 422);
+  assert.equal((await request(`rm/clients/${client.id}/onboarding`, manager())).status, 200);
+});
+
+test("RM-supplied documents are attributed, confirmed only by the investor and never auto-approved", async () => {
+  const { client } = await (await request("rm/clients", rm(), "POST", newClient())).json();
+  const bad = await request(`rm/clients/${client.id}/documents`, rm(), "POST", {
+    name: "agreement.pdf",
+    kind: "agreement",
+    file_data_url: PDF,
+  });
+  assert.equal(bad.status, 422);
+  const ok = await request(`rm/clients/${client.id}/documents`, rm(), "POST", {
+    name: "passport.pdf",
+    kind: "passport",
+    file_data_url: PDF,
+  });
+  assert.equal(ok.status, 201);
+  const row = db.documents.find((d) => d.owner_id === client.id);
+  assert.equal(row.uploaded_by.role, "rm");
+  assert.equal(row.confirmed_at, null);
+  assert.equal(db.findAdminInvestorSeed(client.id).verification_status, "pending");
+
+  // Activate, then confirm as the investor.
+  const token = db.findUserById(client.id).invite_token;
+  const activated = await request("public/activate", investor(), "POST", {
+    token,
+    password: "a-long-password",
+    password_confirmation: "a-long-password",
+  });
+  assert.equal(activated.status, 200);
+  assert.equal(db.findUserById(client.id).invite_token, null);
+  const reuse = await request("public/activate", investor(), "POST", {
+    token,
+    password: "another-password",
+    password_confirmation: "another-password",
+  });
+  assert.equal(reuse.status, 404);
+  const me = db.findUserById(client.id);
+  const docs = await (await request("onboarding/documents", me)).json();
+  assert.equal(docs.documents[0].uploaded_by.role, "rm");
+  assert.equal((await request(`onboarding/documents/${row.id}/confirm`, me, "POST")).status, 200);
+  assert.ok(db.documents.find((d) => d.id === row.id).confirmed_at);
+  // The RM can no longer remove a document the investor has confirmed.
+  assert.equal(
+    (await request(`rm/clients/${client.id}/documents/${row.id}`, rm(), "DELETE")).status,
+    422,
+  );
+  // Another investor cannot confirm it.
+  assert.equal(
+    (await request(`onboarding/documents/${row.id}/confirm`, investor(), "POST")).status,
+    404,
+  );
+});
+
+test("investor's own declarations stay with the investor; RM edits lock after confirmation", async () => {
+  const { client } = await (await request("rm/clients", rm(), "POST", newClient())).json();
+  const user = db.findUserById(client.id);
+  const profile = db.findInvestorProfileByUserId(client.id);
+  // Nothing the RM does completes eligibility, NDA, KYC or consents.
+  await request(`rm/clients/${client.id}/onboarding`, rm(), "PATCH", { phone: "+441234567890" });
+  assert.equal(profile.eligibility_confirmed_at, null);
+  assert.equal(user.nda_status, "not_started");
+  assert.equal(user.kyc_status, "not_started");
+  assert.equal(profile.phone, "+441234567890");
+
+  user.password = "a-long-password";
+  user.invite_token = null;
+  assert.equal(profile.prepared_by_rm.confirmed_at, null);
+  await request("investor_profile", user, "PATCH", { investor_profile: { onboarding_step: 4 } });
+  assert.ok(profile.prepared_by_rm.confirmed_at);
+  const locked = await request(`rm/clients/${client.id}/onboarding`, rm(), "PATCH", {
+    phone: "+440000000000",
+  });
+  assert.equal(locked.status, 422);
+  assert.equal(profile.phone, "+441234567890");
+  const detail = await (await request(`rm/clients/${client.id}/onboarding`, rm())).json();
+  assert.equal(detail.editable, false);
+  assert.equal(detail.client.stage, "verifying");
+});
+
+test("an RM-referred client is partner-referred, tagged to the RM, and cannot switch to direct", async () => {
+  const { client } = await (await request("rm/clients", rm(), "POST", newClient())).json();
+  const user = db.findUserById(client.id);
+  const profile = db.findInvestorProfileByUserId(client.id);
+  assert.equal(profile.channel, "eam_referred");
+  assert.equal(profile.prepared_by_rm.rm_id, rm().id);
+  assert.ok(
+    w.workflow.assignments.some((a) => a.investorId === client.id && a.staffId === rm().id),
+  );
+  assert.equal(
+    (await (await request("demo/investor-segment", user)).json()).segment,
+    "partner_referred",
+  );
+  // The client keeps the channel when they continue; no partner code is required.
+  const keep = await request("investor_profile", user, "PATCH", {
+    investor_profile: { channel: "eam_referred" },
+  });
+  assert.equal(keep.status, 200);
+  const direct = await request("investor_profile", user, "PATCH", {
+    investor_profile: { channel: "direct" },
+  });
+  assert.equal(direct.status, 422);
+  assert.equal(profile.channel, "eam_referred");
 });

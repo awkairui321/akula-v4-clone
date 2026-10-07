@@ -10,6 +10,7 @@ import {
   ShieldCheckIcon,
   PanelLeft,
   UserCheckIcon,
+  UserPlusIcon,
   Building2Icon,
   CreditCard,
   MailIcon,
@@ -48,6 +49,7 @@ export default function LucaLayout() {
     ? [
         { to: "/rm", label: "Overview", icon: LayoutDashboard },
         { to: "/rm/clients", label: "Clients and follow ups", icon: UserCheckIcon },
+        { to: "/rm/onboarding", label: "Client onboarding", icon: UserPlusIcon },
         { to: "/rm/opportunities", label: "Opportunities", icon: TrendingUp },
         { to: "/rm/partners", label: "Partner client book", icon: Building2Icon },
         { to: "/rm/documents", label: "Documents", icon: ShieldCheckIcon },

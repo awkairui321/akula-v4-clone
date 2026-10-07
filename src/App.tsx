@@ -13,6 +13,9 @@ import LiveComparePage from "@/features/workspace/live-compare";
 import LandingPage from "@/features/unauthenticated/landing";
 import LoginPage from "@/features/unauthenticated/login";
 import SignupPage from "@/features/unauthenticated/signup";
+import ActivatePage from "@/features/unauthenticated/activate";
+import RmOnboardingList from "@/features/rm/onboarding-list";
+import ClientOnboardingPage, { NewClientPage } from "@/features/rm/client-onboarding";
 import OnboardingPage from "@/features/investor/onboarding/onboarding";
 import ConfirmPage from "@/features/unauthenticated/confirm";
 import ForgotPasswordPage from "@/features/unauthenticated/forgot-password";
@@ -169,6 +172,7 @@ function App() {
                 <Route element={<GuestOnly />}>
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/signup" element={<SignupPage />} />
+                  <Route path="/activate" element={<ActivatePage />} />
                 </Route>
                 <Route path="/confirm" element={<ConfirmPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -281,6 +285,9 @@ function App() {
                         path="/rm/clients"
                         element={<WorkflowPage surface="Relationships" compact />}
                       />
+                      <Route path="/rm/onboarding" element={<RmOnboardingList />} />
+                      <Route path="/rm/onboarding/new" element={<NewClientPage />} />
+                      <Route path="/rm/onboarding/:id" element={<ClientOnboardingPage />} />
                       <Route
                         path="/rm/opportunities"
                         element={<WorkflowPage surface="Opportunities" compact />}

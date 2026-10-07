@@ -291,6 +291,8 @@ function DocumentTable({
               <span className="block truncate text-sm font-medium">{d.name}</span>
               <span className="block truncate text-xs text-muted-foreground">
                 {documentKindLabel(d.kind)}
+                {d.uploaded_by?.role === "rm" &&
+                  ` · supplied by ${d.uploaded_by.name}, ${d.confirmed_at ? "confirmed by investor" : "awaiting investor confirmation"}`}
               </span>
             </span>
             <span className="order-3 col-span-2 min-w-0 lg:order-none lg:col-span-1">

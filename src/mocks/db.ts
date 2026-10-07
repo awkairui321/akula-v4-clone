@@ -1,4 +1,5 @@
 import type { InvestorSegment, CommercialTerms } from "../lib/investor-access";
+import type { PreparedByRm, UploadedBy } from "../lib/rm-onboarding";
 // ---------------------------------------------------------------------------
 // In-memory mock database for the MSW mock API layer.
 //
@@ -61,6 +62,10 @@ import type {
 
 export type MockUser = {
   investor_segment?: InvestorSegment;
+  /** RM-prepared accounts: the invitation is open until the investor sets a password. */
+  invite_token?: string | null;
+  activated_at?: string | null;
+  provisioned_by?: number;
   id: number;
   email: string;
   password: string;
@@ -204,6 +209,8 @@ export type MockInvestorProfile = {
   /** Set when channel is "eam_referred" — which institution/RM subscriptions get attributed to. */
   eam_firm: string | null;
   eam_name: string | null;
+  /** Set when a LUCA RM created this account and supplied part of it. */
+  prepared_by_rm?: PreparedByRm | null;
 };
 
 export const investorProfiles: MockInvestorProfile[] = [
@@ -3928,7 +3935,7 @@ export function findAdviserClientById(id: number): MockAdviserClient | undefined
 // Admin: investors, partners
 // ---------------------------------------------------------------------------
 
-type AdminInvestorSeed = {
+export type AdminInvestorSeed = {
   id: number;
   full_name: string;
   email: string;
@@ -4492,11 +4499,30 @@ export function adminInvestors(): AdminInvestor[] {
     committed_amount: committedAmountFor(seed.id),
     open_subscriptions: openSubscriptionsFor(seed.id),
     created_at: seed.onboarding_completed_at ?? daysAgo((seed.onboarding_step ?? 0) * 5 + 10),
+    prepared_by_rm: findInvestorProfileByUserId(seed.id)?.prepared_by_rm?.rm_name ?? null,
+    invite_pending: Boolean(findUserById(seed.id)?.invite_token),
   }));
 }
 
 export function findAdminInvestorSeed(id: number): AdminInvestorSeed | undefined {
   return adminInvestorSeeds.find((s) => s.id === id);
+}
+
+/** Register a new investor in the LUCA client book (used when an RM prepares an account). */
+export function addAdminInvestorSeed(seed: AdminInvestorSeed): void {
+  adminInvestorSeeds.push(seed);
+}
+
+/** Next id that is free across accounts, profiles and the LUCA client book. */
+export function nextInvestorUserId(): number {
+  return (
+    Math.max(
+      0,
+      ...users.map((u) => u.id),
+      ...investorProfiles.map((p) => p.user_id),
+      ...adminInvestorSeeds.map((s) => s.id),
+    ) + 1
+  );
 }
 
 export const verificationDocumentsByInvestor: Record<
@@ -4508,6 +4534,8 @@ export const verificationDocumentsByInvestor: Record<
     notes: string | null;
     has_file: boolean;
     created_at: string;
+    uploaded_by?: UploadedBy;
+    confirmed_at?: string | null;
   }>
 > = {
   2: [

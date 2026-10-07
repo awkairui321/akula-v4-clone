@@ -3,7 +3,9 @@ import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Client as PersonaClient } from "persona";
 import { formatISO, subYears } from "date-fns";
-import { isValidPhoneNumber, parsePhoneNumber, type Country } from "react-phone-number-input";
+import { isValidPhoneNumber, parsePhoneNumber } from "react-phone-number-input";
+import { TICKET_SIZES, COUNTRIES } from "@/lib/onboarding-options";
+import type { PreparedByRm, UploadedBy } from "@/lib/rm-onboarding";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
@@ -63,6 +65,7 @@ type InvestorProfile = {
   referral_code: string | null;
   accreditation_basis: string[] | null;
   eligibility_confirmed_at: string | null;
+  prepared_by_rm?: PreparedByRm | null;
 };
 
 type SectionStatus = "locked" | "not_started" | "in_progress" | "waiting" | "complete";
@@ -81,31 +84,6 @@ const INDUSTRIES = [
   { value: "robotics_automation", label: "Robotics & Automation" },
   { value: "cybersecurity", label: "Cybersecurity" },
   { value: "crypto_infrastructure", label: "Crypto Infrastructure" },
-];
-
-const TICKET_SIZES = [
-  { value: "25k-50k", label: "$25k – $50k" },
-  { value: "50k-150k", label: "$50k – $150k" },
-  { value: "150k-500k", label: "$150k – $500k" },
-  { value: "500k+", label: "$500k+" },
-];
-
-const COUNTRIES: { country: string; nationality: string; iso?: Country }[] = [
-  { country: "Singapore", nationality: "Singaporean", iso: "SG" },
-  { country: "United States", nationality: "American", iso: "US" },
-  { country: "United Kingdom", nationality: "British", iso: "GB" },
-  { country: "Australia", nationality: "Australian", iso: "AU" },
-  { country: "Canada", nationality: "Canadian", iso: "CA" },
-  { country: "Hong Kong", nationality: "Hong Konger", iso: "HK" },
-  { country: "Japan", nationality: "Japanese", iso: "JP" },
-  { country: "Germany", nationality: "German", iso: "DE" },
-  { country: "France", nationality: "French", iso: "FR" },
-  { country: "India", nationality: "Indian", iso: "IN" },
-  { country: "Indonesia", nationality: "Indonesian", iso: "ID" },
-  { country: "Malaysia", nationality: "Malaysian", iso: "MY" },
-  { country: "Thailand", nationality: "Thai", iso: "TH" },
-  { country: "Vietnam", nationality: "Vietnamese", iso: "VN" },
-  { country: "Other", nationality: "Other" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -337,6 +315,29 @@ function ChannelSection({
   const [channel, setChannel] = useState<InvestmentChannel | null>(profile?.channel ?? null);
   const [referralCode, setReferralCode] = useState(profile?.referral_code ?? "");
   const mutation = useProfileMutation(onComplete, profile ? "PATCH" : "POST");
+
+  if (profile?.prepared_by_rm) {
+    return (
+      <>
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold">How you are investing</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This was set when {profile.prepared_by_rm.rm_name} referred you to Akula.
+          </p>
+        </div>
+        <div className="rounded-lg border border-primary bg-primary/5 p-4">
+          <p className="text-sm font-medium">Partner-referred investor</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Referred by {profile.prepared_by_rm.rm_name}. Expanded deal access, published fees and
+            priority allocation consideration; allocation is not guaranteed.
+          </p>
+        </div>
+        <Button className="mt-6 w-full" onClick={() => onComplete(profile)}>
+          Continue
+        </Button>
+      </>
+    );
+  }
 
   return (
     <>
@@ -1151,8 +1152,20 @@ function VerificationDocuments() {
     queryKey: ["onboardingDocuments"],
     queryFn: () =>
       api<{
-        documents: { id: number; document_type: string; notes: string | null; status: string }[];
+        documents: {
+          id: number;
+          document_type: string;
+          notes: string | null;
+          status: string;
+          uploaded_by?: UploadedBy;
+          confirmed_at?: string | null;
+        }[];
       }>("/api/v1/onboarding/documents"),
+  });
+  const confirm = useMutation({
+    mutationFn: (id: number) =>
+      api(`/api/v1/onboarding/documents/${id}/confirm`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["onboardingDocuments"] }),
   });
   const upload = useMutation({
     mutationFn: async () => {
@@ -1207,8 +1220,26 @@ function VerificationDocuments() {
       )}
       <ul className="text-xs">
         {data?.documents.map((doc) => (
-          <li key={doc.id}>
-            {doc.notes || doc.document_type} - {doc.status}
+          <li key={doc.id} className="flex items-center justify-between gap-2 py-0.5">
+            <span>
+              {doc.notes || doc.document_type} - {doc.status}
+              {doc.uploaded_by?.role === "rm" && (
+                <span className="text-muted-foreground"> · provided by {doc.uploaded_by.name}</span>
+              )}
+            </span>
+            {doc.uploaded_by?.role === "rm" &&
+              (doc.confirmed_at ? (
+                <span className="text-green-700">Confirmed</span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={confirm.isPending}
+                  onClick={() => confirm.mutate(doc.id)}
+                >
+                  Confirm
+                </Button>
+              ))}
           </li>
         ))}
       </ul>
@@ -1399,6 +1430,34 @@ function KycSection({
   );
 }
 
+function PreparedNotice({ prepared }: { prepared: PreparedByRm }) {
+  const { data } = useQuery({
+    queryKey: ["onboardingDocuments"],
+    queryFn: () =>
+      api<{ documents: { id: number; uploaded_by?: UploadedBy; confirmed_at?: string | null }[] }>(
+        "/api/v1/onboarding/documents",
+      ),
+  });
+  const supplied = (data?.documents ?? []).filter((d) => d.uploaded_by?.role === "rm");
+  const unconfirmed = supplied.filter((d) => !d.confirmed_at).length;
+  if (prepared.confirmed_at && unconfirmed === 0) return null;
+  return (
+    <div className="mb-8 border-l-2 border-primary bg-muted/40 px-4 py-3 text-sm">
+      <p className="font-medium">{prepared.rm_name} has started your account</p>
+      <p className="mt-1 text-muted-foreground">
+        {prepared.fields.length} detail{prepared.fields.length === 1 ? "" : "s"}
+        {supplied.length > 0 &&
+          ` and ${supplied.length} document${supplied.length === 1 ? "" : "s"}`}{" "}
+        {prepared.fields.length + supplied.length === 1 ? "was" : "were"} entered for you.
+        {!prepared.confirmed_at && " Check each page and correct anything that is wrong."}
+        {unconfirmed > 0 &&
+          ` Confirm the document${unconfirmed === 1 ? "" : "s"} under Verify Identity.`}{" "}
+        Eligibility, the identity check, the NDA and consents are yours to complete.
+      </p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
@@ -1579,6 +1638,7 @@ export default function OnboardingPage() {
             activeSection === "nda" && ndaStatus === "not_started" ? "max-w-4xl" : "max-w-xl"
           }`}
         >
+          {profile?.prepared_by_rm && <PreparedNotice prepared={profile.prepared_by_rm} />}
           {activeSection === "channel" && (
             <ChannelSection
               profile={profile}
