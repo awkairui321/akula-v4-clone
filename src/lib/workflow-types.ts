@@ -41,6 +41,19 @@ export type Version = {
   /** Content that differs from the last published version, for the Fund Manager's review. */
   changed?: string[];
   decision?: { by: number; at: string; outcome: "published" | "returned"; text?: string };
+  /** Filled in for the Fund Manager's review: what differs from the live version, right now. */
+  diff?: DiffRow[];
+  impact?: { subscribers: number; newOffering: boolean };
+  checklist?: { label: string; done: boolean }[];
+};
+export type DiffRow = {
+  label: string;
+  before: string;
+  after: string;
+  /** Terms investors feel most: fees, price, valuation, minimum and closing date. */
+  material: boolean;
+  /** The Fund Manager edited this field after the Investment Team submitted it. */
+  editedByManager: boolean;
 };
 /** An edit to a deal's working content. Ops edits route to the Investment Team only. */
 export type DealChange = {
@@ -80,6 +93,8 @@ export type WorkflowState = {
   returns: ReturnObligation[];
   versions: Version[];
   dealChanges: DealChange[];
+  /** Working edits not yet in a version, for the Fund Manager and Investment Team. */
+  unpublished: { fundId: number; fields: string[] }[];
   signatures: Signature[];
   assignments: { investorId: number; staffId: number }[];
   highlights: {

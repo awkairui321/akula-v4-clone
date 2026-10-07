@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { DEAL_MATERIAL_KINDS } from "@/lib/document-catalogue";
 import { allocationOf, daysUntil, formatClose } from "./vehicles/deal-status";
+import { usePublication } from "./vehicles/use-publication";
 
 /** Statuses that count as "funded" — money is confirmed on its way to escrow
  * or already there. Distinct from AUM, which is broader (see below). */
@@ -238,6 +239,7 @@ function Ring({ pct }: { pct: number | null }) {
 
 export default function AdminDashboard() {
   const [showAllQueue, setShowAllQueue] = useState(false);
+  const publication = usePublication();
 
   const { data: fundsData, isLoading: fundsLoading } = useQuery({
     queryKey: ["admin", "funds"],
@@ -286,6 +288,17 @@ export default function AdminDashboard() {
 
   /* ─── What is waiting on the fund manager ─── */
   const attention: AttentionItem[] = [
+    // Offerings the Investment Team has submitted for approval.
+    ...publication.waiting.map((v) => ({
+      key: `publish-${v.id}`,
+      title: v.snapshot.codename,
+      detail: `${v.snapshot.asset.name} · version ${v.number} from the Investment Team`,
+      needs: "Review and approve offering",
+      // Outward-facing, so it ranks above the capital queue.
+      priority: -1,
+      ageDays: daysSince(v.at),
+      to: `/luca/deals/${v.fundId}?tab=review`,
+    })),
     ...allSubs
       .filter((s) => s.status === "under_luca_review")
       .map((s) => ({
@@ -447,7 +460,9 @@ export default function AdminDashboard() {
         <section>
           <div className="flex items-baseline justify-between gap-4">
             <div className={SECTION_LABEL}>Needs your attention ({attention.length})</div>
-            <p className="text-xs text-muted-foreground">Capital decisions first, then oldest</p>
+            <p className="text-xs text-muted-foreground">
+              Offerings and capital decisions first, then oldest
+            </p>
           </div>
           {attention.length === 0 ? (
             <p className="mt-3 border-y py-6 text-sm text-muted-foreground">

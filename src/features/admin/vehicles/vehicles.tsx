@@ -4,7 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { SECTOR_LABELS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
+import type { Version } from "@/lib/workflow-types";
 import { daysUntil, formatClose, allocationOf, StateBadge } from "./deal-status";
+import { usePublication, publicationStatus } from "./use-publication";
+import { useAuth } from "@/contexts/auth-context";
 import { formatPrice, formatPriceCompact, formatPricePrecise } from "@/lib/currency";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +31,7 @@ function lastRoundValuation(fund: Fund): string {
 }
 
 /** Whole card is the link: click anywhere to open the deal. */
-function VehicleCard({ fund }: { fund: Fund }) {
+function VehicleCard({ fund, status }: { fund: Fund; status?: string | null }) {
   const days = daysUntil(fund.closes_at);
   const { allocated, total, pct } = allocationOf(fund);
 
@@ -49,6 +52,7 @@ function VehicleCard({ fund }: { fund: Fund }) {
             </div>
             <StateBadge fund={fund} />
           </div>
+          {status && <p className="text-xs font-medium text-amber-700">{status}</p>}
 
           <p className="line-clamp-2 text-sm text-muted-foreground">
             {fund.hook || fund.asset.description}
@@ -272,6 +276,60 @@ function isClosingSoon(fund: Fund): boolean {
   return days !== null && days <= 7;
 }
 
+const daysSince = (iso: string) =>
+  Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+
+/** What the Investment Team has sent to the Fund Manager, oldest first. */
+function ApprovalBand({ waiting, funds }: { waiting: Version[]; funds: Fund[] }) {
+  if (!waiting.length) return null;
+  return (
+    <section aria-label="Needs your approval" className="space-y-2">
+      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        Needs your approval ({waiting.length})
+      </p>
+      <ul className="divide-y border-y">
+        {waiting.map((version) => {
+          const fund = funds.find((f) => f.id === version.fundId);
+          const days = daysSince(version.at);
+          return (
+            <li key={version.id}>
+              <Link
+                to={`/luca/deals/${version.fundId}?tab=review`}
+                className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-3 hover:bg-muted/40"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">
+                    {fund?.codename ?? `Offering ${version.fundId}`}
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      · {fund?.asset.name} · version {version.number}
+                    </span>
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {version.changed?.length
+                      ? `Changed: ${version.changed.slice(0, 4).join(", ")}${version.changed.length > 4 ? ` and ${version.changed.length - 4} more` : ""}`
+                      : fund && version.impact?.newOffering
+                        ? "New offering"
+                        : "Review the changes"}
+                  </span>
+                </span>
+                <span className="flex items-center gap-4 text-sm">
+                  <span className={days >= 3 ? "text-amber-700" : "text-muted-foreground"}>
+                    {days === 0 ? "Sent today" : `Waiting ${days} day${days === 1 ? "" : "s"}`}
+                  </span>
+                  <span className="flex items-center gap-1 font-medium">
+                    Review <ArrowRightIcon className="size-4" />
+                  </span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export default function AdminVehiclesPage() {
   const navigate = useNavigate();
   const [newDealOpen, setNewDealOpen] = useState(false);
@@ -285,6 +343,8 @@ export default function AdminVehiclesPage() {
   });
 
   const funds = fundsData?.funds ?? [];
+  const { user } = useAuth();
+  const publication = usePublication();
 
   const filtered = useMemo(() => {
     let result = funds;
@@ -341,6 +401,8 @@ export default function AdminVehiclesPage() {
         onOpenChange={setNewDealOpen}
         onCreated={(fund) => navigate(`/luca/deals/${fund.id}`)}
       />
+
+      {user?.role === "luca" && <ApprovalBand waiting={publication.waiting} funds={funds} />}
 
       {/* Search + status filter */}
       <div className="flex gap-3">
@@ -405,7 +467,13 @@ export default function AdminVehiclesPage() {
       {filtered.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((fund) => (
-            <VehicleCard key={fund.id} fund={fund} />
+            <VehicleCard
+              key={fund.id}
+              fund={fund}
+              status={
+                publicationStatus(fund.id, publication.versions, publication.unpublished)?.label
+              }
+            />
           ))}
         </div>
       )}

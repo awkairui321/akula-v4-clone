@@ -1190,3 +1190,49 @@ test("an RM-referred client is partner-referred, tagged to the RM, and cannot sw
   assert.equal(direct.status, 422);
   assert.equal(profile.channel, "eam_referred");
 });
+
+test("Fund Manager review shows what changed against the live version, including their own edits", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  await request("funds/1", team, "PATCH", { fund: { hook: "New headline", price: "199.00" } });
+  w.command(team, { type: "prepare", id: 1 });
+  const version = w.workflow.versions.at(-1);
+  w.command(team, { type: "review", id: version.id, text: "Pricing refresh." });
+  await request("funds/1", manager(), "PATCH", { fund: { min_subscription: "40000" } });
+  const seen = w.view(manager()).versions.find((v) => v.id === version.id);
+  const row = (label) => seen.diff.find((r) => r.label === label);
+  assert.equal(row("Headline").after, "New headline");
+  assert.equal(row("Price per unit").material, true);
+  assert.equal(row("Price per unit").editedByManager, false);
+  assert.equal(row("Minimum subscription").editedByManager, true);
+  assert.equal(seen.impact.newOffering, false);
+  assert.ok(seen.impact.subscribers >= 0);
+  // The Fund Manager sees no Ops attribution anywhere in the review.
+  assert.ok(!JSON.stringify(seen).toLowerCase().includes('"byrole":"ops"'));
+  assert.ok(!w.view(rm()).versions.some((v) => v.diff));
+});
+
+test("a never-published offering is reviewed against a completeness checklist", () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  const draft = db.funds.find((f) => f.state === "draft");
+  const version = w.workflow.versions.find((v) => v.fundId === draft.id && v.status === "draft");
+  w.command(team, { type: "review", id: version.id });
+  const seen = w.view(manager()).versions.find((v) => v.id === version.id);
+  assert.equal(seen.impact.newOffering, true);
+  assert.ok(seen.checklist.length > 0);
+});
+
+test("Fund Manager stages their own edits for review in one step, and only they can", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  assert.equal(w.view(manager()).unpublished.length, 0);
+  await request("funds/1", manager(), "PATCH", { fund: { hook: "Manager headline" } });
+  assert.deepEqual(w.view(manager()).unpublished.find((u) => u.fundId === 1)?.fields, ["Headline"]);
+  for (const actor of [team, ops(), rm()])
+    assert.throws(() => w.command(actor, { type: "stage", id: 1 }));
+  w.command(manager(), { type: "stage", id: 1 });
+  const staged = w.workflow.versions.at(-1);
+  assert.equal(staged.status, "review");
+  assert.equal(staged.submittedBy, manager().id);
+  assert.equal(w.view(manager()).unpublished.length, 0);
+  w.command(manager(), { type: "approve", id: staged.id });
+  assert.equal(w.currentVersion(1).snapshot.hook, "Manager headline");
+});

@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import DemoResetButton from "./demo-reset-button";
+import { usePublication } from "@/features/admin/vehicles/use-publication";
 import {
   Circle,
   LayoutDashboard,
@@ -41,6 +42,7 @@ const NAV_ITEMS = [
 
 export default function LucaLayout() {
   const { logout, user } = useAuth();
+  const approvals = usePublication().waiting.length;
   const isRm = user?.role === "rm";
   const isTeam = user?.role === "investment_team";
   const home = isRm ? "/rm" : isTeam ? "/luca/deals" : "/luca";
@@ -58,7 +60,8 @@ export default function LucaLayout() {
       ]
     : isTeam
       ? NAV_ITEMS.filter((item) => ["/luca/deals", "/luca/publication"].includes(item.to))
-      : NAV_ITEMS;
+      : // Publication is the Investment Team's. The Fund Manager approves from Deals.
+        NAV_ITEMS.filter((item) => item.to !== "/luca/publication");
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
@@ -101,11 +104,19 @@ export default function LucaLayout() {
               <Button
                 variant={activeItem?.to === item.to ? "secondary" : "ghost"}
                 size="lg"
-                className={`w-full py-6 ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
+                className={`relative w-full py-6 ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
                 title={collapsed ? item.label : undefined}
               >
                 <item.icon className={collapsed ? "" : "mr-2"} />
                 {!collapsed && item.label}
+                {user?.role === "luca" && item.to === "/luca/deals" && approvals > 0 && (
+                  <span
+                    className={`rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white ${collapsed ? "absolute top-2 right-3" : "ml-auto"}`}
+                    aria-label={`${approvals} awaiting approval`}
+                  >
+                    {approvals}
+                  </span>
+                )}
               </Button>
             </Link>
           ))}

@@ -136,6 +136,11 @@ function ManagerRoute() {
   const { user } = useAuth();
   return user?.role === "luca" ? <Outlet /> : <Navigate to="/luca/deals" replace />;
 }
+// Publication is the Investment Team's submission tracker; the Fund Manager approves from Deals.
+function TeamRoute() {
+  const { user } = useAuth();
+  return user?.role === "investment_team" ? <Outlet /> : <Navigate to="/luca/deals" replace />;
+}
 function RmRoute() {
   const { user } = useAuth();
   return user?.role === "rm" ? <Outlet /> : <Navigate to="/workflows" replace />;
@@ -209,10 +214,12 @@ function App() {
                     <Route element={<LucaLayout />}>
                       <Route path="/luca/deals" element={<AdminVehiclesPage />} />
                       <Route path="/luca/deals/:id" element={<AdminVehicleOverviewPage />} />
-                      <Route
-                        path="/luca/publication"
-                        element={<WorkflowPage surface="Publication" compact />}
-                      />
+                      <Route element={<TeamRoute />}>
+                        <Route
+                          path="/luca/publication"
+                          element={<WorkflowPage surface="Publication" compact />}
+                        />
+                      </Route>
                       <Route element={<ManagerRoute />}>
                         <Route path="/luca" element={<AdminDashboard />} />
                         <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />

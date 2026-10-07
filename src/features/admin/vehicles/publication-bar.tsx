@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -20,8 +21,7 @@ export default function PublicationBar({ fund }: { fund: Fund }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
-  const [reason, setReason] = useState("");
-  const [sendingBack, setSendingBack] = useState(false);
+  const [, setSearchParams] = useSearchParams();
 
   const { data } = useQuery({
     queryKey: ["workflows", user?.id],
@@ -34,8 +34,6 @@ export default function PublicationBar({ fund }: { fund: Fund }) {
       api<WorkflowView>("/api/v1/workflows", { method: "POST", body: command }),
     onSuccess: () => {
       setNote("");
-      setReason("");
-      setSendingBack(false);
       queryClient.invalidateQueries();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -44,12 +42,15 @@ export default function PublicationBar({ fund }: { fund: Fund }) {
   const isTeam = user?.role === "investment_team";
   const isManager = user?.role === "luca";
   if (!data || (!isTeam && !isManager)) return null;
+  if (isManager && data.versions.some((v) => v.fundId === fund.id && v.status === "review"))
+    return null;
 
   const versions = data.versions
     .filter((v) => v.fundId === fund.id)
     .sort((a, b) => b.number - a.number);
   const open = versions.find((v) => v.status !== "published");
   const published = versions.find((v) => v.status === "published");
+  const working = data.unpublished.find((u) => u.fundId === fund.id);
   const opsEdits = data.dealChanges.filter(
     (c) => c.fundId === fund.id && c.byRole === "ops" && c.includedInVersion === undefined,
   );
@@ -90,6 +91,16 @@ export default function PublicationBar({ fund }: { fund: Fund }) {
                   : "No earlier published version to compare with."}
               </p>
             </>
+          )}
+          {isManager && !open && working && (
+            <p className="text-sm text-amber-700">
+              You have edits that investors cannot see yet: {working.fields.join(", ")}.
+            </p>
+          )}
+          {isManager && open?.status === "draft" && (
+            <p className="text-sm text-muted-foreground">
+              The Investment Team is preparing this version. It reaches you when they submit it.
+            </p>
           )}
           {isTeam && opsEdits.length > 0 && (
             <p className="text-sm text-amber-700">
@@ -132,54 +143,22 @@ export default function PublicationBar({ fund }: { fund: Fund }) {
               </Button>
             </>
           )}
-          {isManager && open?.status === "review" && !sendingBack && (
-            <>
-              <Button
-                size="sm"
-                disabled={run.isPending}
-                onClick={() => run.mutate({ type: "approve", id: open.id })}
-              >
-                Approve and publish to investors
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setSendingBack(true)}>
-                Send back
-              </Button>
-            </>
-          )}
-          {isManager && !open && (
+          {isManager && !open && working && (
             <Button
               size="sm"
-              variant="outline"
               disabled={run.isPending}
-              onClick={() => run.mutate({ type: "prepare", id: fund.id })}
+              onClick={() =>
+                run.mutate(
+                  { type: "stage", id: fund.id },
+                  { onSuccess: () => setSearchParams({ tab: "review" }) },
+                )
+              }
             >
-              Prepare revision
+              Review and publish my edits
             </Button>
           )}
         </div>
       </div>
-
-      {isManager && open?.status === "review" && sendingBack && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            aria-label="Reason for sending back"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="What should the Investment Team change?"
-            className="max-w-lg"
-          />
-          <Button
-            size="sm"
-            disabled={!reason.trim() || run.isPending}
-            onClick={() => run.mutate({ type: "send-back", id: open.id, text: reason })}
-          >
-            Send back to Investment Team
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSendingBack(false)}>
-            Cancel
-          </Button>
-        </div>
-      )}
     </section>
   );
 }

@@ -6,6 +6,8 @@ import type {
   WorkflowCommand,
   WorkflowView,
   StaffRole,
+  DiffRow,
+  Version,
 } from "../lib/workflow-types";
 
 export const workflow: WorkflowState = {
@@ -16,6 +18,7 @@ export const workflow: WorkflowState = {
   returns: [],
   versions: [],
   dealChanges: [],
+  unpublished: [],
   signatures: [],
   assignments: [],
   highlights: [],
@@ -78,24 +81,126 @@ const CHANGE_LABELS: Record<string, string> = {
 };
 const humanize = (key: string) =>
   CHANGE_LABELS[key] ?? key.replace(/^asset\./, "Company: ").replaceAll("_", " ");
-/** Content fields that differ between two snapshots, in plain words. */
-function changedFields(previous: unknown, next: unknown): string[] {
-  const flat = (value: unknown) => {
-    const out: Record<string, string> = {};
-    for (const [key, v] of Object.entries((value ?? {}) as Record<string, unknown>)) {
-      if (["id", "state", "documents"].includes(key)) continue;
-      if (key === "asset" && v && typeof v === "object")
-        for (const [k, inner] of Object.entries(v as Record<string, unknown>))
-          out[`asset.${k}`] = JSON.stringify(inner);
-      else out[key] = JSON.stringify(v);
-    }
-    return out;
-  };
-  const a = flat(previous),
-    b = flat(next);
+const MATERIAL_KEYS = new Set([
+  "price",
+  "min_subscription",
+  "subscription_fee_pct",
+  "management_fee_pct",
+  "carried_interest_pct",
+  "closes_at",
+  "implied_valuation",
+]);
+const show = (value: unknown): string => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (Array.isArray(value)) {
+    if (!value.length) return "None";
+    const names = value.map((item) =>
+      item && typeof item === "object"
+        ? ((item as Record<string, unknown>).title ??
+          (item as Record<string, unknown>).name ??
+          (item as Record<string, unknown>).label)
+        : item,
+    );
+    return names.every((name) => typeof name === "string" || typeof name === "number")
+      ? names.join("; ")
+      : `${value.length} items`;
+  }
+  if (typeof value === "object") return "Updated";
+  const text = String(value);
+  return text.length > 280 ? `${text.slice(0, 277)}...` : text;
+};
+const money = (value: unknown, decimals: number) => {
+  const n = Number(value);
+  return Number.isFinite(n) && value !== "" && value !== null
+    ? `$${n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
+    : show(value);
+};
+/** Format a value the way the Fund Manager reads it: money, percentages, dates. */
+function showFor(key: string, value: unknown): string {
+  if (key === "price") return money(value, 2);
+  if (key === "min_subscription" || key === "implied_valuation") return money(value, 0);
+  if (key.endsWith("_fee_pct") || key === "carried_interest_pct")
+    return value === null || value === undefined || value === "" ? "—" : `${value}%`;
+  if (key === "closes_at" && typeof value === "string" && !Number.isNaN(Date.parse(value)))
+    return new Date(value).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  return show(value);
+}
+const flatten = (value: unknown) => {
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries((value ?? {}) as Record<string, unknown>)) {
+    if (["id", "state", "documents"].includes(key)) continue;
+    if (key === "asset" && v && typeof v === "object")
+      for (const [k, inner] of Object.entries(v as Record<string, unknown>))
+        out[`asset.${k}`] = inner;
+    else out[key] = v;
+  }
+  return out;
+};
+/** Fields that differ between two snapshots, with before and after in plain words. */
+function diffRows(previous: unknown, next: unknown, editedLabels = new Set<string>()): DiffRow[] {
+  const a = flatten(previous),
+    b = flatten(next);
   return [...new Set([...Object.keys(a), ...Object.keys(b)])]
-    .filter((key) => a[key] !== b[key])
-    .map(humanize);
+    .filter((key) => JSON.stringify(a[key]) !== JSON.stringify(b[key]))
+    .map((key) => ({
+      label: humanize(key),
+      before: showFor(key, a[key]),
+      after: showFor(key, b[key]),
+      material: MATERIAL_KEYS.has(key),
+      editedByManager: editedLabels.has(humanize(key)),
+    }));
+}
+const changedFields = (previous: unknown, next: unknown) =>
+  diffRows(previous, next).map((row) => row.label);
+/** Deal documents added since the live version was published. */
+function newDocumentRows(fundId: number, since?: string): DiffRow[] {
+  return db.documents
+    .filter(
+      (d) => d.fund_id === fundId && d.subscription_id === null && (!since || d.created_at > since),
+    )
+    .map((d) => ({
+      label: "Document added",
+      before: "—",
+      after: d.name,
+      material: false,
+      editedByManager: false,
+    }));
+}
+/** What the Fund Manager sees when reviewing a submitted version. */
+function reviewDetail(v: Version) {
+  const fund = db.findFundById(v.fundId)!;
+  const published = currentVersion(v.fundId);
+  const edited = new Set(
+    workflow.dealChanges
+      .filter((c) => c.fundId === v.fundId && c.byRole === "luca" && c.at >= v.at)
+      .flatMap((c) => c.fields),
+  );
+  const documentRows = newDocumentRows(v.fundId, published?.at);
+  return {
+    diff: published
+      ? [...diffRows(published.snapshot, fund, edited), ...documentRows]
+      : documentRows,
+    impact: {
+      subscribers: db.subscriptions.filter(
+        (s) =>
+          s.fund_id === v.fundId && !["cancelled", "rejected", "funds_returned"].includes(s.status),
+      ).length,
+      newOffering: !published,
+    },
+    checklist: published
+      ? undefined
+      : [
+          { label: "Risks described", done: fund.asset.risks.length > 0 },
+          { label: "Fees set", done: String(fund.subscription_fee_pct ?? "") !== "" },
+          { label: "Closing date set", done: Boolean(fund.closes_at) },
+          { label: "Minimum subscription set", done: Boolean(fund.min_subscription) },
+          { label: "Deal documents added", done: documentRows.length > 0 },
+        ],
+  };
 }
 /** Record an edit to a deal's working content so the right people see it. */
 export function recordDealChange(user: db.MockUser, fundId: number, fields: string[]) {
@@ -426,7 +531,7 @@ export function view(user: db.MockUser): WorkflowView {
       ids.includes(c.investorId) &&
       (privileged || user.id === c.investorId || c.owner === user.role),
   );
-  const versions = workflow.versions.filter(
+  const allVersions = workflow.versions.filter(
     (v) =>
       publisher ||
       ((staff(user) || user.has_eam_profile || disclosureAccess(user)) &&
@@ -437,8 +542,28 @@ export function view(user: db.MockUser): WorkflowView {
         (s) => s.reviewed_version_ids?.includes(v.id) || s.needs_review_version_id === v.id,
       ),
   );
+  const reviewing = user.role === "luca" || user.role === "investment_team";
+  const versions = allVersions.map((v) =>
+    reviewing && v.status === "review" ? { ...v, ...reviewDetail(v) } : v,
+  );
+  const unpublished = reviewing
+    ? db.funds.flatMap((fund) => {
+        const live = currentVersion(fund.id);
+        if (
+          !live ||
+          workflow.versions.some((v) => v.fundId === fund.id && v.status !== "published")
+        )
+          return [];
+        const fields = [
+          ...diffRows(live.snapshot, fund).map((row) => row.label),
+          ...newDocumentRows(fund.id, live.at).map(() => "Document added"),
+        ];
+        return fields.length ? [{ fundId: fund.id, fields: [...new Set(fields)] }] : [];
+      })
+    : [];
   return {
     ...workflow,
+    unpublished,
     actor: { id: user.id, role: user.role, email: user.email },
     storageWarning,
     clients: ids.map((id) => {
@@ -1051,6 +1176,33 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         (x) => x.fundId === v.fundId && x.includedInVersion === undefined,
       ))
         change.includedInVersion = v.id;
+      break;
+    }
+    // The Fund Manager's own edits: stage them for review in one step, then approve to publish.
+    case "stage": {
+      role("luca");
+      const fund = db.findFundById(c.id!);
+      requireValue(fund, "Offering not found.");
+      requireValue(
+        !workflow.versions.some((v) => v.fundId === fund.id && v.status !== "published"),
+        "Finish the existing revision first.",
+      );
+      const published = currentVersion(fund.id);
+      workflow.versions.push({
+        id: id(),
+        fundId: fund.id,
+        number:
+          Math.max(
+            0,
+            ...workflow.versions.filter((v) => v.fundId === fund.id).map((v) => v.number),
+          ) + 1,
+        status: "review",
+        snapshot: structuredClone(fund),
+        at: now(),
+        submittedBy: user.id,
+        note: "Edited by the Fund Manager.",
+        changed: published ? changedFields(published.snapshot, fund) : [],
+      });
       break;
     }
     // The Fund Manager sends a version back with a reason.
