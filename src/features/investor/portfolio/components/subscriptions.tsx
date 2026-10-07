@@ -840,37 +840,45 @@ function HoldingCard({
             id={`holding-details-${holding.id}`}
             className="space-y-2 rounded-lg bg-muted/50 p-3 text-xs"
           >
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div>
-                <p className="text-muted-foreground">Committed</p>
-                <p className="font-medium">{formatPricePrecise(committed)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Holding period</p>
-                <p className="font-medium">{yearsHeld ? `${yearsHeld} yrs` : "—"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Entry price / share</p>
-                <p className="font-medium">
-                  ${numericValue(holding.entry_price_per_share).toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Units</p>
-                <p className="font-medium">{holding.units}</p>
-              </div>
-              {subscribed && (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-3">
                 <div>
-                  <p className="text-muted-foreground">Subscribed</p>
-                  <p className="font-medium">{subscribed}</p>
+                  <p className="text-muted-foreground">Committed</p>
+                  <p className="font-medium">{formatPricePrecise(committed)}</p>
                 </div>
-              )}
-              {holding.nav_as_of && (
+                {subscribed && (
+                  <div>
+                    <p className="text-muted-foreground">Subscribed</p>
+                    <p className="font-medium">{subscribed}</p>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-3">
                 <div>
-                  <p className="text-muted-foreground">NAV as of</p>
-                  <p className="font-medium">{new Date(holding.nav_as_of).toLocaleDateString()}</p>
+                  <p className="text-muted-foreground">Holding period</p>
+                  <p className="font-medium">{yearsHeld ? `${yearsHeld} yrs` : "—"}</p>
                 </div>
-              )}
+                {holding.nav_as_of && (
+                  <div>
+                    <p className="text-muted-foreground">NAV as of</p>
+                    <p className="font-medium">
+                      {new Date(holding.nav_as_of).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-muted-foreground">Entry price / share</p>
+                  <p className="font-medium">
+                    ${numericValue(holding.entry_price_per_share).toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Units</p>
+                  <p className="font-medium">{holding.units}</p>
+                </div>
+              </div>
               {realized && (
                 <>
                   <div>

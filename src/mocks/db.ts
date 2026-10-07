@@ -4950,6 +4950,7 @@ export type CommunicationRouting = "direct" | "through_rm";
 export type CommunicationStatus = "draft" | "scheduled" | "sent";
 
 export type MockCommunication = {
+  uploaded_attachments?: import("@/lib/file-upload").UploadedFile[];
   delivery_channels?: ("email" | "inbox")[];
   purpose?: string;
   id: number;

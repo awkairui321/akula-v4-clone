@@ -1,4 +1,6 @@
 import { commercialTerms, fundForSegment } from "../../lib/investor-access";
+import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
+import { DOCUMENT_REQUEST_KINDS } from "@/lib/document-catalogue";
 import {
   segmentFor,
   investorAudience,
@@ -599,10 +601,16 @@ export const investorHandlers = [
           fund_name: communication.fund_id
             ? (findFundById(communication.fund_id)?.name ?? null)
             : null,
-          attachments: communication.attachment_document_ids
-            .map((id) => documents.find((d) => d.id === id))
-            .filter((d): d is NonNullable<typeof d> => Boolean(d))
-            .map((d) => ({ id: d.id, name: d.name })),
+          attachments: [
+            ...communication.attachment_document_ids
+              .map((id) => documents.find((d) => d.id === id))
+              .filter((d): d is NonNullable<typeof d> => Boolean(d))
+              .map((d) => ({ id: d.id, name: d.name, file_data_url: d.file_data_url })),
+            ...(communication.uploaded_attachments ?? []).map((file, index) => ({
+              ...file,
+              id: -(communication.id * 10 + index + 1),
+            })),
+          ],
           requests: documentRequests
             .filter((q) => q.communication_id === communication.id && q.investor_id === user.id)
             .map((q) => ({
@@ -657,14 +665,22 @@ export const investorHandlers = [
       (r) => r.id === Number(params.id) && r.investor_id === user.id,
     );
     if (!req) return HttpResponse.json({ error: "Request not found" }, { status: 404 });
-    const body = (await request.json().catch(() => ({}))) as { filename?: string };
+    if (req.status !== "requested")
+      return HttpResponse.json({ error: "This request is no longer open." }, { status: 409 });
+    const body = (await request.json().catch(() => ({}))) as UploadedFile;
+    if (!validUploadedFile(body))
+      return HttpResponse.json(
+        { error: "Choose a PDF, PNG or JPEG file up to 2 MB." },
+        { status: 422 },
+      );
     const profile = findInvestorProfileByUserId(user.id);
     const ownerName = profile
       ? `${profile.first_name} ${profile.last_name}`.trim() || user.email
       : user.email;
     const doc = {
       id: nextDocumentId(),
-      name: body.filename?.trim() || `${ownerName} — ${req.kind.replace(/_/g, " ")}`,
+      name: body.name.trim(),
+      file_data_url: body.file_data_url,
       kind: req.kind,
       status: "submitted",
       review_state: "received" as const,
@@ -680,7 +696,50 @@ export const investorHandlers = [
     documents.push(doc);
     req.status = "uploaded";
     req.received_document_id = doc.id;
+    persist();
     return HttpResponse.json({ request: req });
+  }),
+
+  http.post("*/api/v1/documents", async ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    const body = (await request.json().catch(() => ({}))) as UploadedFile & {
+      kind?: string;
+      fund_id?: number | null;
+    };
+    if (!validUploadedFile(body) || !DOCUMENT_REQUEST_KINDS.some((k) => k.key === body.kind))
+      return HttpResponse.json(
+        { error: "Choose a document type and a PDF, PNG or JPEG file up to 2 MB." },
+        { status: 422 },
+      );
+    if (body.fund_id != null && !hasInvestmentHistory(user, body.fund_id))
+      return HttpResponse.json({ error: "Upload only for your own investments." }, { status: 403 });
+    const profile = findInvestorProfileByUserId(user.id);
+    const doc = {
+      id: nextDocumentId(),
+      name: body.name.trim(),
+      kind: body.kind!,
+      status: "submitted",
+      review_state: "received" as const,
+      has_file: true,
+      file_data_url: body.file_data_url,
+      fund_id: body.fund_id ?? null,
+      fund_name: body.fund_id ? (findFundById(body.fund_id)?.name ?? null) : null,
+      subscription_id: null,
+      owner_id: user.id,
+      owner_email: user.email,
+      owner_name: profile ? `${profile.first_name} ${profile.last_name}`.trim() : user.email,
+      created_at: new Date().toISOString(),
+    };
+    documents.push(doc);
+    recordClientEvent(
+      user.id,
+      "documents",
+      "Submitted a document for LUCA review.",
+      doc.owner_name,
+    );
+    persist();
+    return HttpResponse.json({ document: doc });
   }),
 
   // GET /api/v1/documents (optionally ?fund_id=:id) — without a fund_id this

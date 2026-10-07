@@ -244,6 +244,7 @@ export type CommunicationRecipient = {
 };
 
 export type Communication = {
+  uploaded_attachments?: import("@/lib/file-upload").UploadedFile[];
   delivery_channels?: ("email" | "inbox")[];
   purpose?: string;
   id: number;

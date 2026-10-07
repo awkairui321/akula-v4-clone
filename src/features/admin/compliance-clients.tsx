@@ -378,6 +378,15 @@ export function DocRow({ doc, actions }: { doc: AdminDocument; actions: ClientAc
           </span>
         </summary>
         <div className="flex flex-wrap items-center justify-between gap-3 py-3 pl-4">
+          {doc.file_data_url && (
+            <a
+              href={doc.file_data_url}
+              download={doc.name}
+              className="text-xs font-medium text-primary underline underline-offset-2"
+            >
+              Download document
+            </a>
+          )}
           <p className="text-xs text-muted-foreground">
             {documentKindLabel(doc.kind)} · {formatDate(doc.created_at)}
             {doc.uploaded_by?.role === "rm" &&

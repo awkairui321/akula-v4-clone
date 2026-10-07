@@ -74,6 +74,21 @@ export default function CommunicationDetailPage() {
       <Card className="mb-6">
         <CardContent className="space-y-3 pt-6 text-sm">
           <div className="whitespace-pre-line">{communication.body}</div>
+          {!!communication.uploaded_attachments?.length && (
+            <ul className="space-y-2 border-t pt-3">
+              {communication.uploaded_attachments.map((file, index) => (
+                <li key={`${file.name}-${index}`}>
+                  <a
+                    href={file.file_data_url}
+                    download={file.name}
+                    className="text-primary underline underline-offset-2"
+                  >
+                    {file.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
           <Separator />
           <div className="flex flex-wrap gap-x-8 gap-y-1 text-muted-foreground">
             <span>Delivery: {(communication.delivery_channels ?? ["inbox"]).join(" and ")}</span>
@@ -87,7 +102,11 @@ export default function CommunicationDetailPage() {
                   ? `Scheduled for ${formatDate(communication.scheduled_at)}`
                   : `Drafted ${formatDate(communication.created_at)}`}
             </span>
-            <span>{communication.attachment_document_ids.length} attachment(s)</span>
+            <span>
+              {communication.attachment_document_ids.length +
+                (communication.uploaded_attachments?.length ?? 0)}{" "}
+              attachment(s)
+            </span>
           </div>
         </CardContent>
       </Card>

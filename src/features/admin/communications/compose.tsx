@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CheckIcon, XIcon } from "lucide-react";
 import { api } from "@/lib/api";
+import FileDropzone from "@/components/file-dropzone";
+import { readUpload, type UploadedFile } from "@/lib/file-upload";
 import { stageOfStatus } from "@/lib/types";
 import type { Fund } from "@/lib/types";
 import {
@@ -200,6 +202,7 @@ export default function ComposeCommunicationPage() {
   const [body, setBody] = useState("");
   const [edited, setEdited] = useState(false);
   const [attachmentIds, setAttachmentIds] = useState<number[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const routing: CommunicationRouting = "direct";
   const emailOnly = ["request", "remind_sign", "remind_fund"].includes(purpose ?? "");
   const [timing, setTiming] = useState<"now" | "schedule">("now");
@@ -398,6 +401,7 @@ export default function ComposeCommunicationPage() {
           purpose,
           delivery_channels: emailOnly ? ["email"] : ["email", "inbox"],
           attachment_document_ids: attachmentIds,
+          uploaded_attachments: uploadedFiles,
           send_at: timing === "schedule" ? new Date(scheduleDate).toISOString() : null,
           investor_ids: audience.map((i) => i.id),
         },
@@ -860,6 +864,40 @@ export default function ComposeCommunicationPage() {
             />
           </div>
 
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Attachments (optional)</p>
+            <FileDropzone
+              multiple
+              label="Attach files"
+              onFiles={async (files) => {
+                if (uploadedFiles.length + files.length > 5)
+                  throw new Error("Attach up to 5 files per communication.");
+                const selected = await Promise.all(files.map(readUpload));
+                setUploadedFiles((previous) => [...previous, ...selected]);
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Demo attachments are saved in this browser. External email delivery is not connected.
+            </p>
+            {uploadedFiles.map((file, index) => (
+              <div
+                key={`${file.name}-${index}`}
+                className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+              >
+                <span className="truncate">{file.name}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Remove ${file.name}`}
+                  onClick={() =>
+                    setUploadedFiles((previous) => previous.filter((_, i) => i !== index))
+                  }
+                >
+                  <XIcon className="size-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
           {documents.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">Attach deal documents (optional)</p>
@@ -923,7 +961,15 @@ export default function ComposeCommunicationPage() {
               label="Delivery"
               value={emailOnly ? "Email request" : "Email and investor inbox"}
             />
-            <ReviewRow label="Attachments" value={String(attachmentIds.length)} />
+            <ReviewRow
+              label="Attachments"
+              value={
+                [
+                  ...documents.filter((d) => attachmentIds.includes(d.id)).map((d) => d.name),
+                  ...uploadedFiles.map((f) => f.name),
+                ].join(", ") || "None"
+              }
+            />
             <ReviewRow label="Subject" value={subject} />
           </dl>
           <div>
