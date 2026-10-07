@@ -15,6 +15,7 @@ export const workflow: WorkflowState = {
   allocations: [],
   returns: [],
   versions: [],
+  dealChanges: [],
   signatures: [],
   assignments: [],
   highlights: [],
@@ -62,6 +63,52 @@ export function clientsFor(user: db.MockUser): number[] {
 export function ownedSubscription(request: Request, sid: number) {
   const user = db.currentUser(request);
   return user && db.subscriptions.find((s) => s.id === sid && s.investor_id === user.id);
+}
+const CHANGE_LABELS: Record<string, string> = {
+  hook: "Headline",
+  descriptor: "Descriptor",
+  price: "Price per unit",
+  min_subscription: "Minimum subscription",
+  subscription_fee_pct: "Subscription fee",
+  management_fee_pct: "Management fee",
+  carried_interest_pct: "Carried interest",
+  closes_at: "Closing date",
+  implied_valuation: "Valuation",
+  tags: "Tags",
+};
+const humanize = (key: string) =>
+  CHANGE_LABELS[key] ?? key.replace(/^asset\./, "Company: ").replaceAll("_", " ");
+/** Content fields that differ between two snapshots, in plain words. */
+function changedFields(previous: unknown, next: unknown): string[] {
+  const flat = (value: unknown) => {
+    const out: Record<string, string> = {};
+    for (const [key, v] of Object.entries((value ?? {}) as Record<string, unknown>)) {
+      if (["id", "state", "documents"].includes(key)) continue;
+      if (key === "asset" && v && typeof v === "object")
+        for (const [k, inner] of Object.entries(v as Record<string, unknown>))
+          out[`asset.${k}`] = JSON.stringify(inner);
+      else out[key] = JSON.stringify(v);
+    }
+    return out;
+  };
+  const a = flat(previous),
+    b = flat(next);
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+    .filter((key) => a[key] !== b[key])
+    .map(humanize);
+}
+/** Record an edit to a deal's working content so the right people see it. */
+export function recordDealChange(user: db.MockUser, fundId: number, fields: string[]) {
+  if (!fields.length) return;
+  if (!["ops", "investment_team", "luca"].includes(user.role)) return;
+  workflow.dealChanges.push({
+    id: id(),
+    fundId,
+    by: user.id,
+    byRole: user.role as "ops" | "investment_team" | "luca",
+    fields: [...new Set(fields.map(humanize))],
+    at: now(),
+  });
 }
 export function currentVersion(fid: number) {
   return workflow.versions.filter((v) => v.fundId === fid && v.status === "published").at(-1);
@@ -438,6 +485,13 @@ export function view(user: db.MockUser): WorkflowView {
     returns: workflow.returns.filter((r) => sid.has(r.subscriptionId)),
     signatures: workflow.signatures.filter((r) => sid.has(r.subscriptionId)),
     versions,
+    // Ops edits go to the Investment Team only; the Fund Manager sees what the team submits.
+    dealChanges: workflow.dealChanges.filter(
+      (change) =>
+        user.role === "ops" ||
+        user.role === "investment_team" ||
+        (user.role === "luca" && change.byRole !== "ops"),
+    ),
     assignments: workflow.assignments.filter((a) => ids.includes(a.investorId)),
     highlights: workflow.highlights.filter(
       (h) =>
@@ -958,7 +1012,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       break;
     }
     case "prepare": {
-      role("ops", "luca", "investment_team");
+      role("luca", "investment_team");
       const fund = db.findFundById(c.id!);
       requireValue(fund, "Offering not found.");
       requireValue(
@@ -979,27 +1033,59 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       });
       break;
     }
-    case "review":
-    case "approve":
-    case "publish": {
-      role(...(c.type === "approve" ? ["luca"] : ["ops", "luca", "investment_team"]));
+    // The Investment Team sends a prepared version to the Fund Manager.
+    case "review": {
+      role("investment_team", "luca");
       const v = workflow.versions.find((v) => v.id === c.id);
       requireValue(v, "Version not found.");
-      const expected = { review: "draft", approve: "review", publish: "approved" };
-      requireValue(v.status === expected[c.type], "Version is not ready.");
+      requireValue(v.status === "draft", "Version is not ready.");
+      const f = db.findFundById(v.fundId)!;
+      requireValue(f.state !== "cancelled", "Cancelled offering cannot be submitted.");
+      v.snapshot = structuredClone(f);
+      v.status = "review";
+      v.submittedBy = user.id;
+      v.note = c.text?.trim() || undefined;
+      const published = currentVersion(v.fundId);
+      v.changed = published ? changedFields(published.snapshot, v.snapshot) : [];
+      for (const change of workflow.dealChanges.filter(
+        (x) => x.fundId === v.fundId && x.includedInVersion === undefined,
+      ))
+        change.includedInVersion = v.id;
+      break;
+    }
+    // The Fund Manager sends a version back with a reason.
+    case "send-back": {
+      role("luca");
+      const v = workflow.versions.find((v) => v.id === c.id);
+      requireValue(v, "Version not found.");
+      requireValue(v.status === "review", "Version is not with the Fund Manager.");
+      v.status = "draft";
+      v.decision = { by: user.id, at: now(), outcome: "returned", text: text() };
+      break;
+    }
+    // Only the Fund Manager publishes: approval is what puts the offering in front of investors.
+    case "approve":
+    case "publish": {
+      role("luca");
+      const v = workflow.versions.find((v) => v.id === c.id);
+      requireValue(v, "Version not found.");
+      requireValue(
+        v.status === (c.type === "approve" ? "review" : "approved"),
+        "Version is not ready.",
+      );
       const f = db.findFundById(v.fundId)!;
       requireValue(f.state !== "cancelled", "Cancelled offering cannot publish.");
-      if (c.type === "review") v.snapshot = structuredClone(f);
-      v.status = c.type === "review" ? "review" : c.type === "approve" ? "approved" : "published";
-      if (c.type === "publish") {
-        Object.assign(f, structuredClone(v.snapshot));
-        f.state = "open";
-        for (const sub of db.subscriptions.filter(
-          (s) =>
-            s.fund_id === f.id && !["cancelled", "rejected", "funds_returned"].includes(s.status),
-        ))
-          sub.needs_review_version_id = v.id;
-      }
+      // The Fund Manager approves what they are looking at, including their own edits.
+      if (c.type === "approve") v.snapshot = structuredClone(f);
+      v.status = "published";
+      v.decision = { by: user.id, at: now(), outcome: "published" };
+      Object.assign(f, structuredClone(v.snapshot));
+      f.state = "open";
+      for (const sub of db.subscriptions.filter(
+        (s) =>
+          s.fund_id === f.id && !["cancelled", "rejected", "funds_returned"].includes(s.status),
+      ))
+        sub.needs_review_version_id = v.id;
       break;
     }
     case "acknowledge": {

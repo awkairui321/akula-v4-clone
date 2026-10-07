@@ -1,5 +1,5 @@
 import { canManageOfferingRequest } from "@/lib/permissions";
-import { workflow, command } from "../workflow";
+import { workflow, command, persist, recordDealChange } from "../workflow";
 import { http, HttpResponse } from "msw";
 import {
   currentUser,
@@ -1060,13 +1060,19 @@ export const adminHandlers = [
         { error: "Use exact-version Fund Manager approval and publication in Workflows." },
         { status: 422 },
       );
+    // While a version is with the Fund Manager only the Fund Manager edits it, so what they
+    // approve is what they reviewed. Ops and the Investment Team edit again once it is decided.
     if (
+      user.role !== "luca" &&
       workflow.versions.some(
         (v) => v.fundId === fund.id && ["review", "approved"].includes(v.status),
       )
     )
       return HttpResponse.json(
-        { error: "Finish the reviewed version before editing again." },
+        {
+          error:
+            "This offering is with the Fund Manager for review. Edit it again once it is decided.",
+        },
         { status: 422 },
       );
 
@@ -1094,11 +1100,27 @@ export const adminHandlers = [
     const previousState = fund.state;
     Object.assign(fund, scalarPatch);
 
-    if (typeof scalarPatch.state === "string" && scalarPatch.state !== previousState) {
+    // Ops edits stay out of the Fund Manager's activity; the Investment Team sees them instead.
+    if (
+      typeof scalarPatch.state === "string" &&
+      scalarPatch.state !== previousState &&
+      user.role !== "ops"
+    ) {
       logEvent("deal_status_change", `${fund.asset.name} moved to ${scalarPatch.state}.`, {
         fundId: fund.id,
       });
     }
+
+    recordDealChange(user, fund.id, [
+      ...Object.keys(scalarPatch),
+      ...(Array.isArray(patch.tag_ids) ? ["tags"] : []),
+      ...(typeof patch.fund_manager_id === "number" ? ["fund_manager"] : []),
+      ...Object.keys((patch.asset as object | undefined) ?? {}).map((key) => `asset.${key}`),
+      ...Object.keys((patch.share_class as object | undefined) ?? {}).map(
+        (key) => `share_class.${key}`,
+      ),
+    ]);
+    persist();
 
     return HttpResponse.json({ fund });
   }),

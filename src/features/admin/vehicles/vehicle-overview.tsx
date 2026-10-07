@@ -15,6 +15,7 @@ import PublishedDealEditor from "@/features/admin/vehicles/published-deal-editor
 import DealDocuments from "./deal-documents";
 import DealSubscriptions from "./deal-subscriptions";
 import DealFees from "./deal-fees";
+import PublicationBar from "./publication-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { StateBadge, allocationOf, daysUntil, formatClose } from "./deal-status";
 
@@ -184,6 +185,8 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           </div>
         </div>
       </div>
+
+      <PublicationBar fund={fund} />
 
       <Tabs
         value={visibleTab}

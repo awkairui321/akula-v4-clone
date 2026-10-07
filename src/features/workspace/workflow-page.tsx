@@ -2307,8 +2307,11 @@ function WorkflowPageContent({
           <>
             <Panel title="Offering preparation">
               <p>
-                The Investment Team prepares and submits the offering. The Fund Manager approves the
-                exact version; the Investment Team or Akula Ops then publishes the approved content.
+                {ops
+                  ? "Akula Ops edits to a deal go to the LUCA Investment Team, who decide what to include when they submit it. The Fund Manager sees only what the Investment Team submits."
+                  : team
+                    ? "Prepare the offering, then submit it to the Fund Manager. Edits from Akula Ops appear below and are included when you submit."
+                    : "The Investment Team prepares and submits each offering. You review it, edit anything you want changed, and approve. Approval publishes it to investors."}
               </p>
               <div className="wf-publication-grid">
                 {d.funds.map((fund) => (
@@ -2321,15 +2324,52 @@ function WorkflowPageContent({
                     <span>
                       {fund.name} · {fund.state}
                     </span>
-                    <small>Edit shared deal overview →</small>
+                    <small>{ops ? "Edit deal →" : "Open deal →"}</small>
                   </Link>
                 ))}
               </div>
-              <Action label="Prepare draft version" command={{ type: "prepare" }}>
-                <Choice name="id" label="Offering" items={d.funds} />
-              </Action>
+              {(team || manager) && (
+                <Action label="Prepare draft version" command={{ type: "prepare" }}>
+                  <Choice name="id" label="Offering" items={d.funds} />
+                </Action>
+              )}
             </Panel>
+            {(team || ops) && (
+              <Panel
+                title={ops ? "Your edits, routed to the Investment Team" : "Edits from Akula Ops"}
+              >
+                {d.dealChanges.filter((change) => change.byRole === "ops").length === 0 ? (
+                  <p className="wf-empty">No Akula Ops edits to deals.</p>
+                ) : (
+                  d.dealChanges
+                    .filter((change) => change.byRole === "ops")
+                    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+                    .map((change) => (
+                      <article className="wf-record" key={change.id}>
+                        <h3>
+                          {d.funds.find((fund) => fund.id === change.fundId)?.company ??
+                            `Offering ${change.fundId}`}
+                        </h3>
+                        <p>
+                          {change.fields.join(", ")} · {date(change.at)}
+                        </p>
+                        <p>
+                          {change.includedInVersion
+                            ? `Submitted to the Fund Manager in version ${
+                                d.versions.find((v) => v.id === change.includedInVersion)?.number ??
+                                ""
+                              }.`
+                            : "Not yet submitted. Included in the next version the Investment Team submits."}
+                        </p>
+                      </article>
+                    ))
+                )}
+              </Panel>
+            )}
             <Panel title="Publication queue">
+              {d.versions.filter((v) => v.status !== "published").length === 0 && (
+                <p className="wf-empty">Nothing is waiting for publication.</p>
+              )}
               {d.versions
                 .filter((v) => v.status !== "published")
                 .map((v) => (
@@ -2337,20 +2377,50 @@ function WorkflowPageContent({
                     <h3>
                       {v.snapshot.codename} · version {v.number}
                     </h3>
-                    <p>{v.status}</p>
-                    {(team || manager || ops) && v.status === "draft" && (
-                      <Action
-                        label="Submit for LUCA review"
-                        command={{ type: "review", id: v.id }}
-                      />
+                    <p>
+                      {v.status === "draft"
+                        ? "Draft with the Investment Team"
+                        : v.status === "review"
+                          ? `Awaiting Fund Manager approval · submitted ${date(v.at)}`
+                          : "Approved, not yet published"}
+                    </p>
+                    {v.decision?.outcome === "returned" && v.status === "draft" && (
+                      <p>Returned by the Fund Manager: {v.decision.text}</p>
+                    )}
+                    {v.status === "review" && v.note && (
+                      <p>Note from the Investment Team: {v.note}</p>
+                    )}
+                    {v.status === "review" && (
+                      <p>
+                        {v.changed?.length
+                          ? `Changed from the published version: ${v.changed.join(", ")}.`
+                          : "No earlier published version to compare with."}
+                      </p>
+                    )}
+                    {(team || manager) && v.status === "draft" && (
+                      <Action label="Submit to Fund Manager" command={{ type: "review", id: v.id }}>
+                        <Field
+                          name="text"
+                          label="Note for the Fund Manager (optional)"
+                          required={false}
+                        />
+                      </Action>
                     )}
                     {manager && v.status === "review" && (
-                      <Action
-                        label="Approve exact version"
-                        command={{ type: "approve", id: v.id }}
-                      />
+                      <>
+                        <Action
+                          label="Approve and publish to investors"
+                          command={{ type: "approve", id: v.id }}
+                        />
+                        <Action
+                          label="Return to Investment Team"
+                          command={{ type: "send-back", id: v.id }}
+                        >
+                          <Field name="text" label="Reason" />
+                        </Action>
+                      </>
                     )}
-                    {(team || manager || ops) && v.status === "approved" && (
+                    {manager && v.status === "approved" && (
                       <Action
                         label="Publish approved version"
                         command={{ type: "publish", id: v.id }}

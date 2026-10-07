@@ -285,12 +285,12 @@ test("support persists a scoped reference and actual staff reply", () => {
 test("exact approved publication retains earlier signed snapshots", () => {
   const f = db.funds[0];
   const old = structuredClone(w.currentVersion(f.id));
-  w.command(ops(), { type: "prepare", id: f.id });
+  const team = db.users.find((u) => u.role === "investment_team");
+  w.command(team, { type: "prepare", id: f.id });
   const v = w.workflow.versions.at(-1);
-  assert.throws(() => w.command(ops(), { type: "publish", id: v.id }));
-  w.command(ops(), { type: "review", id: v.id });
+  assert.throws(() => w.command(team, { type: "publish", id: v.id }));
+  w.command(team, { type: "review", id: v.id });
   w.command(manager(), { type: "approve", id: v.id });
-  w.command(ops(), { type: "publish", id: v.id });
   assert.deepEqual(
     w.workflow.versions.find((v) => v.id === old.id),
     old,
@@ -340,11 +340,11 @@ test("database round-trip preserves records and advances ID counters", () => {
 test("revised published version gates allocation until exact investor acknowledgment", () => {
   const s = funded();
   const f = db.findFundById(s.fund_id);
-  w.command(ops(), { type: "prepare", id: f.id });
+  const team = db.users.find((u) => u.role === "investment_team");
+  w.command(team, { type: "prepare", id: f.id });
   const v = w.workflow.versions.at(-1);
-  w.command(ops(), { type: "review", id: v.id });
+  w.command(team, { type: "review", id: v.id });
   w.command(manager(), { type: "approve", id: v.id });
-  w.command(ops(), { type: "publish", id: v.id });
   assert.throws(
     () => w.command(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 }),
     /review/,
@@ -410,12 +410,12 @@ test("drafts stay hidden, require manager approval, and appear only after Ops pu
   const created = (await res.json()).fund;
   assert.equal(created.state, "draft");
   assert.equal((await request(`funds/${created.id}`, investor())).status, 404);
-  w.command(ops(), { type: "prepare", id: created.id });
+  const team = db.users.find((u) => u.role === "investment_team");
+  w.command(team, { type: "prepare", id: created.id });
   const v = w.workflow.versions.at(-1);
-  w.command(ops(), { type: "review", id: v.id });
+  w.command(team, { type: "review", id: v.id });
   assert.throws(() => w.command(ops(), { type: "approve", id: v.id }), /role/);
   w.command(manager(), { type: "approve", id: v.id });
-  w.command(ops(), { type: "publish", id: v.id });
   assert.equal((await request(`funds/${created.id}`, investor())).status, 200);
 });
 
@@ -863,7 +863,6 @@ test("Investment Team publishes only after Fund Manager approval and cannot acce
   );
   assert.equal((await request("admin/investors", team)).status, 403);
   w.command(manager(), { type: "approve", id: version.id });
-  w.command(team, { type: "publish", id: version.id });
   assert.equal(w.currentVersion(1).id, version.id);
 });
 
@@ -940,16 +939,73 @@ test("restoring an existing demo adds the Investment Team without resetting clie
   assert.equal(db.users.filter((u) => u.role === "investment_team").length, 1);
 });
 
-test("Ops publishes Investment Team materials only after exact-version manager approval", () => {
+test("only the Fund Manager publishes: the Investment Team submits and approval puts the offering live", () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  assert.throws(() => w.command(ops(), { type: "prepare", id: 1 }));
+  w.command(team, { type: "prepare", id: 1 });
+  const version = w.workflow.versions.at(-1);
+  w.command(team, { type: "review", id: version.id, text: "Updated risks." });
+  assert.equal(w.workflow.versions.at(-1).status, "review");
+  assert.equal(w.workflow.versions.at(-1).submittedBy, team.id);
+  for (const type of ["approve", "publish", "send-back"])
+    for (const actor of [team, ops(), rm()])
+      assert.throws(() => w.command(actor, { type, id: version.id, text: "x" }));
+  w.command(manager(), { type: "approve", id: version.id });
+  assert.equal(w.currentVersion(1).id, version.id);
+  assert.equal(w.currentVersion(1).decision.outcome, "published");
+});
+
+test("Fund Manager can return a submitted version with a reason", () => {
   const team = db.users.find((u) => u.role === "investment_team");
   w.command(team, { type: "prepare", id: 1 });
   const version = w.workflow.versions.at(-1);
   w.command(team, { type: "review", id: version.id });
-  assert.throws(() => w.command(ops(), { type: "approve", id: version.id }));
-  assert.throws(() => w.command(ops(), { type: "publish", id: version.id }));
+  assert.throws(() => w.command(manager(), { type: "send-back", id: version.id }));
+  w.command(manager(), { type: "send-back", id: version.id, text: "Fee wording unclear." });
+  const after = w.workflow.versions.find((v) => v.id === version.id);
+  assert.equal(after.status, "draft");
+  assert.equal(after.decision.outcome, "returned");
+  assert.notEqual(w.currentVersion(1).id, version.id);
+});
+
+test("Ops deal edits are visible to the Investment Team but not the Fund Manager", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  const res = await request("funds/1", ops(), "PATCH", { fund: { hook: "Edited by Ops" } });
+  assert.equal(res.status, 200);
+  assert.equal(db.findFundById(1).hook, "Edited by Ops");
+  const seenBy = (user) => w.view(user).dealChanges.filter((c) => c.fundId === 1);
+  assert.equal(seenBy(team).length, 1);
+  assert.equal(seenBy(team)[0].byRole, "ops");
+  assert.equal(seenBy(ops()).length, 1);
+  assert.equal(seenBy(manager()).length, 0);
+  assert.equal(seenBy(rm()).length, 0);
+  assert.equal(seenBy(investor()).length, 0);
+  // Ops activity does not reach the Fund Manager's audit or activity feed either.
+  assert.ok(!w.view(manager()).events.some((e) => /ops/i.test(e.label) && /edit/i.test(e.label)));
+  // What the Investment Team submits is what the Fund Manager reviews, without the Ops attribution.
+  await request("funds/1", team, "PATCH", { fund: { descriptor: "Team wording" } });
+  w.command(team, { type: "prepare", id: 1 });
+  const version = w.workflow.versions.at(-1);
+  w.command(team, { type: "review", id: version.id });
+  assert.ok(version.changed.length > 0);
+  assert.ok(seenBy(manager()).every((c) => c.byRole !== "ops"));
+  assert.equal(seenBy(team).find((c) => c.byRole === "ops").includedInVersion, version.id);
+  assert.ok(seenBy(manager()).some((c) => c.byRole === "investment_team"));
+});
+
+test("while a version is with the Fund Manager only the Fund Manager can edit it", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  w.command(team, { type: "prepare", id: 1 });
+  const version = w.workflow.versions.at(-1);
+  w.command(team, { type: "review", id: version.id });
+  assert.equal((await request("funds/1", team, "PATCH", { fund: { hook: "Late" } })).status, 422);
+  assert.equal((await request("funds/1", ops(), "PATCH", { fund: { hook: "Late" } })).status, 422);
+  assert.equal(
+    (await request("funds/1", manager(), "PATCH", { fund: { hook: "Manager wording" } })).status,
+    200,
+  );
   w.command(manager(), { type: "approve", id: version.id });
-  w.command(ops(), { type: "publish", id: version.id });
-  assert.equal(w.currentVersion(1).id, version.id);
+  assert.equal(w.currentVersion(1).snapshot.hook, "Manager wording");
 });
 
 test("RM can route processing support to Ops and the investor sees the resolution", () => {

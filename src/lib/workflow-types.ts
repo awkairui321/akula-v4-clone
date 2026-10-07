@@ -35,6 +35,23 @@ export type Version = {
   status: "draft" | "review" | "approved" | "published";
   snapshot: Fund;
   at: string;
+  /** Investment Team member who sent this version to the Fund Manager. */
+  submittedBy?: number;
+  note?: string;
+  /** Content that differs from the last published version, for the Fund Manager's review. */
+  changed?: string[];
+  decision?: { by: number; at: string; outcome: "published" | "returned"; text?: string };
+};
+/** An edit to a deal's working content. Ops edits route to the Investment Team only. */
+export type DealChange = {
+  id: number;
+  fundId: number;
+  by: number;
+  byRole: "ops" | "investment_team" | "luca";
+  fields: string[];
+  at: string;
+  /** The version the Investment Team submitted these edits in. */
+  includedInVersion?: number;
 };
 export type Signature = {
   id: number;
@@ -62,6 +79,7 @@ export type WorkflowState = {
   allocations: Allocation[];
   returns: ReturnObligation[];
   versions: Version[];
+  dealChanges: DealChange[];
   signatures: Signature[];
   assignments: { investorId: number; staffId: number }[];
   highlights: {
