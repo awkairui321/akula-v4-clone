@@ -14,7 +14,7 @@ import {
 } from "./compliance-helpers";
 
 type Signature = { subscriptionId: number; versionId: number; at: string };
-type SubscriptionRef = { id: number; investor_id: number; asset_name: string };
+type SubscriptionRef = { id: number; investor_id: number; asset_name: string; fund_id: number };
 
 export type ClientActions = {
   approve: (id: number) => void;
@@ -63,8 +63,6 @@ const TONE: Record<string, string> = {
   wait: "text-blue-700",
 };
 
-const GROUP_LABEL = "text-xs font-medium tracking-wide text-muted-foreground uppercase";
-
 /** Every client in one list; open one to see all of their documents in one place. */
 export default function ComplianceClients({
   investors,
@@ -112,6 +110,9 @@ export default function ComplianceClients({
           .filter((x) => x.sub?.investor_id === investor.id)
           .map(({ sig, sub }) => ({
             key: `${sig.subscriptionId}-${sig.versionId}`,
+            fundId: sub!.fund_id,
+            fundName:
+              versions.find((v) => v.id === sig.versionId)?.snapshot.name ?? sub!.asset_name,
             text: `${sub!.asset_name} offering, version ${versions.find((v) => v.id === sig.versionId)?.number ?? "?"}`,
             at: sig.at,
           }));
@@ -146,7 +147,7 @@ export default function ComplianceClients({
     .filter(
       (r) =>
         !q ||
-        `${r.investor.full_name} ${r.investor.client_code} ${r.investor.eam_firm ?? ""}`
+        `${r.investor.full_name} ${r.investor.reference ?? ""} ${r.investor.client_code} ${r.investor.eam_firm ?? ""}`
           .toLowerCase()
           .includes(q),
     )
@@ -246,84 +247,70 @@ export default function ComplianceClients({
 
                   {isOpen && (
                     <div className="space-y-5 pb-5 pl-7">
-                      <Group title="Identity and compliance" empty="Nothing received yet.">
+                      <Group
+                        title="Account and identity documents"
+                        empty="No account documents on file."
+                      >
                         {r.identity.map((d) => (
                           <DocRow key={d.id} doc={d} actions={actions} />
                         ))}
-                      </Group>
-                      <Group
-                        title="Signed offering documents"
-                        empty="No offering documents signed yet."
-                      >
-                        {r.offering.map((d) => (
-                          <DocRow key={d.id} doc={d} actions={actions} />
-                        ))}
-                        {r.signed.map((s) => (
-                          <li
-                            key={s.key}
-                            className="flex flex-wrap justify-between gap-2 py-2 text-sm"
-                          >
-                            <span>Subscription form signed · {s.text}</span>
-                            <span className="text-muted-foreground tabular-nums">
-                              {formatDate(s.at)}
-                            </span>
-                          </li>
-                        ))}
-                      </Group>
-                      <Group title="Requested from the client" empty="Nothing outstanding.">
-                        {r.asked.map((req) => {
-                          const due = dueLabel(req.due_at);
-                          return (
-                            <li
-                              key={req.id}
-                              className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm"
-                            >
-                              <span className="min-w-0">
-                                <span className="block truncate">
-                                  {documentKindLabel(req.kind)}
-                                </span>
-                                <span className="block text-xs text-muted-foreground">
-                                  Requested {formatDate(req.requested_at)}
-                                  {req.reminded_at
-                                    ? ` · reminded ${formatDate(req.reminded_at)}`
-                                    : ""}
-                                </span>
-                              </span>
-                              <span className="flex items-center gap-3">
-                                <span
-                                  className={
-                                    due.overdue
-                                      ? "font-medium text-amber-700"
-                                      : "text-muted-foreground"
-                                  }
-                                >
-                                  {due.text}
-                                </span>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => actions.remind(req.id)}
-                                >
-                                  Remind
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-muted-foreground hover:text-destructive"
-                                  onClick={() => actions.withdraw(req.id)}
-                                >
-                                  Withdraw
-                                </Button>
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </Group>
-                      {r.statements.length > 0 && (
-                        <Group title="Statements" empty="">
-                          {r.statements.map((d) => (
-                            <DocRow key={d.id} doc={d} actions={actions} />
+                        {r.asked
+                          .filter((req) => !req.fund_id)
+                          .map((req) => (
+                            <RequestRow key={req.id} req={req} actions={actions} />
                           ))}
+                      </Group>
+                      {[
+                        ...new Set(
+                          [
+                            ...r.offering.map((d) => d.fund_id),
+                            ...r.statements.map((d) => d.fund_id),
+                            ...r.signed.map((s) => s.fundId),
+                            ...r.asked.map((req) => req.fund_id),
+                          ].filter((id): id is number => id != null),
+                        ),
+                      ].map((fundId) => {
+                        const fundDocs = [...r.offering, ...r.statements].filter(
+                          (d) => d.fund_id === fundId,
+                        );
+                        const fundSignatures = r.signed.filter((s) => s.fundId === fundId);
+                        const fundRequests = r.asked.filter((req) => req.fund_id === fundId);
+                        const fundName =
+                          fundDocs[0]?.fund_name ??
+                          fundRequests[0]?.fund_name ??
+                          fundSignatures[0]?.fundName ??
+                          "Fund #" + fundId;
+                        return (
+                          <Group key={fundId} title={fundName} empty="No documents.">
+                            {fundDocs.map((d) => (
+                              <DocRow key={d.id} doc={d} actions={actions} />
+                            ))}
+                            {fundSignatures.map((s) => (
+                              <li key={s.key}>
+                                <details className="py-2 text-sm">
+                                  <summary className="cursor-pointer">
+                                    Signed subscription · {s.text}
+                                  </summary>
+                                  <p className="py-3 pl-4 text-muted-foreground">
+                                    Signed {formatDate(s.at)} · Exact offering version retained
+                                  </p>
+                                </details>
+                              </li>
+                            ))}
+                            {fundRequests.map((req) => (
+                              <RequestRow key={req.id} req={req} actions={actions} />
+                            ))}
+                          </Group>
+                        );
+                      })}
+                      {[...r.offering, ...r.statements].filter((d) => d.fund_id === null).length >
+                        0 && (
+                        <Group title="Other subscription documents" empty="">
+                          {r.offering
+                            .filter((d) => d.fund_id === null)
+                            .map((d) => (
+                              <DocRow key={d.id} doc={d} actions={actions} />
+                            ))}
                         </Group>
                       )}
                       <div className="flex flex-wrap gap-2">
@@ -367,55 +354,81 @@ function Group({
 }) {
   const hasItems = Children.toArray(children).length > 0;
   return (
-    <section className="space-y-1">
-      <h3 className={GROUP_LABEL}>{title}</h3>
-      {hasItems ? (
-        <ul className="divide-y border-y">{children}</ul>
-      ) : (
-        <p className="text-sm text-muted-foreground">{empty}</p>
-      )}
-    </section>
+    <details className="border-t py-2">
+      <summary className="cursor-pointer text-sm font-medium">{title}</summary>
+      <div className="mt-2 pl-4">
+        {hasItems ? (
+          <ul className="divide-y border-y">{children}</ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">{empty}</p>
+        )}
+      </div>
+    </details>
   );
 }
 
 function DocRow({ doc, actions }: { doc: AdminDocument; actions: ClientActions }) {
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
-      <span className="min-w-0">
-        <span className="block truncate font-medium">{doc.name}</span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {documentKindLabel(doc.kind)}
-          {doc.fund_name ? ` · ${doc.fund_name}` : ""} · {formatDate(doc.created_at)}
-          {doc.uploaded_by?.role === "rm" &&
-            ` · supplied by ${doc.uploaded_by.name}, ${doc.confirmed_at ? "confirmed by the client" : "awaiting client confirmation"}`}
-        </span>
-      </span>
-      <span className="flex items-center gap-2">
-        <span className="text-muted-foreground">
-          {STATE_LABEL[doc.review_state] ?? doc.review_state}
-        </span>
-        {doc.review_state !== "filed" && (
-          <>
-            <Button size="sm" onClick={() => actions.approve(doc.id)}>
-              Approve
+    <li>
+      <details className="py-2 text-sm">
+        <summary className="cursor-pointer font-medium">
+          {doc.name}{" "}
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            {STATE_LABEL[doc.review_state] ?? doc.review_state} · {formatDate(doc.created_at)}
+          </span>
+        </summary>
+        <div className="flex flex-wrap items-center justify-between gap-3 py-3 pl-4">
+          <p className="text-xs text-muted-foreground">
+            {documentKindLabel(doc.kind)} · {formatDate(doc.created_at)}
+            {doc.uploaded_by?.role === "rm" &&
+              ` · supplied by ${doc.uploaded_by.name}, ${doc.confirmed_at ? "confirmed by the client" : "awaiting client confirmation"}`}
+          </p>
+          {doc.review_state !== "filed" && (
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => actions.approve(doc.id)}>
+                Approve
+              </Button>
+              {doc.review_state === "on_hold" ? (
+                <Button size="sm" variant="ghost" onClick={() => actions.release(doc.id)}>
+                  Release hold
+                </Button>
+              ) : (
+                <Button size="sm" variant="ghost" onClick={() => actions.hold(doc.id)}>
+                  Hold
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </details>
+    </li>
+  );
+}
+
+function RequestRow({ req, actions }: { req: DocumentRequestRow; actions: ClientActions }) {
+  const due = dueLabel(req.due_at);
+  return (
+    <li>
+      <details className="py-2 text-sm">
+        <summary className="cursor-pointer">
+          Requested · {documentKindLabel(req.kind)}{" "}
+          <span className="ml-2 text-xs text-muted-foreground">{due.text}</span>
+        </summary>
+        <div className="flex flex-wrap items-center justify-between gap-3 py-3 pl-4">
+          <p className="text-xs text-muted-foreground">
+            Requested {formatDate(req.requested_at)}
+            {req.note && ` · ${req.note}`}
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => actions.remind(req.id)}>
+              Remind
             </Button>
-            {doc.review_state === "on_hold" ? (
-              <Button size="sm" variant="ghost" onClick={() => actions.release(doc.id)}>
-                Release hold
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-muted-foreground"
-                onClick={() => actions.hold(doc.id)}
-              >
-                Hold
-              </Button>
-            )}
-          </>
-        )}
-      </span>
+            <Button size="sm" variant="ghost" onClick={() => actions.withdraw(req.id)}>
+              Withdraw
+            </Button>
+          </div>
+        </div>
+      </details>
     </li>
   );
 }

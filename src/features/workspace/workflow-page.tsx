@@ -25,7 +25,6 @@ import {
   LayoutDashboard,
   TrendingUp,
   FileTextIcon,
-  HeadsetIcon,
   UsersIcon,
   ChartNoAxesColumnIncreasing,
 } from "lucide-react";
@@ -44,7 +43,6 @@ const RM_TAB_ICONS: Record<string, typeof Circle> = {
   Overview: LayoutDashboard,
   Opportunities: TrendingUp,
   Documents: FileTextIcon,
-  Support: HeadsetIcon,
   Relationships: UsersIcon,
   "Client reports": ChartNoAxesColumnIncreasing,
   Reports: ChartNoAxesColumnIncreasing,
@@ -445,191 +443,6 @@ function documentHtml(v: Version) {
   return `<html><head><meta charset="utf-8"></head><body><h1>${esc(f.codename)} · Investment term sheet</h1><p>SIMULATION · Version ${v.number} · ${esc(v.at)}</p><h2>Overview</h2><p>${esc(f.asset.name)} · ${esc(f.asset.about || f.asset.description)}</p><h2>Structure & terms</h2><p>${esc(f.name)} / ${esc(f.share_class.name)} · ${esc(f.security_type)}</p><p>Minimum USD ${esc(f.min_subscription)}; increment ${esc(f.subscription_increment)}; subscription fee ${esc(f.subscription_fee_pct)}%; management fee ${esc(f.management_fee_pct)}%; carry ${esc(f.carried_interest_pct)}%.</p><h2>Timeline</h2><p>Close: ${esc(f.closes_at || "Undisclosed")}. ${esc(f.holding_period_note || "Duration undisclosed")}</p><h2>Parties</h2><p>${esc(f.fund_manager.name)}: fund manager. Akula: technology and operational infrastructure. Administrator and custody: undisclosed in this demo.</p><h2>Risks</h2>${f.asset.risks.map((r) => `<h3>${esc(r.title)}</h3><p>${esc(r.body)}</p>`).join("")}<p>Illustrative only. No real signatures, payment or liquidity. Company share prices are not class unit prices.</p></body></html>`;
 }
 
-export function ServiceDesk() {
-  const q = useWorkspace();
-  if (q.isLoading)
-    return (
-      <p role="status" className="py-8 text-sm text-muted-foreground">
-        Loading your support requests…
-      </p>
-    );
-  if (q.error || !q.data)
-    return (
-      <div className="space-y-2">
-        <p role="alert" className="text-sm text-muted-foreground">
-          We couldn’t load your support requests. Your signed-in session is still active.
-        </p>
-        <Button variant="outline" size="sm" onClick={() => void q.refetch()}>
-          Try again
-        </Button>
-      </div>
-    );
-  return (
-    <div className="wf-content">
-      <Cases data={q.data} />
-    </div>
-  );
-}
-function Cases({ data: d }: { data: WorkflowView }) {
-  const staff = ["luca", "ops", "rm"].includes(d.actor.role) || d.actor.role === "eam";
-  const isRm = d.actor.role === "rm";
-  const investorSupport = !staff;
-  const [clientSearch, setClientSearch] = useState("");
-  const clients = d.clients.filter((client) => client.name !== "Newly Registered");
-  const selectedClient = clients.find(
-    (client) => client.name.toLowerCase() === clientSearch.trim().toLowerCase(),
-  );
-  const clientInvestments = selectedClient
-    ? d.subscriptions.filter((subscription) => subscription.investor_id === selectedClient.id)
-    : [];
-  const clientHoldings = selectedClient
-    ? d.holdings.filter((holding) => holding.investor_id === selectedClient.id)
-    : [];
-  return (
-    <>
-      <Panel title="Raise a tracked case">
-        <p>
-          A reference appears immediately in your case history and the responsible team’s workspace.
-        </p>
-        <Action
-          label="Create case"
-          command={{ type: "case", target: d.actor.id }}
-          disabled={isRm && !selectedClient}
-        >
-          {isRm ? (
-            <>
-              <label className="wf-field">
-                <span>Individual client</span>
-                <Input
-                  list="rm-support-clients"
-                  value={clientSearch}
-                  onChange={(event) => setClientSearch(event.target.value)}
-                  placeholder="Type a client name"
-                  required
-                />
-                <datalist id="rm-support-clients">
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.name} />
-                  ))}
-                </datalist>
-                <input type="hidden" name="target" value={selectedClient?.id ?? ""} />
-              </label>
-              {selectedClient && (
-                <div className="wf-exposure">
-                  <strong>Current and past exposure</strong>
-                  <div>
-                    {[
-                      ...new Set([
-                        ...clientInvestments.map((investment) => investment.asset_name),
-                        ...clientHoldings.map((holding) => holding.asset_name),
-                      ]),
-                    ].map((name) => (
-                      <span key={name}>{name}</span>
-                    ))}
-                  </div>
-                  {clientInvestments.length === 0 && clientHoldings.length === 0 && (
-                    <small>No recorded investment exposure.</small>
-                  )}
-                </div>
-              )}
-              <Choice
-                label="Related exposure (optional)"
-                name="exposure"
-                required={false}
-                items={[
-                  { id: "", name: "General client inquiry" },
-                  ...clientInvestments.map((investment) => ({
-                    id: `sub:${investment.id}`,
-                    name: `Investment #${investment.id} · ${investment.asset_name}`,
-                  })),
-                  ...clientHoldings
-                    .filter(
-                      (holding) =>
-                        !clientInvestments.some(
-                          (investment) => investment.holdingId === holding.id,
-                        ),
-                    )
-                    .map((holding) => ({
-                      id: `holding:${holding.id}`,
-                      name: `Holding #${holding.id} · ${holding.asset_name}`,
-                    })),
-                ]}
-              />
-            </>
-          ) : (
-            staff && <Choice label="Client" name="target" items={d.clients} />
-          )}
-          <Choice
-            label="Route to"
-            name="status"
-            items={
-              investorSupport
-                ? [{ id: "rm", name: "Assigned LUCA RM" }]
-                : [
-                    { id: "ops", name: "Akula Ops · processing" },
-                    { id: "luca", name: "LUCA · fund manager" },
-                    ...(!isRm ? [{ id: "rm", name: "Assigned LUCA RM" }] : []),
-                    ...(!isRm || selectedClient?.eamFirm
-                      ? [{ id: "eam", name: "Assigned external institution" }]
-                      : []),
-                  ]
-            }
-          />
-          {!isRm && (
-            <Choice
-              label="Investment (optional)"
-              name="id"
-              required={false}
-              items={[
-                { id: "", name: "General client inquiry" },
-                ...d.subscriptions.map((s) => ({
-                  id: s.id,
-                  name: `#${s.id} · ${s.investor_name} · ${s.asset_name}`,
-                })),
-              ]}
-            />
-          )}
-          <Field label="Question or issue" name="text" />
-        </Action>
-      </Panel>
-      <Panel title="Case history & inbox">
-        {!d.cases.length && <p>No cases yet.</p>}
-        {d.cases.map((c) => (
-          <article className="wf-record" key={c.id}>
-            <h3>
-              Case #{c.id} · {c.subject}
-            </h3>
-            <p>
-              {c.owner === "luca"
-                ? "LUCA manager"
-                : c.owner === "ops"
-                  ? "Akula Ops"
-                  : c.owner.toUpperCase()}{" "}
-              · {c.status} · {date(c.at)}
-              {c.subscriptionId && ` · Investment #${c.subscriptionId}`}
-              {c.holdingId && ` · Holding #${c.holdingId}`}
-            </p>
-            {c.messages.map((m, i) => (
-              <blockquote key={i}>
-                <span>
-                  Identity #{m.actorId} · {date(m.at)}
-                </span>
-                <p>{m.text}</p>
-              </blockquote>
-            ))}
-            <Action label="Reply" command={{ type: "reply", id: c.id }}>
-              <Field label="Message" name="text" />
-            </Action>
-            {staff && c.status === "open" && (
-              <Action label="Resolve case" command={{ type: "resolve", id: c.id }} />
-            )}
-          </article>
-        ))}
-      </Panel>
-    </>
-  );
-}
-
 function Analytics({ data: d }: { data: WorkflowView }) {
   const [fund, setFund] = useState("all");
   const subs = d.subscriptions.filter((s) => fund === "all" || s.fund_id === Number(fund)),
@@ -884,11 +697,6 @@ function RMOverview({
             <span>With LUCA or institution</span>
             <strong>{awaitingDecision}</strong>
             <small>View review stages →</small>
-          </button>
-          <button onClick={() => onNavigate("Support")}>
-            <span>Open support cases</span>
-            <strong>{d.cases.filter((item) => item.status === "open").length}</strong>
-            <small>Open support →</small>
           </button>
         </div>
       </Panel>
@@ -1426,7 +1234,12 @@ function WorkflowPageContent({
     { logout } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const routeSurface = onSurfaceChange ? surface : searchParams.get("surface") || surface;
+  const requestedSurface = onSurfaceChange ? surface : searchParams.get("surface") || surface;
+  const routeSurface =
+    requestedSurface === "Support" ||
+    (q.data?.actor.role === "luca" && requestedSurface === "Relationships")
+      ? "Overview"
+      : requestedSurface;
   const [tab, setTab] = useState(routeSurface || "Overview");
   const [sid, setSid] = useState("");
   const [preview, setPreview] = useState<number | null>(null);
@@ -1522,37 +1335,18 @@ function WorkflowPageContent({
           "Documents",
           "Publication",
           "Demand",
-          "Relationships",
           "Partners",
           "Reports",
           "Reporting",
-          "Support",
         ]
       : rm
-        ? [
-            "Overview",
-            "Reports",
-            "Opportunities",
-            "Documents",
-            "Relationships",
-            "Partners",
-            "Support",
-          ]
+        ? ["Overview", "Reports", "Opportunities", "Documents", "Relationships", "Partners"]
         : ops
-          ? [
-              "Overview",
-              "Investments",
-              "Documents",
-              "Publication",
-              "Demand",
-              "Reporting",
-              "Support",
-            ]
+          ? ["Overview", "Investments", "Documents", "Publication", "Demand", "Reporting"]
           : [
               "Overview",
               "Investments",
               "Documents",
-              "Support",
               ...(privileged ? ["Publication", "Demand"] : []),
               ...(manager ? ["Relationships"] : []),
               "Reporting",
@@ -1727,13 +1521,6 @@ function WorkflowPageContent({
                     </h3>
                     <p>Receipts, matching, registry issuance and returns</p>
                   </button>
-                  <button className="wf-tile" onClick={() => chooseTab("Support")}>
-                    <h3>
-                      {d.cases.filter((c) => c.status === "open" && c.owner === "ops").length}{" "}
-                      routed cases →
-                    </h3>
-                    <p>Respond through tracked case history</p>
-                  </button>
                   <button className="wf-tile" onClick={() => chooseTab("Publication")}>
                     <h3>
                       {d.versions.filter((v) => v.status !== "published").length} publication
@@ -1762,10 +1549,6 @@ function WorkflowPageContent({
                   <strong>{d.receipts.filter((r) => !r.matched && !r.supersededBy).length}</strong>
                 </div>
                 <div>
-                  <span>Open cases</span>
-                  <strong>{d.cases.filter((c) => c.status === "open").length}</strong>
-                </div>
-                <div>
                   <span>Returns awaiting settlement</span>
                   <strong>{d.returns.filter((r) => r.status !== "confirmed").length}</strong>
                 </div>
@@ -1774,7 +1557,7 @@ function WorkflowPageContent({
                 <div className="wf-grid">
                   {[
                     ["Investments", "Follow cash exceptions, allocation, issuance and returns."],
-                    ["Support", "Review routed cases and reply using the shared reference."],
+                    ["Review routed cases and reply using the shared reference."],
                     ["Documents", "Read the exact version behind a simulated signature."],
                     ["Reporting", "Check stale reports and separate experimental observations."],
                   ].map(([title, text]) => (
@@ -2201,7 +1984,6 @@ function WorkflowPageContent({
             )}
           </>
         )}
-        {tab === "Support" && <Cases data={d} />}
         {tab === "Documents" && (
           <Panel title="Versioned investment documents">
             <p>
@@ -2427,23 +2209,15 @@ function WorkflowPageContent({
             </Panel>
           </>
         )}
-        {tab === "Relationships" && (rm || manager) && (
+        {tab === "Relationships" && rm && !manager && (
           <>
             <Panel
-              title={
-                manager
-                  ? "Assign LUCA relationship managers"
-                  : relationshipView === "tasks"
-                    ? "My client task list"
-                    : "Assigned clients"
-              }
+              title={relationshipView === "tasks" ? "My client task list" : "Assigned clients"}
             >
               <p>
-                {manager
-                  ? "Find investors in the client book and review their assigned LUCA RM."
-                  : relationshipView === "tasks"
-                    ? "Client actions and private RM notes are collected here. Expand a client only when you need to record a follow-up or share an opportunity."
-                    : "Search assigned investors by name or tag. Expand one client to share an opportunity or record a private follow-up."}
+                {relationshipView === "tasks"
+                  ? "Client actions and private RM notes are collected here. Expand a client only when you need to record a follow-up or share an opportunity."
+                  : "Search assigned investors by name or tag. Expand one client to share an opportunity or record a private follow-up."}
               </p>
               {rm && (
                 <div className="wf-view-switch">
@@ -2489,12 +2263,6 @@ function WorkflowPageContent({
                           </span>
                         </summary>
                         <div className="wf-client-task-content">
-                          <Action
-                            label="Send one client reminder"
-                            command={{ type: "case", target: client.id, status: "rm" }}
-                          >
-                            <Field name="text" label="Reminder or message" />
-                          </Action>
                           {tasks.map((subscription) => (
                             <div className="wf-client-task-item" key={subscription.id}>
                               <strong>
@@ -2539,32 +2307,6 @@ function WorkflowPageContent({
                   placeholder="Type a client name"
                 />
               </label>
-              {manager && (
-                <Action label="Record mock eligibility decision" command={{ type: "eligibility" }}>
-                  <Choice name="id" label="Investor identity" items={d.clients} />
-                  <Choice
-                    name="status"
-                    label="Manager decision"
-                    items={[
-                      { id: "approved", name: "Approved" },
-                      { id: "failed", name: "Declined" },
-                    ]}
-                  />
-                </Action>
-              )}
-              {manager && (
-                <Action label="Assign RM" command={{ type: "assign" }}>
-                  <Choice name="id" label="Client" items={d.clients} />
-                  <Choice
-                    name="target"
-                    label="LUCA employee"
-                    items={[
-                      { id: 6, name: "LUCA RM · rm@akula.vc" },
-                      { id: 8, name: "LUCA RM · rm2@akula.vc" },
-                    ]}
-                  />
-                </Action>
-              )}
               {!visibleClients.length && <p className="wf-empty">No clients match this search.</p>}
               {visibleClients.map((c) => (
                 <details className="wf-record wf-client-record" key={c.id}>

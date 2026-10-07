@@ -12,7 +12,6 @@ import {
   BarChart3Icon,
   UserIcon,
   FileTextIcon,
-  MessageCircleIcon,
   PanelLeft,
 } from "lucide-react";
 import {
@@ -31,7 +30,6 @@ const NAV_ITEMS = [
   { to: "/eam/opportunities", label: "Opportunities", icon: TrendingUp },
   { to: "/eam/documents", label: "Documents", icon: FileTextIcon },
   { to: "/eam/clients", label: "Clients", icon: Users },
-  { to: "/eam/support", label: "Support", icon: MessageCircleIcon },
   { to: "/eam/revenue", label: "Revenue", icon: BarChart3Icon },
   { to: "/eam/profile", label: "Profile", icon: UserIcon },
 ];

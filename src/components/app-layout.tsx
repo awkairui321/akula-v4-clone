@@ -10,7 +10,6 @@ import {
   TrendingUp,
   Clock3,
   FileTextIcon,
-  LifeBuoyIcon,
   MailIcon,
   PanelLeft,
   UserIcon,
@@ -31,7 +30,6 @@ const NAV_ITEMS = [
   { to: "/documents", label: "Documents", icon: FileTextIcon },
   { to: "/messages", label: "Messages", icon: MailIcon },
   { to: "/account", label: "Account", icon: UserIcon },
-  { to: "/support", label: "Support", icon: LifeBuoyIcon },
 ];
 
 type InvestorProfile = {

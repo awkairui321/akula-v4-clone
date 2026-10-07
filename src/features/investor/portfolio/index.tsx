@@ -71,7 +71,7 @@ export default function PortfolioPage() {
             {TabTitle("Subscription Activity", actionCount)}
           </TabsTrigger>
           <TabsTrigger value="requests" className="flex-none">
-            {TabTitle("Requests & discussions", 0)}
+            {TabTitle("Requests", 0)}
           </TabsTrigger>
         </TabsList>
         <TabsContent value="holdings" className="w-full min-w-0">

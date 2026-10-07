@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -7,8 +7,6 @@ import type {
   ClientDetail,
   ClientDocument,
   Highlight,
-  Discussion,
-  DiscussionDetail,
   ClientStage,
   ClientHolding,
   ClientSubscription,
@@ -22,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { OnboardingRecord } from "@/features/clients/onboarding-record";
-import { ArrowLeftIcon, SendIcon, Trash2Icon, XIcon, PlusIcon, FileTextIcon } from "lucide-react";
+import { ArrowLeftIcon, Trash2Icon, XIcon, PlusIcon, FileTextIcon } from "lucide-react";
 
 const STAGE_VARIANT: Record<ClientStage, "default" | "secondary" | "outline" | "destructive"> = {
   prospect: "outline",
@@ -568,146 +566,6 @@ function DocumentsTab({ detail }: { detail: ClientDetail }) {
   );
 }
 
-function DiscussionThread({ discussionId }: { discussionId: number }) {
-  const queryClient = useQueryClient();
-  const [body, setBody] = useState("");
-
-  const { data: discussion } = useQuery({
-    queryKey: ["eamDiscussion", discussionId],
-    queryFn: () => api<DiscussionDetail>(`/api/v1/eam/discussions/${discussionId}`),
-  });
-
-  const sendMutation = useMutation({
-    mutationFn: (messageBody: string) =>
-      api(`/api/v1/eam/discussions/${discussionId}/messages`, {
-        method: "POST",
-        body: { message: { sender_role: "adviser", body: messageBody } },
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["eamDiscussion", discussionId],
-      });
-      setBody("");
-    },
-  });
-
-  function handleSend(e: FormEvent) {
-    e.preventDefault();
-    if (!body.trim()) return;
-    sendMutation.mutate(body.trim());
-  }
-
-  if (!discussion) return null;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium">{discussion.fund_name}</p>
-          <p className="text-xs text-muted-foreground">Status: {discussion.status}</p>
-        </div>
-      </div>
-      <Separator />
-      <div className="max-h-80 space-y-3 overflow-y-auto">
-        {discussion.messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.sender_role === "adviser" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                msg.sender_role === "adviser" ? "bg-primary text-primary-foreground" : "bg-muted"
-              }`}
-            >
-              <p>{msg.body}</p>
-              <p className="mt-1 text-[10px] opacity-70">
-                {new Date(msg.created_at).toLocaleString()}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-      <form onSubmit={handleSend} className="flex gap-2">
-        <Textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Type a message..."
-          rows={2}
-          className="flex-1"
-        />
-        <Button type="submit" size="icon" disabled={sendMutation.isPending || !body.trim()}>
-          <SendIcon className="size-4" />
-        </Button>
-      </form>
-    </div>
-  );
-}
-
-function DiscussionsTab({
-  clientId,
-  initialDiscussionId,
-}: {
-  clientId: number;
-  initialDiscussionId: number | null;
-}) {
-  const [selectedDiscussion, setSelectedDiscussion] = useState<number | null>(initialDiscussionId);
-
-  const { data: discussions } = useQuery({
-    queryKey: ["eamDiscussions", String(clientId)],
-    queryFn: () => api<Discussion[]>(`/api/v1/eam/discussions?client_id=${clientId}`),
-  });
-
-  const list = discussions ?? [];
-
-  if (selectedDiscussion !== null) {
-    return (
-      <div className="mt-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setSelectedDiscussion(null)}
-          className="mb-4"
-        >
-          <ArrowLeftIcon className="mr-1 size-4" />
-          Back to conversations
-        </Button>
-        <DiscussionThread discussionId={selectedDiscussion} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-4 space-y-3">
-      {list.length === 0 ? (
-        <Card>
-          <CardContent className="py-6 text-center text-sm text-muted-foreground">
-            New investor questions will appear here.
-          </CardContent>
-        </Card>
-      ) : (
-        list.map((d) => (
-          <Card
-            key={d.id}
-            size="sm"
-            className="cursor-pointer transition-shadow hover:ring-2 hover:ring-primary/20"
-            onClick={() => setSelectedDiscussion(d.id)}
-          >
-            <CardContent className="flex items-center justify-between gap-4 pt-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{d.fund_name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(d.updated_at).toLocaleDateString()}
-                </p>
-              </div>
-              <Badge variant="secondary">{d.status}</Badge>
-            </CardContent>
-          </Card>
-        ))
-      )}
-    </div>
-  );
-}
-
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <Card>
@@ -723,17 +581,9 @@ export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [params, setParams] = useSearchParams();
   const requestedTab = params.get("tab") ?? "overview";
-  const tab = [
-    "overview",
-    "holdings",
-    "onboarding",
-    "activity",
-    "conversations",
-    "documents",
-  ].includes(requestedTab)
+  const tab = ["overview", "holdings", "onboarding", "activity", "documents"].includes(requestedTab)
     ? requestedTab
     : "overview";
-  const discussionId = Number(params.get("discussion")) || null;
 
   const { data: detail, isLoading } = useQuery({
     queryKey: ["eamClient", id],
@@ -804,9 +654,6 @@ export default function ClientDetailPage() {
           <TabsTrigger value="activity" className="flex-none">
             Activity
           </TabsTrigger>
-          <TabsTrigger value="conversations" className="flex-none">
-            Conversations
-          </TabsTrigger>
           <TabsTrigger value="documents" className="flex-none">
             Documents
           </TabsTrigger>
@@ -826,13 +673,6 @@ export default function ClientDetailPage() {
         </TabsContent>
         <TabsContent value="activity">
           <ActivityTab detail={detail} highlights={highlights ?? []} />
-        </TabsContent>
-        <TabsContent value="conversations">
-          <DiscussionsTab
-            key={discussionId ?? "list"}
-            clientId={detail.client.id}
-            initialDiscussionId={discussionId}
-          />
         </TabsContent>
         <TabsContent value="documents">
           <DocumentsTab detail={detail} />

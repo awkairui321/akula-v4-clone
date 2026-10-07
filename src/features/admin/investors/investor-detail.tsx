@@ -19,8 +19,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -101,7 +99,7 @@ export default function AdminInvestorDetailPage() {
     investor.accreditation_status === "accredited" && expiryDays !== null && expiryDays <= 60;
 
   return (
-    <div className="mx-auto w-full max-w-5xl">
+    <div className="w-full space-y-6">
       <Link
         to="/luca/clients"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -159,97 +157,99 @@ export default function AdminInvestorDetailPage() {
         />
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_3fr]">
+      <div className="space-y-8">
         <div className="space-y-6">
           <IdentityPanel investor={investor} eamPartner={eamPartner} />
         </div>
 
         <div className="space-y-4">
-          <Tabs defaultValue="holdings">
-            <TabsList>
-              <TabsTrigger value="holdings">Holdings</TabsTrigger>
-              <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
-              <TabsTrigger value="evidence">Evidence</TabsTrigger>
-              <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              <TabsTrigger value="history">Transactions</TabsTrigger>
-              <TabsTrigger value="notes">
-                Notes
-                {investor.internal_notes.trim() && (
-                  <span className="ml-1.5 size-1.5 rounded-full bg-primary" />
+          <nav
+            aria-label="Client sections"
+            className="flex flex-wrap gap-x-6 gap-y-2 border-b pb-4 text-sm text-muted-foreground"
+          >
+            {[
+              ["holdings", "Holdings"],
+              ["subscriptions", "Subscriptions"],
+              ["evidence", "Evidence"],
+              ["timeline", "Timeline"],
+              ["history", "Transactions"],
+              ["notes", "Notes"],
+            ].map(([id, label]) => (
+              <a key={id} href={"#" + id} className="hover:text-foreground">
+                {label}
+              </a>
+            ))}
+          </nav>
+
+          <section id="holdings" className="scroll-mt-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Holdings</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {formatPrice(totalHoldingsCommitted)} committed in issued holdings ·{" "}
+                  {formatPrice(totalDistributions)} distributed to date
+                </p>
+              </CardHeader>
+              <CardContent>
+                {holdings.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No holdings.</p>
+                ) : (
+                  <HoldingsTable holdings={holdings} />
                 )}
-              </TabsTrigger>
-            </TabsList>
+              </CardContent>
+            </Card>
+          </section>
 
-            <TabsContent value="holdings">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Holdings</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {formatPrice(totalHoldingsCommitted)} committed in issued holdings ·{" "}
-                    {formatPrice(totalDistributions)} distributed to date
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {holdings.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No holdings.</p>
-                  ) : (
-                    <HoldingsTable holdings={holdings} />
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+          <section id="subscriptions" className="scroll-mt-8">
+            <SubscriptionsTab subscriptions={subscriptions} />
+          </section>
 
-            <TabsContent value="subscriptions">
-              <SubscriptionsTab subscriptions={subscriptions} />
-            </TabsContent>
-
-            <TabsContent value="evidence">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Evidence</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  {verification_documents.length === 0 && (
-                    <p className="text-muted-foreground">No documents submitted.</p>
-                  )}
-                  {verification_documents.map((document) => (
-                    <div key={document.id} className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <span className="block truncate">
-                          {document.document_type.replace(/_/g, " ")}
-                        </span>
-                        {document.notes && (
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {document.notes}
-                          </span>
-                        )}
-                      </div>
-                      <span className="flex shrink-0 items-center gap-2">
-                        <Badge variant="outline" className="text-[10px]">
-                          {document.status}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(document.created_at)}
-                        </span>
+          <section id="evidence" className="scroll-mt-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Evidence</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {verification_documents.length === 0 && (
+                  <p className="text-muted-foreground">No documents submitted.</p>
+                )}
+                {verification_documents.map((document) => (
+                  <div key={document.id} className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <span className="block truncate">
+                        {document.document_type.replace(/_/g, " ")}
                       </span>
+                      {document.notes && (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {document.notes}
+                        </span>
+                      )}
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">
+                        {document.status}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDate(document.created_at)}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </section>
 
-            <TabsContent value="timeline">
-              <ClientTimeline investorId={investor.id} />
-            </TabsContent>
+          <section id="timeline" className="scroll-mt-8">
+            <ClientTimeline investorId={investor.id} />
+          </section>
 
-            <TabsContent value="history">
-              <TransactionHistory investorId={investor.id} />
-            </TabsContent>
+          <section id="history" className="scroll-mt-8">
+            <TransactionHistory investorId={investor.id} />
+          </section>
 
-            <TabsContent value="notes">
-              <NotesPanel investor={investor} />
-            </TabsContent>
-          </Tabs>
+          <section id="notes" className="scroll-mt-8">
+            <NotesPanel investor={investor} />
+          </section>
         </div>
       </div>
     </div>
@@ -311,7 +311,10 @@ function IdentityPanel({
 }) {
   return (
     <Card>
-      <CardContent className="space-y-1 pt-6 text-sm">
+      <CardHeader>
+        <CardTitle className="text-base">Client overview</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-x-10 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
         <Row label="Investor type" value={investor.investor_type} capitalize />
         <Row label="Country" value={investor.country ?? "—"} />
         <Row label="Nationality" value={investor.nationality ?? "—"} />
@@ -330,8 +333,8 @@ function IdentityPanel({
             )
           }
         />
-        <Separator className="my-2" />
-        <p className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+
+        <p className="col-span-full border-t pt-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Verification
         </p>
         <VerificationRow
@@ -353,7 +356,7 @@ function IdentityPanel({
           failed={false}
           value={investor.nda_status.replace(/_/g, " ")}
         />
-        <Separator className="my-2" />
+
         <Row label="Approved by LUCA" value={formatDate(investor.approved_at)} />
         <Row label="Last reviewed" value={formatDate(investor.reviewed_at)} />
         <Row label="Committed (all-time)" value={formatPrice(investor.committed_amount)} />
@@ -379,7 +382,7 @@ function VerificationRow({
     <div className="flex justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>
       <span
-        className={`flex items-center gap-1 truncate text-right font-medium capitalize ${color}`}
+        className={`flex items-center gap-1 text-right font-medium break-words capitalize ${color}`}
       >
         {ok && <CheckIcon className="size-3.5 shrink-0" />}
         {value}
@@ -566,7 +569,7 @@ function NotesPanel({ investor }: { investor: AdminInvestor }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <Textarea
-          rows={8}
+          rows={4}
           value={notes}
           placeholder="Anything worth remembering about this investor..."
           onChange={(e) => setNotes(e.target.value)}
@@ -595,7 +598,7 @@ function Row({
   return (
     <div className="flex justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>
-      <span className={`truncate text-right font-medium ${capitalize ? "capitalize" : ""}`}>
+      <span className={`text-right font-medium break-words ${capitalize ? "capitalize" : ""}`}>
         {value}
       </span>
     </div>

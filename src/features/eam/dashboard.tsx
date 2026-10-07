@@ -209,19 +209,6 @@ export default function EamDashboard() {
                 </CardContent>
               </Card>
             </button>
-            <Link to="/eam/support">
-              <Card className="h-full hover:bg-muted/40">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Open conversations
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{dashboard.open_discussions}</div>
-                  <p className="text-xs text-muted-foreground">Open support →</p>
-                </CardContent>
-              </Card>
-            </Link>
           </div>
 
           <section className="space-y-3">
@@ -339,10 +326,10 @@ export default function EamDashboard() {
                         </span>
                         <Link
                           className="text-sm text-primary hover:underline"
-                          to={`/eam/clients/${clientId}?tab=conversations`}
+                          to={`/eam/clients/${clientId}?tab=activity`}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          Message / remind client →
+                          View client activity →
                         </Link>
                       </summary>
                       <div className="space-y-2 border-t px-4 py-3">
@@ -435,10 +422,6 @@ export default function EamDashboard() {
           </section>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <Link className="rounded-lg border p-4 text-sm hover:bg-muted/50" to="/eam/support">
-              <strong>Client support →</strong>
-              <p className="mt-1 text-muted-foreground">Raise and follow tracked cases.</p>
-            </Link>
             <Link className="rounded-lg border p-4 text-sm hover:bg-muted/50" to="/eam/documents">
               <strong>Client documents →</strong>
               <p className="mt-1 text-muted-foreground">Find deal-linked material.</p>
