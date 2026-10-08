@@ -1,171 +1,80 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import WorkflowPage from "@/features/workspace/workflow-page";
+import { useState } from "react";
 import { isMocking } from "@/mocks/browser";
 import DemoResetButton from "@/components/demo-reset-button";
 import "./workflow.css";
 
-type Persona = { id: number; label: string; surfaces: string[] };
+type Persona = { id: number; label: string; surfaces: Record<string, string> };
 const personas: Persona[] = [
   {
     id: 7,
     label: "Akula Ops",
-    surfaces: ["Overview", "Investments", "Documents", "Publication", "Demand", "Reporting"],
+    surfaces: {
+      Overview: "/ops",
+      Investments: "/ops?surface=Investments",
+      Documents: "/ops?surface=Documents",
+      Publication: "/ops?surface=Publication",
+      Demand: "/ops?surface=Demand",
+      Reporting: "/ops?surface=Reporting",
+    },
   },
   {
     id: 2,
     label: "Investor · Elena Cross",
-    surfaces: ["Overview", "Investments", "Documents", "Reporting", "Company requests"],
+    surfaces: {
+      Portfolio: "/portfolio",
+      Invest: "/funds",
+      Documents: "/documents",
+      Messages: "/messages",
+      Account: "/account",
+    },
   },
   {
     id: 6,
     label: "LUCA RM",
-    surfaces: ["Overview", "Reports", "Opportunities", "Documents", "Relationships", "Partners"],
+    surfaces: {
+      Overview: "/rm",
+      "Client follow-ups": "/rm/clients",
+      "Client onboarding": "/rm/onboarding",
+      Opportunities: "/rm/opportunities",
+      "Partner client book": "/rm/partners",
+      Communications: "/rm/communications",
+    },
   },
-  { id: 9000, label: "LUCA Investment Team", surfaces: ["Publication", "Documents"] },
+  {
+    id: 9000,
+    label: "LUCA Investment Team",
+    surfaces: { Deals: "/luca/deals", Publication: "/luca/publication" },
+  },
   {
     id: 1,
     label: "LUCA Fund Manager",
-    surfaces: [
-      "Overview",
-      "Investments",
-      "Opportunities",
-      "Documents",
-      "Publication",
-      "Demand",
-      "Partners",
-      "Reports",
-      "Reporting",
-    ],
+    surfaces: {
+      Dashboard: "/luca",
+      Deals: "/luca/deals",
+      Subscriptions: "/luca/subscriptions",
+      Clients: "/luca/clients",
+      "Partner client book": "/luca/partners",
+      Compliance: "/luca/compliance",
+      Communications: "/luca/communications",
+      Analytics: "/luca/analytics",
+    },
   },
 ];
 
-function PersonaPane({
-  pane,
-  index,
-  changePersona,
-  changeSurface,
-}: {
-  pane: { personaId: number; surface: string };
-  index: number;
-  changePersona: (id: number) => void;
-  changeSurface: (surface: string) => void;
-}) {
-  const persona = personas.find((item) => item.id === pane.personaId) ?? personas[0];
-  return (
-    <section className="live-pane live-workspace-pane" aria-label={`Comparison view ${index}`}>
-      <header className="live-pane-controls">
-        <div>
-          <p className="wf-eyebrow">VIEW {index} · SIMULATED PERSONA</p>
-          <h2>{persona.label}</h2>
-        </div>
-        <div className="live-selectors">
-          <label>
-            <span>Persona</span>
-            <select
-              value={persona.id}
-              onChange={(event) => changePersona(Number(event.target.value))}
-            >
-              {personas.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Surface</span>
-            <select value={pane.surface} onChange={(event) => changeSurface(event.target.value)}>
-              {persona.surfaces.map((surface) => (
-                <option key={surface} value={surface}>
-                  {surface}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </header>
-      <div className="live-pane-screen">
-        <WorkflowPage
-          key={persona.id}
-          demoPersonaId={persona.id}
-          surface={pane.surface}
-          compact
-          onSurfaceChange={changeSurface}
-        />
-      </div>
-    </section>
-  );
-}
-
 export default function LiveComparePage() {
-  const gridRef = useRef<HTMLDivElement>(null);
-  const [paneHeight, setPaneHeight] = useState(620);
-  const [panes, setPanes] = useState([
-    { personaId: 2, surface: "Overview" },
-    { personaId: 9000, surface: "Publication" },
-    { personaId: 6, surface: "Overview" },
-    { personaId: 1, surface: "Overview" },
-    { personaId: 7, surface: "Overview" },
-  ]);
-  const updatePersona = (index: number, personaId: number) => {
-    const persona = personas.find((item) => item.id === personaId)!;
-    setPanes((previous) =>
-      previous.map((pane, paneIndex) =>
-        paneIndex === index ? { personaId, surface: persona.surfaces[0] } : pane,
-      ),
-    );
-  };
-  const updateSurface = (index: number, surface: string) => {
-    setPanes((previous) =>
-      previous.map((pane, paneIndex) => (paneIndex === index ? { ...pane, surface } : pane)),
-    );
-  };
-
-  useLayoutEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    let frame = 0;
-    const measure = () => {
-      const requiredHeights = Array.from(
-        grid.querySelectorAll<HTMLElement>(".live-workspace-pane"),
-      ).map((pane) => {
-        const controls = pane.querySelector<HTMLElement>(".live-pane-controls");
-        const screen = pane.querySelector<HTMLElement>(".live-pane-screen");
-        return Math.ceil(
-          (controls?.getBoundingClientRect().height ?? 0) + (screen?.scrollHeight ?? 0) + 44,
-        );
-      });
-      const nextHeight = Math.max(620, ...requiredHeights);
-      setPaneHeight((current) => (current === nextHeight ? current : nextHeight));
-    };
-    const scheduleMeasure = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(measure);
-    };
-    const observer = new ResizeObserver(scheduleMeasure);
-    const mutationObserver = new MutationObserver(scheduleMeasure);
-    grid.querySelectorAll(".live-pane-controls, .live-pane-screen").forEach((element) => {
-      observer.observe(element);
-      mutationObserver.observe(element, { childList: true, subtree: true, characterData: true });
-    });
-    window.addEventListener("resize", scheduleMeasure);
-    scheduleMeasure();
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      mutationObserver.disconnect();
-      window.removeEventListener("resize", scheduleMeasure);
-    };
-  }, [panes]);
-
+  const [panes, setPanes] = useState(
+    [2, 9000, 6, 1, 7].map((id) => ({
+      id,
+      surface: Object.keys(personas.find((p) => p.id === id)!.surfaces)[0],
+      revision: 0,
+    })),
+  );
   if (!isMocking)
     return (
       <main className="wf-main">
         <p>Persona comparison is available in the fictional demo.</p>
       </main>
     );
-
   return (
     <div className="live-compare-wrap">
       <header className="live-top">
@@ -173,34 +82,96 @@ export default function LiveComparePage() {
           <p className="wf-eyebrow">SIMULATION CONTROL ROOM</p>
           <h1>Watch five interfaces work together</h1>
           <p>
-            Choose a persona and workspace surface for each pane. Simulated actions refresh across
-            the shared records in all five views.
+            Each pane shows the actual role interface. Follow links inside a pane; shared demo
+            records refresh across all views.
           </p>
         </div>
-        <div className="live-tools">
-          <Link to="/workflows">Connected records →</Link>
-          <DemoResetButton compact />
-        </div>
+        <DemoResetButton compact />
       </header>
       <div className="live-banner">
-        DEMO PERSONA VIEW · Select a different role and surface in any pane. All changes remain
-        fictional and browser-local.
+        DEMO PERSONA VIEW · All actions remain fictional and browser-local. Each pane keeps its own
+        role and navigation.
       </div>
       <div
-        ref={gridRef}
         className="live-split"
         aria-label="Five live platform views"
-        style={{ "--live-pane-height": `${paneHeight}px` } as React.CSSProperties}
+        style={{ "--live-pane-height": "900px" } as React.CSSProperties}
       >
-        {panes.map((pane, index) => (
-          <PersonaPane
-            key={index}
-            pane={pane}
-            index={index + 1}
-            changePersona={(id) => updatePersona(index, id)}
-            changeSurface={(surface) => updateSurface(index, surface)}
-          />
-        ))}
+        {panes.map((pane, index) => {
+          const persona = personas.find((p) => p.id === pane.id)!;
+          const path = persona.surfaces[pane.surface];
+          return (
+            <section
+              key={index}
+              className="live-pane live-workspace-pane"
+              aria-label={"Comparison view " + (index + 1)}
+            >
+              <header className="live-pane-controls">
+                <div>
+                  <p className="wf-eyebrow">VIEW {index + 1} · SIMULATED PERSONA</p>
+                  <h2>{persona.label}</h2>
+                </div>
+                <div className="live-selectors">
+                  <label>
+                    <span>Persona</span>
+                    <select
+                      value={pane.id}
+                      onChange={(event) => {
+                        const selected = personas.find((p) => p.id === Number(event.target.value))!;
+                        setPanes((previous) =>
+                          previous.map((p, i) =>
+                            i === index
+                              ? {
+                                  id: selected.id,
+                                  surface: Object.keys(selected.surfaces)[0],
+                                  revision: p.revision + 1,
+                                }
+                              : p,
+                          ),
+                        );
+                      }}
+                    >
+                      {personas.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Open page</span>
+                    <select
+                      value=""
+                      onChange={(event) =>
+                        setPanes((previous) =>
+                          previous.map((p, i) =>
+                            i === index
+                              ? { ...p, surface: event.target.value, revision: p.revision + 1 }
+                              : p,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="" disabled>
+                        Choose a page…
+                      </option>
+                      {Object.keys(persona.surfaces).map((surface) => (
+                        <option key={surface}>{surface}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </header>
+              <iframe
+                key={pane.id + path + pane.revision}
+                title={persona.label + " interface"}
+                src={"/?demo_persona=" + pane.id + "&demo_path=" + encodeURIComponent(path)}
+                className="w-full flex-1 border-0"
+                style={{ minHeight: 720 }}
+              />
+            </section>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,5 +1,11 @@
+import {
+  deliverDueCommunications,
+  saveCommunication,
+  cancelScheduledCommunication,
+  type CommunicationInput,
+} from "../communications";
 import { canManageOfferingRequest } from "@/lib/permissions";
-import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
+import { validUploadedFile } from "@/lib/file-upload";
 import { workflow, command, persist, recordDealChange } from "../workflow";
 import { http, HttpResponse } from "msw";
 import {
@@ -38,13 +44,8 @@ import {
   communications,
   communicationRecipients,
   communicationSummary,
-  nextCommunicationId,
-  nextCommunicationRecipientId,
   type MockUser,
   type MockSubscription,
-  type CommunicationAudienceType,
-  type CommunicationRouting,
-  type CommunicationStatus,
 } from "../db";
 import { STATUS_LABELS, DEAL_DOCUMENT_KINDS } from "@/lib/types";
 import type { SubscriptionStatus, Fund } from "@/lib/types";
@@ -1190,100 +1191,32 @@ export const adminHandlers = [
     });
   }),
 
-  // POST /api/v1/admin/communications — the caller resolves the audience
-  // client-side (from the same investor/subscription lists the rest of the
-  // LUCA portal already fetches) and sends the resolved investor_ids; the
-  // mock just builds recipients and simulated delivery/open state from them.
   http.post("*/api/v1/admin/communications", async ({ request }) => {
     const user = requireAdmin(request);
     if (!user) return unauthorized();
-    const body = (await request.json()) as {
-      subject?: string;
-      body?: string;
-      audience_type?: CommunicationAudienceType;
-      audience_description?: string;
-      fund_id?: number | null;
-      routing?: CommunicationRouting;
-      purpose?: string;
-      delivery_channels?: ("email" | "inbox")[];
-      attachment_document_ids?: number[];
-      uploaded_attachments?: UploadedFile[];
-      send_at?: string | null;
-      investor_ids?: number[];
-    };
-    if (!body.subject?.trim() || !body.body?.trim() || !body.investor_ids?.length) {
-      return HttpResponse.json(
-        { error: "subject, body and at least one recipient are required" },
-        { status: 422 },
-      );
-    }
-
-    if (
-      body.uploaded_attachments &&
-      (!Array.isArray(body.uploaded_attachments) ||
-        body.uploaded_attachments.length > 5 ||
-        !body.uploaded_attachments.every(validUploadedFile))
-    )
-      return HttpResponse.json(
-        { error: "Attach up to 5 PDF, PNG or JPEG files, up to 2 MB each." },
-        { status: 422 },
-      );
-    const now = new Date();
-    const sendAt = body.send_at ? new Date(body.send_at) : now;
-    const status: CommunicationStatus = sendAt.getTime() > now.getTime() ? "scheduled" : "sent";
-    const commId = nextCommunicationId();
-    const emailOnly = ["request", "remind_sign", "remind_fund"].includes(body.purpose ?? "");
-    const channels: ("email" | "inbox")[] = emailOnly ? ["email"] : ["email", "inbox"];
-
-    body.investor_ids.forEach((investorId) => {
-      const investor = adminInvestors().find((inv) => inv.id === investorId);
-      if (!investor) return;
-      const routedVia: "investor" | "eam" =
-        body.routing === "through_rm" && investor.eam_firm ? "eam" : "investor";
-      const delivered = status === "sent" && channels.includes("inbox");
-      communicationRecipients.push({
-        id: nextCommunicationRecipientId(),
-        communication_id: commId,
-        investor_id: investor.id,
-        investor_name: investor.full_name,
-        investor_email: investor.email,
-        eam_firm: investor.eam_firm,
-        routed_via: emailOnly ? routedVia : "investor",
-        email_status: status === "scheduled" ? "scheduled" : "pending_integration",
-        delivered_at: delivered ? now.toISOString() : null,
-        opened_at: null,
-        downloaded_document_ids: [],
+    try {
+      const communication = saveCommunication(user, (await request.json()) as CommunicationInput);
+      return HttpResponse.json({
+        communication: { ...communication, ...communicationSummary(communication.id) },
       });
-    });
-
-    const communication = {
-      id: commId,
-      subject: body.subject.trim(),
-      purpose: body.purpose,
-      delivery_channels: channels,
-      body: body.body,
-      audience_type: body.audience_type ?? ("filtered_group" as CommunicationAudienceType),
-      audience_description:
-        body.audience_description?.trim() || `${body.investor_ids.length} investors`,
-      fund_id: body.fund_id ?? null,
-      routing: body.routing ?? ("direct" as CommunicationRouting),
-      attachment_document_ids: body.attachment_document_ids ?? [],
-      uploaded_attachments: body.uploaded_attachments ?? [],
-      status,
-      scheduled_at: status === "scheduled" ? sendAt.toISOString() : null,
-      sent_at: status === "sent" ? now.toISOString() : null,
-      created_at: now.toISOString(),
-    };
-    communications.unshift(communication);
-    persist();
-    logEvent(
-      "communication_sent",
-      `"${communication.subject}" ${status === "sent" ? "sent" : "scheduled"} to ${body.investor_ids.length} investor(s).`,
-      { fundId: communication.fund_id ?? undefined },
-    );
-
-    return HttpResponse.json({
-      communication: { ...communication, ...communicationSummary(commId) },
-    });
+    } catch (error) {
+      return HttpResponse.json({ error: (error as Error).message }, { status: 422 });
+    }
+  }),
+  http.patch("*/api/v1/admin/communications/:id", async ({ request, params }) => {
+    const user = requireAdmin(request);
+    if (!user) return unauthorized();
+    deliverDueCommunications();
+    try {
+      const body = (await request.json()) as CommunicationInput & { cancel_schedule?: boolean };
+      const communication = body.cancel_schedule
+        ? cancelScheduledCommunication(user, Number(params.id))
+        : saveCommunication(user, body as CommunicationInput, Number(params.id));
+      return HttpResponse.json({
+        communication: { ...communication, ...communicationSummary(communication.id) },
+      });
+    } catch (error) {
+      return HttpResponse.json({ error: (error as Error).message }, { status: 422 });
+    }
   }),
 ];

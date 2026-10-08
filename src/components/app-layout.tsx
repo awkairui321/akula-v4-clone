@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
 } from "./ui/dropdown-menu";
 import ProfileSwitcher from "./profile-switcher";
+import { demoPersonaId } from "@/lib/demo-persona";
 import DemoResetButton from "./demo-reset-button";
 
 const NAV_ITEMS = [
@@ -110,6 +111,7 @@ export default function AppLayout() {
                 size="lg"
                 className={`relative w-full py-6 ${collapsed ? "justify-center px-0" : "justify-start px-4"}`}
                 title={collapsed ? item.label : undefined}
+                aria-label={item.label}
               >
                 <item.icon className={collapsed ? "" : "mr-2"} />
                 {!collapsed && (
@@ -153,9 +155,11 @@ export default function AppLayout() {
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
           <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
-              Compare roles live
-            </Button>
+            {!demoPersonaId() && (
+              <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
+                Compare roles live
+              </Button>
+            )}
             <DemoResetButton compact />
             <DropdownMenu>
               <DropdownMenuTrigger

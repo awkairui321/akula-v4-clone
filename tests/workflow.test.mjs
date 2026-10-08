@@ -17,6 +17,9 @@ for (const file of [
   "src/features/admin/client-funds-data.ts",
   "src/features/admin/analytics-data.ts",
   "src/lib/document-catalogue.ts",
+  "src/lib/demo-cohort.ts",
+  "src/mocks/communications.ts",
+  "src/features/eam/revenue-statement.ts",
   "src/mocks/db.ts",
   "src/mocks/workflow.ts",
   "src/mocks/onboarding.ts",
@@ -50,6 +53,9 @@ for (const file of [
 const db = await import("../.test-runtime/src/mocks/db.mjs");
 const w = await import("../.test-runtime/src/mocks/workflow.mjs");
 const { handlers } = await import("../.test-runtime/src/mocks/handlers/index.mjs");
+const communicationModel = await import("../.test-runtime/src/mocks/communications.mjs");
+const { revenueStatement } =
+  await import("../.test-runtime/src/features/eam/revenue-statement.mjs");
 const { buildAnalytics } = await import("../.test-runtime/src/features/admin/analytics-data.mjs");
 const { buildPartnerBook } =
   await import("../.test-runtime/src/features/partners/partner-data.mjs");
@@ -67,6 +73,178 @@ const manager = () => db.users.find((u) => u.role === "luca"),
   rm = () => db.users.find((u) => u.id === 6),
   investor = () => db.users.find((u) => u.id === 2);
 const funded = () => db.subscriptions.find((s) => s.status === "allocation_pending");
+
+test("drafts resume in place without delivering; sent messages are immutable", async () => {
+  const file = { name: "draft.pdf", file_data_url: "data:application/pdf;base64,JVBERi0xLjQ=" };
+  const payload = {
+    subject: "Saved draft",
+    body: "Original message",
+    investor_ids: [2],
+    save_draft: true,
+    uploaded_attachments: [file],
+    editor_state: { kind: "investor", investorId: "2" },
+  };
+  const created = await (await request("admin/communications", manager(), "POST", payload)).json();
+  const id = created.communication.id;
+  assert.equal(created.communication.status, "draft");
+  assert.ok(!db.communicationRecipients.find((r) => r.communication_id === id).delivered_at);
+  const updated = await (
+    await request(`admin/communications/${id}`, manager(), "PATCH", {
+      ...payload,
+      body: "Edited draft",
+    })
+  ).json();
+  assert.equal(updated.communication.id, id);
+  assert.equal(updated.communication.body, "Edited draft");
+  assert.deepEqual(updated.communication.uploaded_attachments, [file]);
+  assert.equal(db.communications.filter((c) => c.id === id).length, 1);
+  assert.equal((await request(`admin/communications/${id}`, rm(), "PATCH", payload)).status, 403);
+  assert.equal(
+    (
+      await request(`admin/communications/${id}`, manager(), "PATCH", {
+        ...payload,
+        save_draft: false,
+      })
+    ).status,
+    200,
+  );
+  const before = structuredClone(db.communications.find((c) => c.id === id));
+  assert.equal(
+    (await request(`admin/communications/${id}`, manager(), "PATCH", payload)).status,
+    422,
+  );
+  assert.deepEqual(
+    db.communications.find((c) => c.id === id),
+    before,
+  );
+});
+
+test("scheduled inbox delivery is due-only, persistent and idempotent; cancellation retains a draft", async () => {
+  const date = new Date(Date.now() + 3600000);
+  const payload = {
+    subject: "Scheduled update",
+    body: "Demo update",
+    investor_ids: [2],
+    purpose: "general",
+    send_at: date.toISOString(),
+  };
+  const created = await (await request("admin/communications", manager(), "POST", payload)).json();
+  const id = created.communication.id;
+  communicationModel.deliverDueCommunications(new Date(date.getTime() - 1));
+  assert.ok(!db.communicationRecipients.find((r) => r.communication_id === id).delivered_at);
+  db.restoreDemoState(db.exportDemoState());
+  communicationModel.deliverDueCommunications(date);
+  const recipient = db.communicationRecipients.find((r) => r.communication_id === id);
+  assert.equal(recipient.delivered_at, date.toISOString());
+  const delivered = structuredClone(recipient);
+  communicationModel.deliverDueCommunications(new Date(date.getTime() + 1000));
+  assert.deepEqual(
+    db.communicationRecipients.find((r) => r.id === recipient.id),
+    delivered,
+  );
+  assert.ok(
+    (await (await request("messages", investor())).json()).messages.some((m) => m.id === id),
+  );
+  const another = await (await request("admin/communications", manager(), "POST", payload)).json();
+  assert.equal(
+    (
+      await request(`admin/communications/${another.communication.id}`, manager(), "PATCH", {
+        cancel_schedule: true,
+      })
+    ).status,
+    200,
+  );
+  communicationModel.deliverDueCommunications(date);
+  assert.equal(db.communications.find((c) => c.id === another.communication.id).status, "draft");
+  assert.ok(
+    !db.communicationRecipients.find((r) => r.communication_id === another.communication.id)
+      .delivered_at,
+  );
+  assert.equal(
+    (
+      await request("admin/communications", manager(), "POST", {
+        ...payload,
+        investor_ids: [999999],
+      })
+    ).status,
+    422,
+  );
+});
+
+test("revenue CSV matches scoped totals, escapes quotes and neutralizes formulas", async () => {
+  const eam = db.users.find((u) => u.id === 4);
+  const data = await (await request("eam/revenue", eam)).json();
+  data.transactions[0].client_name = '=HYPERLINK("bad")';
+  const csv = revenueStatement(data);
+  assert.ok(csv.includes('"\'=HYPERLINK(""bad"")"'));
+  assert.ok(csv.includes('"Simulated paid","' + data.paid + '"'));
+  assert.ok(csv.includes("fictional demo"));
+  assert.equal((await request("eam/revenue", investor())).status, 403);
+});
+
+test("scheduled document requests activate only when due and never on draft save or cancellation", async () => {
+  const user = investor();
+  const kind = "passport";
+  db.documentRequests.splice(0, db.documentRequests.length);
+  const date = new Date(Date.now() + 3600000);
+  const payload = {
+    subject: "Documents required",
+    body: "Please provide the requested document.",
+    investor_ids: [user.id],
+    purpose: "request",
+    send_at: date.toISOString(),
+    editor_state: { docKinds: [kind], dueDate: "2026-11-30" },
+  };
+  const count = db.communications.length;
+  assert.equal(
+    (
+      await request("admin/communications", manager(), "POST", {
+        ...payload,
+        editor_state: { docKinds: ["invalid"] },
+      })
+    ).status,
+    422,
+  );
+  assert.equal(db.communications.length, count);
+  const draft = await (
+    await request("admin/communications", manager(), "POST", { ...payload, save_draft: true })
+  ).json();
+  assert.equal(db.documentRequests.length, 0);
+  const result = await (
+    await request(`admin/communications/${draft.communication.id}`, manager(), "PATCH", payload)
+  ).json();
+  assert.equal(result.communication.status, "scheduled");
+  assert.equal(db.documentRequests.length, 0);
+  communicationModel.deliverDueCommunications(date);
+  assert.equal(db.documentRequests.length, 1);
+  assert.equal(db.documentRequests[0].communication_id, draft.communication.id);
+  assert.equal(db.documentRequests[0].investor_id, user.id);
+  communicationModel.deliverDueCommunications(date);
+  assert.equal(db.documentRequests.length, 1);
+});
+
+test("approved showcase is shared across adviser and RM views without removing scoped history", async () => {
+  const eam = db.users.find((u) => u.id === 4);
+  const clients = await (await request("eam/clients", eam)).json();
+  const approved = clients.filter((c) => c.showcase);
+  assert.ok(approved.length > 0);
+  for (const client of approved) {
+    const record = db.adminInvestors().find((i) => i.id === client.investor_user_id);
+    assert.equal(record.verification_status, "approved");
+  }
+  const dashboard = await (await request("eam/dashboard", eam)).json();
+  assert.equal(dashboard.total_clients, approved.length);
+  const view = w.view(rm());
+  const excluded = clients.find((c) => !c.showcase);
+  assert.ok(excluded);
+  assert.equal((await request(`eam/clients/${excluded.id}`, eam)).status, 200);
+  for (const client of view.clients.filter((c) => c.showcase))
+    assert.equal(
+      db.adminInvestors().find((i) => i.id === client.id).verification_status,
+      "approved",
+    );
+  assert.ok(view.clients.some((c) => !c.showcase));
+});
 
 test("advisers see published terms and never unpublished working changes", async () => {
   const eam = db.users.find((u) => u.id === 4);

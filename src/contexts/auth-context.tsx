@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { demoPersonaId } from "@/lib/demo-persona";
 
 type User = {
   id: number;
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return data.user;
     } catch {
       setUser(null);
-      localStorage.removeItem("token");
+      if (!demoPersonaId()) localStorage.removeItem("token");
       return null;
     } finally {
       setLoading(false);
@@ -50,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (localStorage.getItem("token")) {
+    if (demoPersonaId() || localStorage.getItem("token")) {
       fetchUser();
     } else {
       setLoading(false);
@@ -58,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUser]);
 
   const login = async (email: string, password: string, otpCode?: string): Promise<LoginResult> => {
+    if (demoPersonaId()) throw new Error("Change the persona using the comparison controls.");
     const body: Record<string, unknown> = { email, password };
     if (otpCode) body.otp_attempt = otpCode;
 
@@ -80,6 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    if (demoPersonaId()) {
+      setUser(null);
+      queryClient.clear();
+      return;
+    }
     try {
       await api("/api/v1/logout", { method: "DELETE" });
     } finally {

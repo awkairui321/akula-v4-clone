@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { resetDemo } from "@/mocks/workflow";
 import { isMocking } from "@/mocks/browser";
+import { demoPersonaId } from "@/lib/demo-persona";
 
 export default function DemoResetButton({ compact = false }: { compact?: boolean }) {
   const [confirming, setConfirming] = useState(false);
-  if (!isMocking) return null;
+  if (!isMocking || demoPersonaId()) return null;
   return confirming ? (
     <span className="inline-flex items-center gap-2">
       <span className="text-xs">Reset this browser’s fictional demo records?</span>

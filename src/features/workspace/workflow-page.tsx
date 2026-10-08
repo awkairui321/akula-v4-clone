@@ -9,6 +9,7 @@ import {
   type FormEvent,
 } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { demoPersonaId as framePersonaId } from "@/lib/demo-persona";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { api, apiAsDemo } from "@/lib/api";
@@ -1191,6 +1192,7 @@ function WorkflowPageContent({
   const [relationshipSearch, setRelationshipSearch] = useState("");
   const [relationshipView, setRelationshipView] = useState("tasks");
   const [reviewSignal, setReviewSignal] = useState(0);
+  const [historicalClients, setHistoricalClients] = useState(false);
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
   const demoPersonaId = useContext(DemoPersonaContext);
   const chooseTab = (value: string) => {
@@ -1214,7 +1216,19 @@ function WorkflowPageContent({
     screen.addEventListener("change", collapse);
     return () => screen.removeEventListener("change", collapse);
   }, []);
-  const d = q.data;
+  const raw = q.data;
+  const cohort = new Set(
+    raw?.clients.filter((client) => client.showcase !== false).map((client) => client.id),
+  );
+  const d =
+    raw?.actor.role === "rm" && !historicalClients
+      ? {
+          ...raw,
+          clients: raw.clients.filter((client) => cohort.has(client.id)),
+          subscriptions: raw.subscriptions.filter((sub) => cohort.has(sub.investor_id)),
+          holdings: raw.holdings.filter((holding) => cohort.has(holding.investor_id)),
+        }
+      : raw;
   if (!d)
     return (
       <main className="wf-loading">
@@ -1389,9 +1403,11 @@ function WorkflowPageContent({
                   <span>{tab}</span>
                 </div>
                 <div className="rm-header-tools">
-                  <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
-                    Compare roles live
-                  </Button>
+                  {!framePersonaId() && (
+                    <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
+                      Compare roles live
+                    </Button>
+                  )}
                   <DemoResetButton compact />
                   <DropdownMenu>
                     <DropdownMenuTrigger
@@ -1416,7 +1432,7 @@ function WorkflowPageContent({
                   <h1>{tab}</h1>
                 </div>
                 <div className="wf-header-tools">
-                  <Link to="/live-demo">View roles live →</Link>
+                  {!framePersonaId() && <Link to="/live-demo">View roles live →</Link>}
                   <DemoResetButton compact />
                   <span>{d.actor.email}</span>
                 </div>
@@ -1432,6 +1448,22 @@ function WorkflowPageContent({
               </p>
             )}
           </>
+        )}
+        {d.actor.role === "rm" && (
+          <div className="mb-5 flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setHistoricalClients(!historicalClients)}
+            >
+              {historicalClients ? "Approved client book" : "Onboarding & historical accounts"}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              {historicalClients
+                ? "All assigned records, including onboarding and history."
+                : "Approved showcase clients. Other assigned records remain available."}
+            </p>
+          </div>
         )}
         {tab === "Overview" &&
           (rm ? (

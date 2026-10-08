@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DownloadIcon } from "lucide-react";
+import { revenueStatement } from "./revenue-statement";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   accrued: "outline",
@@ -14,14 +15,14 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "dest
 };
 
 export default function RevenuePage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["eamRevenue"],
     queryFn: () => api<EamRevenueData>("/api/v1/eam/revenue"),
   });
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Referral economics
@@ -32,13 +33,28 @@ export default function RevenuePage() {
             statuses are simulated.
           </p>
         </div>
-        <Button variant="outline" disabled>
-          <DownloadIcon className="mr-2 size-4" />
-          Download statement
-        </Button>
+        {data ? (
+          <a
+            className="inline-flex items-center rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+            href={"data:text/csv;charset=utf-8," + encodeURIComponent(revenueStatement(data))}
+            download={`akula-demo-revenue-${new Date().toISOString().slice(0, 10)}.csv`}
+          >
+            <DownloadIcon className="mr-2 size-4" />
+            Download statement (CSV)
+          </a>
+        ) : (
+          <Button variant="outline" disabled>
+            Download statement (CSV)
+          </Button>
+        )}
       </div>
 
       {isLoading && <p className="py-12 text-center text-muted-foreground">Loading...</p>}
+      {error && (
+        <p role="alert" className="text-destructive">
+          {error.message}
+        </p>
+      )}
 
       {!isLoading && data && (
         <>

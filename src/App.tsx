@@ -1,6 +1,16 @@
 import RmCommunications from "@/features/rm/communications";
 import RmDeal from "@/features/rm/deal";
-import { BrowserRouter, Routes, Route, Navigate, Outlet, Link } from "react-router-dom";
+import {
+  BrowserRouter,
+  MemoryRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+  Link,
+} from "react-router-dom";
+import { useEffect, type ReactNode } from "react";
+import { demoPersonaId } from "@/lib/demo-persona";
 import * as Sentry from "@sentry/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
@@ -168,12 +178,27 @@ function EamRoute() {
   return <Outlet />;
 }
 
+function DemoRouter({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const refresh = () => {
+      queryClient.invalidateQueries();
+    };
+    window.addEventListener("akula-demo-sync", refresh);
+    return () => window.removeEventListener("akula-demo-sync", refresh);
+  }, []);
+  if (demoPersonaId()) {
+    const path = new URLSearchParams(window.location.search).get("demo_path") ?? "/";
+    return <MemoryRouter initialEntries={[path]}>{children}</MemoryRouter>;
+  }
+  return <BrowserRouter>{children}</BrowserRouter>;
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <Toaster richColors position="top-right" />
-        <BrowserRouter>
+        <DemoRouter>
           <AuthProvider>
             <ActiveProfileProvider>
               <SentryRoutes>
@@ -359,7 +384,7 @@ function App() {
               </SentryRoutes>
             </ActiveProfileProvider>
           </AuthProvider>
-        </BrowserRouter>
+        </DemoRouter>
       </QueryClientProvider>
     </ErrorBoundary>
   );

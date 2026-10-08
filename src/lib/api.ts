@@ -1,3 +1,4 @@
+import { demoPersonaId } from "./demo-persona";
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 type RequestOptions = {
@@ -9,7 +10,8 @@ export async function api<T>(
   path: string,
   { method = "GET", body }: RequestOptions = {},
 ): Promise<T> {
-  const token = localStorage.getItem("token");
+  const persona = demoPersonaId();
+  const token = persona ? `mock-token-${persona}` : localStorage.getItem("token");
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -32,7 +34,7 @@ export async function api<T>(
 
   // Capture JWT from login response
   const authHeader = res.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ")) {
+  if (!persona && authHeader?.startsWith("Bearer ")) {
     localStorage.setItem("token", authHeader.replace("Bearer ", ""));
   }
 
