@@ -1980,7 +1980,7 @@ for (const spec of dealSpecs) {
     typical_buyer: spec.buyer,
     commercial_model: spec.model,
     how_it_works: base.asset.how_it_works.map((row, i) => ({
-      label: row.label,
+      label: ["The customer problem", `What ${spec.company} provides`, row.label, row.label][i % 4],
       text: [
         `Illustrative: ${spec.company} addresses a significant customer problem in ${spec.subSector.toLowerCase()}.`,
         `${spec.company} provides ${spec.descriptor.toLowerCase()}.`,
@@ -2169,7 +2169,7 @@ export const discoverCompanies: DiscoverCompany[] = [
     notable_investors: ["SoftBank Vision Fund", "General Atlantic"],
     total_capital_raised: "$3.1B",
     company_structure: "Cayman Islands holding company",
-    website: "https://nightjarlabs.example.com",
+    website: "",
     about:
       "Nightjar Labs operates a short-form video platform with an AI-driven recommendation engine and a creator-monetisation marketplace spanning 60+ markets.",
     thesis:
@@ -5086,8 +5086,8 @@ function seedCommunications() {
   const reminderId = nextCommunicationId();
   communications.push({
     id: reminderId,
-    subject: "Quanta Compute closes in 3 days",
-    body: "Hello,\n\nQuanta Compute SPV I closes to new subscriptions on 5 October. Your subscription is waiting for the payment to be matched. If you have already sent the transfer, please upload proof of payment from the **Subscription Activity** tab so we can match it.\n\nThank you,\nLUCA SGP",
+    subject: "Quanta Compute funding reminder",
+    body: `Hello,\n\nQuanta Compute SPV I closes to new subscriptions on ${new Date(findFundById(8)!.closes_at!).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}. Your subscription is waiting for the payment to be matched. If you have already sent the transfer, please upload proof of payment from **Subscription activity** below your holdings so we can match it.\n\nThank you,\nLUCA SGP`,
     audience_type: "fund",
     audience_description: "Investors in Quanta Compute SPV I with funding outstanding (1 investor)",
     fund_id: 8,

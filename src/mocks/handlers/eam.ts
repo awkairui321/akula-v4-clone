@@ -1,4 +1,5 @@
 import { mayDiscover } from "../investor-access";
+import { currentVersion } from "../workflow";
 import { findUserById } from "../db";
 import { partnerOnboarding } from "../onboarding";
 import { http, HttpResponse } from "msw";
@@ -86,6 +87,7 @@ function clientDocuments(investorId: number) {
       kind: d.kind,
       status: d.status,
       has_file: d.has_file,
+      file_data_url: d.file_data_url ?? null,
       created_at: d.created_at,
     }));
 }
@@ -234,6 +236,7 @@ export const eamHandlers = [
             kind: document.kind,
             status: document.status,
             has_file: document.has_file,
+            file_data_url: document.file_data_url ?? null,
             created_at: document.created_at,
           })),
       ),
@@ -401,8 +404,12 @@ export const eamHandlers = [
   }),
 
   // GET /api/v1/eam/opportunities
-  http.get("*/api/v1/eam/opportunities", () => {
-    const openFunds = funds.filter((f) => f.state === "open");
+  http.get("*/api/v1/eam/opportunities", ({ request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    const openFunds = funds
+      .filter((f) => f.state === "open" && currentVersion(f.id))
+      .map((f) => ({ ...structuredClone(currentVersion(f.id)!.snapshot), state: f.state }));
     const eamFunds = openFunds.map((f) => ({
       id: f.id,
       name: f.name,
@@ -439,8 +446,11 @@ export const eamHandlers = [
   http.get("*/api/v1/eam/opportunities/:id", ({ params, request }) => {
     const user = currentUser(request);
     if (!user) return unauthorized();
-    const fund = findFundById(Number(params.id));
-    if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
+    const working = findFundById(Number(params.id));
+    const published = working && currentVersion(working.id);
+    if (!working || working.state === "draft" || !published)
+      return HttpResponse.json({ error: "Published opportunity not found" }, { status: 404 });
+    const fund = { ...structuredClone(published.snapshot), state: working.state };
     const fundHighlights = highlights.filter(
       (h) => h.fund_id === fund.id && myClients(user.id).some((c) => c.id === h.adviser_client_id),
     );

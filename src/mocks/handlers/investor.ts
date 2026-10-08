@@ -762,12 +762,20 @@ export const investorHandlers = [
     if (!fundId) {
       return HttpResponse.json({ documents: documents.filter((d) => d.owner_id === user.id) });
     }
+    const editor = ["luca", "ops", "investment_team"].includes(user.role);
+    const published = currentVersion(Number(fundId));
+    if (!editor && !published)
+      return HttpResponse.json({ error: "Published opportunity not found" }, { status: 404 });
     if (!mayDiscover(user, Number(fundId)) && !hasInvestmentHistory(user, Number(fundId)))
       return HttpResponse.json({ error: "Opportunity access required" }, { status: 403 });
     const forFund = documents.filter(
       (d) =>
         d.fund_id === Number(fundId) &&
-        ((d.subscription_id === null && d.review_state === "filed" && disclosureAccess(user)) ||
+        ((d.subscription_id === null &&
+          d.owner_name === "LUCA SGP" &&
+          (editor ||
+            (d.review_state === "filed" &&
+              (disclosureAccess(user) || user.has_eam_profile || user.role === "rm")))) ||
           d.owner_id === user.id),
     );
     return HttpResponse.json({ documents: forFund });
@@ -948,13 +956,44 @@ export const investorHandlers = [
   http.post("*/api/v1/subscriptions/:id/payment_proof", async ({ params, request }) => {
     const sub = ownedSubscription(request, Number(params.id));
     if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
-    const body = (await request.json().catch(() => ({}))) as { filename?: string };
-    if (!body.filename) {
-      return HttpResponse.json({ error: "A file is required" }, { status: 422 });
+    const body = (await request.json().catch(() => ({}))) as UploadedFile;
+    if (!validUploadedFile(body)) {
+      return HttpResponse.json(
+        { error: "Choose a PDF, PNG or JPEG file up to 2 MB." },
+        { status: 422 },
+      );
     }
+    if (
+      sub.on_hold ||
+      !["awaiting_funds", "payment_unmatched", "reconciliation"].includes(sub.status)
+    )
+      return HttpResponse.json(
+        { error: "Payment evidence is not accepted at this stage." },
+        { status: 422 },
+      );
+    const user = currentUser(request)!;
+    const profile = findInvestorProfileByUserId(user.id);
+    documents.push({
+      id: nextDocumentId(),
+      name: body.name.trim(),
+      file_data_url: body.file_data_url,
+      kind: "payment_proof",
+      status: "submitted",
+      review_state: "received",
+      has_file: true,
+      fund_id: sub.fund_id,
+      fund_name: findFundById(sub.fund_id)?.name ?? null,
+      subscription_id: sub.id,
+      owner_id: user.id,
+      owner_name: profile ? `${profile.first_name} ${profile.last_name}`.trim() : user.email,
+      owner_email: user.email,
+      created_at: new Date().toISOString(),
+    });
     // Ops still confirms the match by hand — this just flags the subscription
     // as having evidence attached so it surfaces in their queue.
     sub.payment_claimed = true;
+    recordAudit(user.id, `Payment evidence uploaded for subscription #${sub.id}.`);
+    persist();
     return HttpResponse.json({
       subscription: toSubscription(sub),
       wizard_step: wizardStepFor(sub),

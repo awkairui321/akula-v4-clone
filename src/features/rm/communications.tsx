@@ -125,7 +125,10 @@ export default function RmCommunications() {
             Delivered to the client inbox in this demo. Email delivery is not connected.
           </p>
           <div className="flex gap-3">
-            <Button disabled={send.isPending || !client || !subject.trim() || !body.trim()}>
+            <Button
+              type="submit"
+              disabled={send.isPending || !client || !subject.trim() || !body.trim()}
+            >
               Send to client
             </Button>
             <Button type="button" variant="ghost" onClick={() => setCompose(false)}>

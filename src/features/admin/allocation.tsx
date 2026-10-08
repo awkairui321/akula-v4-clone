@@ -152,7 +152,9 @@ export default function AllocationPage() {
               {run.error.message}
             </p>
           )}
-          <Button disabled={!ready || !valid || run.isPending}>Confirm allocation</Button>
+          <Button type="submit" disabled={!ready || !valid || run.isPending}>
+            Confirm allocation
+          </Button>
         </form>
       )}
     </div>

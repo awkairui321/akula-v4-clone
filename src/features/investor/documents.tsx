@@ -122,19 +122,7 @@ function DocumentRow({ doc }: { doc: Document }) {
               <DownloadIcon className="size-4" />
             </a>
           ) : (
-            <Button
-              aria-label={`Download ${doc.name}`}
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                window.open(
-                  `${import.meta.env.VITE_API_URL ?? "http://localhost:3000"}/api/v1/documents/${doc.id}/download`,
-                  "_blank",
-                );
-              }}
-            >
-              <DownloadIcon className="size-4" />
-            </Button>
+            <span className="text-xs text-muted-foreground">File unavailable</span>
           ))}
       </div>
     </div>

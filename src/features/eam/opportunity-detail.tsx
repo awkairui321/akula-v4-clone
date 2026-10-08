@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Fund } from "@/lib/types";
@@ -22,7 +22,7 @@ import { StarIcon, Trash2Icon } from "lucide-react";
 export default function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["eamOpportunity", id],
     queryFn: () => api<{ fund: Fund; highlights: Highlight[] }>(`/api/v1/eam/opportunities/${id}`),
     enabled: !!id,
@@ -31,13 +31,23 @@ export default function OpportunityDetailPage() {
   const fund = data?.fund;
   const highlights = data?.highlights ?? [];
 
-  if (isLoading || !fund) {
+  if (isLoading) {
     return (
       <div>
         <p className="py-12 text-center text-muted-foreground">Loading...</p>
       </div>
     );
   }
+
+  if (!fund || error)
+    return (
+      <div className="space-y-4 py-8">
+        <p role="alert">{error?.message ?? "Opportunity not found."}</p>
+        <Link to="/eam/opportunities" className="text-primary underline">
+          Back to opportunities
+        </Link>
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-8">

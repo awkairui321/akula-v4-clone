@@ -302,12 +302,12 @@ const CHANNEL_OPTIONS: { value: InvestmentChannel; title: string; body: string }
   {
     value: "direct",
     title: "Independent investor",
-    body: "Demo: standard deal access and published subscription fees plus 1 percentage point.",
+    body: "Access to funds for direct clients. Review the applicable fees shown on each fund before subscribing.",
   },
   {
     value: "eam_referred",
     title: "Partner-referred investor",
-    body: "Introduced by an EAM, MFO or private bank. Demo: expanded deal access, published fees and priority allocation consideration; allocation is not guaranteed.",
+    body: "Introduced by an EAM, MFO or private bank. Access to eligible partner funds, with the applicable fees shown on each fund. Allocation is not guaranteed.",
   },
 ];
 
@@ -341,8 +341,8 @@ function ChannelSection({
             {profile.prepared_by_rm?.rm_name ??
               profile.referral?.partner_firm ??
               "your LUCA relationship manager"}
-            . Expanded deal access, published fees and priority allocation consideration; allocation
-            is not guaranteed.
+            . Your client class determines the funds available to you. Review each fund's fees;
+            allocation is not guaranteed.
           </p>
         </div>
         <Button className="mt-6 w-full" onClick={() => onComplete(profile)}>

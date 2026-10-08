@@ -139,21 +139,22 @@ export default function DiscoverDetailPage() {
           {company.company_structure && (
             <FactRow label="Company structure" value={company.company_structure} />
           )}
-          {company.website && (
-            <FactRow
-              label="Website"
-              value={
-                <a
-                  href={company.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline underline-offset-2"
-                >
-                  {company.website.replace(/^https?:\/\//, "")}
-                </a>
-              }
-            />
-          )}
+          {company.website &&
+            !/^https?:\/\/([a-z0-9-]+\.)*example\.(com|net|org)(\/|$)/i.test(company.website) && (
+              <FactRow
+                label="Website"
+                value={
+                  <a
+                    href={company.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2"
+                  >
+                    {company.website.replace(/^https?:\/\//, "")}
+                  </a>
+                }
+              />
+            )}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import RmCommunications from "@/features/rm/communications";
 import RmDeal from "@/features/rm/deal";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, Link } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
@@ -344,6 +344,18 @@ function App() {
                   </Route>
                 </Route>
                 <Route path="/dashboard" element={<Navigate to="/portfolio" replace />} />
+                <Route
+                  path="*"
+                  element={
+                    <main className="mx-auto max-w-xl space-y-4 p-8">
+                      <h1 className="text-2xl font-semibold">Page not found</h1>
+                      <p>This address does not match a page in the platform.</p>
+                      <Link to="/" className="text-primary underline">
+                        Return to the platform
+                      </Link>
+                    </main>
+                  }
+                />
               </SentryRoutes>
             </ActiveProfileProvider>
           </AuthProvider>
