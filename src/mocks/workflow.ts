@@ -1,5 +1,6 @@
 import { mayDiscover, hasInvestmentHistory, setPublishedAudienceReader } from "./investor-access";
 import * as db from "./db";
+import { inDemoClientCohort } from "../lib/demo-cohort";
 import type {
   WorkflowState,
   WorkflowCommand,
@@ -441,7 +442,8 @@ const KEY = "akula-v4-simulation-v1";
 export function persist() {
   if (typeof localStorage === "undefined" || restoreFailed) return;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ schema: 1, workflow, db: db.exportDemoState() }));
+    const value = JSON.stringify({ schema: 1, workflow, db: db.exportDemoState() });
+    if (localStorage.getItem(KEY) !== value) localStorage.setItem(KEY, value);
     storageWarning = null;
   } catch {
     storageWarning = "Browser storage is unavailable or full. Export this demo before reloading.";
@@ -620,6 +622,11 @@ export function view(user: db.MockUser): WorkflowView {
         name: investor?.full_name || db.findUserById(id)?.email || `Investor ${id}`,
         type: investor?.investor_type === "individual" ? "individual" : "entity",
         eamFirm: investor?.eam_firm ?? null,
+        showcase: inDemoClientCohort(
+          id,
+          investor?.verification_status === "approved",
+          Boolean(investor?.prepared_by_rm),
+        ),
       };
     }),
     subscriptions: subs.map((s) => ({

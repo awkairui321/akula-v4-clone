@@ -1,6 +1,8 @@
 import { seedWorkflow, restore, persist } from "./workflow";
 import { setupWorker } from "msw/browser";
 import { handlers } from "./handlers";
+import { deliverDueCommunications } from "./communications";
+import { demoPersonaId } from "../lib/demo-persona";
 
 // This app normally talks to a live Rails-style JSON API at VITE_API_URL. We
 // have no backend at all in this environment, so the entire app runs against
@@ -23,6 +25,7 @@ function installFetchFallback() {
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
+    restore();
     for (const handler of handlers) {
       if (await handler.test({ request: request.clone() })) {
         const result = await handler.run({
@@ -42,6 +45,21 @@ function installFetchFallback() {
 export async function startMockWorker() {
   seedWorkflow();
   restore();
+  deliverDueCommunications();
+  window.setInterval(() => {
+    restore();
+    if (deliverDueCommunications()) window.dispatchEvent(new Event("akula-demo-sync"));
+  }, 1000);
+  window.addEventListener("storage", (event) => {
+    if (event.key === "akula-v4-simulation-v1") {
+      restore();
+      window.dispatchEvent(new Event("akula-demo-sync"));
+    }
+  });
+  if (demoPersonaId()) {
+    installFetchFallback();
+    return;
+  }
   worker.events.on("response:mocked", ({ response }) => {
     if (response.ok) persist();
   });

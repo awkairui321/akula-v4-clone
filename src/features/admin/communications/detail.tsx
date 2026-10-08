@@ -1,5 +1,7 @@
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { CommunicationDetailResponse, CommunicationStatus } from "../types";
 import { Badge } from "@/components/ui/badge";
@@ -33,11 +35,25 @@ function formatDate(value: string | null): string {
 
 export default function CommunicationDetailPage() {
   const { id } = useParams();
+  const queryClient = useQueryClient();
+  const cancel = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/admin/communications/${id}`, {
+        method: "PATCH",
+        body: { cancel_schedule: true },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "communications"] });
+      toast.success("Schedule cancelled. Message retained as a draft.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "communications", id],
     queryFn: () => api<CommunicationDetailResponse>(`/api/v1/admin/communications/${id}`),
     enabled: Boolean(id),
+    refetchInterval: 5000,
   });
 
   if (isLoading) return <p className="py-12 text-center text-muted-foreground">Loading...</p>;
@@ -65,6 +81,27 @@ export default function CommunicationDetailPage() {
         </Badge>
       </div>
 
+      {communication.status !== "sent" && (
+        <div className="mb-6 flex flex-wrap gap-3">
+          <Link
+            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            to={`/luca/communications/new?draft=${communication.id}`}
+          >
+            {communication.status === "draft" ? "Resume draft" : "Edit scheduled message"}
+          </Link>
+          {communication.status === "scheduled" && (
+            <Button variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+              Cancel schedule
+            </Button>
+          )}
+        </div>
+      )}
+      {communication.status === "scheduled" && (
+        <p className="mb-6 text-sm text-muted-foreground">
+          Scheduled processing runs while the app is open, or next time it opens if overdue. Updates
+          reach the demo inbox; email requests remain pending integration. Email is not connected.
+        </p>
+      )}
       <div className="mb-6 grid grid-cols-3 gap-3 sm:gap-4">
         <SummaryTile label="Recipients" value={String(communication.recipient_count)} />
         <SummaryTile label="Delivered" value={String(communication.delivered_count)} />
@@ -138,9 +175,13 @@ export default function CommunicationDetailPage() {
                     {r.routed_via === "eam" ? (r.eam_firm ?? "RM") : "Direct"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {r.email_status === "pending_integration" && !r.delivered_at
-                      ? "Email pending integration"
-                      : formatDate(r.delivered_at)}
+                    {communication.status === "draft"
+                      ? "Not sent"
+                      : communication.status === "scheduled"
+                        ? "Scheduled"
+                        : r.email_status === "pending_integration" && !r.delivered_at
+                          ? "Email pending integration"
+                          : formatDate(r.delivered_at)}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(r.opened_at)}</TableCell>
                   <TableCell className="text-right">{r.downloaded_document_ids.length}</TableCell>

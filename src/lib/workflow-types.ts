@@ -166,6 +166,7 @@ export type WorkflowView = WorkflowState & {
     name: string;
     type: "individual" | "entity";
     eamFirm?: string | null;
+    showcase?: boolean;
   }[];
   subscriptions: {
     paymentProofs: { id: number; name: string; file_data_url: string | null; created_at: string }[];

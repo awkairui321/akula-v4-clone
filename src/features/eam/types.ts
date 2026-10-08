@@ -18,6 +18,7 @@ export type AdviserClient = {
   updated_at: string;
   investor_user_id: number;
   client_code: string;
+  showcase?: boolean;
 };
 
 export type ClientStage = "prospect" | "onboarding" | "active" | "inactive";

@@ -46,6 +46,7 @@ export default function CommunicationsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "communications"],
     queryFn: () => api<CommunicationsResponse>("/api/v1/admin/communications"),
+    refetchInterval: 5000,
   });
 
   const communications = data?.communications ?? [];

@@ -22,6 +22,9 @@ export default function ClientsPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
+  const [history, setHistory] = useState(
+    Boolean(params.get("stage") && params.get("stage") !== "active"),
+  );
   const stageFilter = STAGES.includes(params.get("stage") as ClientStage)
     ? (params.get("stage") as ClientStage)
     : "all";
@@ -31,7 +34,10 @@ export default function ClientsPage() {
     queryFn: () => api<AdviserClient[]>("/api/v1/eam/clients"),
   });
 
-  const clients = useMemo(() => data ?? [], [data]);
+  const clients = useMemo(
+    () => (data ?? []).filter((client) => history || client.showcase !== false),
+    [data, history],
+  );
 
   const filtered = useMemo(() => {
     let result = clients;
@@ -57,7 +63,9 @@ export default function ClientsPage() {
     <div className="flex flex-col gap-6">
       <div className="space-y-1">
         <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
-        <p className="text-muted-foreground">Manage your adviser clients and their portfolios.</p>
+        <p className="text-muted-foreground">
+          Your approved client book. Onboarding and historical accounts remain available separately.
+        </p>
       </div>
 
       <div className="flex gap-3">
@@ -73,7 +81,17 @@ export default function ClientsPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {STAGES.map((s) => (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setHistory(!history);
+            setParams({});
+          }}
+        >
+          {history ? "Approved client book" : "Onboarding & historical accounts"}
+        </Button>
+        {(history ? STAGES : (["all"] as const)).map((s) => (
           <Button
             key={s}
             variant={stageFilter === s ? "secondary" : "outline"}

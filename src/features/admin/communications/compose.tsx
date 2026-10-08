@@ -17,6 +17,7 @@ import type {
   AdminInvestor,
   AdminSubscription,
   Communication,
+  CommunicationDetailResponse,
   CommunicationAudienceType,
   CommunicationRouting,
   DocumentRequestRow,
@@ -162,6 +163,14 @@ export default function ComposeCommunicationPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
+  const draftId = params.get("draft");
+  const { data: saved, error: savedError } = useQuery({
+    queryKey: ["admin", "communications", draftId],
+    queryFn: () => api<CommunicationDetailResponse>(`/api/v1/admin/communications/${draftId}`),
+    enabled: Boolean(draftId),
+  });
+  const [hydrated, setHydrated] = useState(false);
+  const [savedIds, setSavedIds] = useState<number[] | null>(null);
 
   // Links from other pages arrive with the audience and/or purpose already chosen.
   const [paramKind, paramValue] = (params.get("audience") ?? "").split(":");
@@ -203,10 +212,46 @@ export default function ComposeCommunicationPage() {
   const [edited, setEdited] = useState(false);
   const [attachmentIds, setAttachmentIds] = useState<number[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const routing: CommunicationRouting = "direct";
+  const routing: CommunicationRouting = saved?.communication.routing ?? "direct";
   const emailOnly = ["request", "remind_sign", "remind_fund"].includes(purpose ?? "");
   const [timing, setTiming] = useState<"now" | "schedule">("now");
   const [scheduleDate, setScheduleDate] = useState("");
+  useEffect(() => {
+    if (!saved || hydrated) return;
+    const message = saved.communication;
+    if (message.status === "sent") return;
+    const state = message.editor_state ?? {};
+    setKind((state.kind as AudienceKind) ?? "custom");
+    setDealId(
+      (state.dealId as string | null) ?? (message.fund_id ? String(message.fund_id) : null),
+    );
+    setInvestorId((state.investorId as string | null) ?? null);
+    setFirm((state.firm as string | null) ?? null);
+    setGroup((state.group as string | null) ?? null);
+    setFilters((state.filters as Filters) ?? NO_FILTERS);
+    setExcluded((state.excluded as number[]) ?? []);
+    setPurpose((message.purpose as PurposeKey) ?? "general");
+    setDocKinds((state.docKinds as string[]) ?? []);
+    setDueDate((state.dueDate as string) ?? dateInDays(7));
+    setSubject(message.subject);
+    setBody(message.body);
+    setEdited(true);
+    setAttachmentIds(message.attachment_document_ids);
+    setUploadedFiles(message.uploaded_attachments ?? []);
+    setSavedIds(saved.recipients.map((r) => r.investor_id));
+    if (!message.scheduled_at && state.timing === "schedule") {
+      setTiming("schedule");
+      setScheduleDate((state.scheduleDate as string) ?? "");
+    }
+    if (message.scheduled_at) {
+      const date = new Date(message.scheduled_at);
+      setTiming("schedule");
+      setScheduleDate(
+        new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+      );
+    }
+    setHydrated(true);
+  }, [saved, hydrated]);
 
   const { data: investorsData } = useQuery({
     queryKey: ["admin", "investors", "all"],
@@ -299,12 +344,16 @@ export default function ComposeCommunicationPage() {
     }
   }, [kind, dealId, investorId, firm, group, filters, investors, subs, openRequests]);
 
-  const audience = recipients.filter((i) => !excluded.includes(i.id));
+  const audience =
+    savedIds === null
+      ? recipients.filter((i) => !excluded.includes(i.id))
+      : investors.filter((i) => savedIds.includes(i.id));
   const deal = funds.find((f) => String(f.id) === dealId) ?? null;
   const dealName = deal?.asset.name ?? null;
 
   const audienceLabel = (() => {
     const n = `${audience.length} investor${audience.length === 1 ? "" : "s"}`;
+    if (savedIds !== null) return `Saved audience (${n})`;
     if (kind === "deal") return deal ? `Everyone in ${deal.name} (${n})` : "Choose a deal";
     if (kind === "investor") return audience[0]?.full_name ?? "Choose an investor";
     if (kind === "partner") return firm ? `Clients of ${firm} (${n})` : "Choose a partner";
@@ -388,47 +437,55 @@ export default function ComposeCommunicationPage() {
   );
 
   const send = useMutation({
-    mutationFn: async () => {
-      const result = await api<{ communication: Communication }>("/api/v1/admin/communications", {
-        method: "POST",
-        body: {
-          subject: subject.trim(),
-          body: body.trim(),
-          audience_type: apiAudienceType,
-          audience_description: audienceLabel,
-          fund_id: kind === "deal" ? (deal?.id ?? null) : null,
-          routing,
-          purpose,
-          delivery_channels: emailOnly ? ["email"] : ["email", "inbox"],
-          attachment_document_ids: attachmentIds,
-          uploaded_attachments: uploadedFiles,
-          send_at: timing === "schedule" ? new Date(scheduleDate).toISOString() : null,
-          investor_ids: audience.map((i) => i.id),
-        },
-      });
-      if (purpose === "request" && docKinds.length > 0) {
-        await api("/api/v1/admin/document_requests", {
-          method: "POST",
+    mutationFn: async (saveDraft: boolean) => {
+      const result = await api<{ communication: Communication }>(
+        draftId ? `/api/v1/admin/communications/${draftId}` : "/api/v1/admin/communications",
+        {
+          method: draftId ? "PATCH" : "POST",
           body: {
-            investor_ids: audience.map((i) => i.id),
-            kinds: docKinds,
-            due_at: new Date(`${dueDate}T23:59:00`).toISOString(),
+            subject: subject.trim(),
+            body: body.trim(),
+            audience_type: apiAudienceType,
+            audience_description: audienceLabel,
             fund_id: kind === "deal" ? (deal?.id ?? null) : null,
-            communication_id: result.communication.id,
+            routing,
+            purpose,
+            delivery_channels: emailOnly ? ["email"] : ["email", "inbox"],
+            attachment_document_ids: attachmentIds,
+            uploaded_attachments: uploadedFiles,
+            send_at:
+              timing === "schedule" && scheduleDate ? new Date(scheduleDate).toISOString() : null,
+            investor_ids: audience.map((i) => i.id),
+            save_draft: saveDraft,
+            editor_state: {
+              kind,
+              dealId,
+              investorId,
+              firm,
+              group,
+              filters,
+              excluded,
+              docKinds,
+              dueDate,
+              timing,
+              scheduleDate,
+            },
           },
-        });
-      }
+        },
+      );
       return result;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "document-requests"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "communications"] });
       toast.success(
-        result.communication.status === "sent"
-          ? purpose === "request"
-            ? "Message sent and documents requested."
-            : "Communication sent."
-          : "Communication scheduled.",
+        result.communication.status === "draft"
+          ? "Draft saved."
+          : result.communication.status === "sent"
+            ? purpose === "request"
+              ? "Message sent and documents requested."
+              : "Communication sent."
+            : "Communication scheduled.",
       );
       navigate(`/luca/communications/${result.communication.id}`);
     },
@@ -445,7 +502,9 @@ export default function ComposeCommunicationPage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-8">
       <div className="space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">New communication</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {draftId ? "Edit communication" : "New communication"}
+        </h1>
         <p className="text-muted-foreground">
           Start with who it is for, then why, then the message.
         </p>
@@ -488,7 +547,7 @@ export default function ComposeCommunicationPage() {
       </ol>
 
       {/* 1. Audience */}
-      {step === 0 && (
+      {step === 0 && savedIds === null && (
         <section className="space-y-6">
           <div>
             <h2 className="text-lg font-semibold">Who is this for?</h2>
@@ -995,6 +1054,7 @@ export default function ComposeCommunicationPage() {
               </Button>
               {timing === "schedule" && (
                 <Input
+                  aria-label="Scheduled delivery date"
                   type="datetime-local"
                   className="w-auto"
                   value={scheduleDate}
@@ -1007,12 +1067,43 @@ export default function ComposeCommunicationPage() {
       )}
 
       {/* Navigation */}
+      {savedError && (
+        <p role="alert" className="text-destructive">
+          {savedError.message}
+        </p>
+      )}
+      {saved?.communication.status === "sent" && (
+        <p role="alert">
+          This communication has already been sent. Return to its detail to view it.
+        </p>
+      )}
+      {step === 0 && savedIds !== null && (
+        <div className="rounded-lg border p-4 text-sm">
+          <h2 className="mb-2 text-lg font-semibold">Saved audience</h2>
+          <p>{audience.map((i) => i.full_name).join(", ") || "No recipients chosen yet"}.</p>
+          <Button variant="outline" className="mt-3" onClick={() => setSavedIds(null)}>
+            Change audience
+          </Button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-t pt-5">
         <Button
           variant="ghost"
           onClick={() => (step === 0 ? navigate("/luca/communications") : setStep(step - 1))}
         >
           {step === 0 ? "Cancel" : "Back"}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={
+            !subject.trim() ||
+            send.isPending ||
+            Boolean(draftId && !hydrated) ||
+            saved?.communication.status === "sent"
+          }
+          onClick={() => send.mutate(true)}
+        >
+          Save draft
         </Button>
         {step < 3 ? (
           <Button
@@ -1025,7 +1116,15 @@ export default function ComposeCommunicationPage() {
             Continue
           </Button>
         ) : (
-          <Button disabled={!canContinue || send.isPending} onClick={() => send.mutate()}>
+          <Button
+            disabled={
+              !canContinue ||
+              send.isPending ||
+              Boolean(draftId && !hydrated) ||
+              saved?.communication.status === "sent"
+            }
+            onClick={() => send.mutate(false)}
+          >
             {send.isPending
               ? "Sending..."
               : timing === "now"

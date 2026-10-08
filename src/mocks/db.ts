@@ -4953,6 +4953,7 @@ export type CommunicationStatus = "draft" | "scheduled" | "sent";
 
 export type MockCommunication = {
   created_by?: number;
+  editor_state?: Record<string, unknown>;
   uploaded_attachments?: import("@/lib/file-upload").UploadedFile[];
   delivery_channels?: ("email" | "inbox")[];
   purpose?: string;

@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import DemoResetButton from "./demo-reset-button";
+import { demoPersonaId } from "@/lib/demo-persona";
 import { usePublication } from "@/features/admin/vehicles/use-publication";
 import {
   Circle,
@@ -142,9 +143,11 @@ export default function LucaLayout() {
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
           <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-            <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
-              Compare roles live
-            </Button>
+            {!demoPersonaId() && (
+              <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
+                Compare roles live
+              </Button>
+            )}
             <DemoResetButton compact />
             <DropdownMenu>
               <DropdownMenuTrigger

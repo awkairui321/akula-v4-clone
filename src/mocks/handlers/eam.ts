@@ -1,5 +1,6 @@
 import { mayDiscover } from "../investor-access";
 import { currentVersion } from "../workflow";
+import { inDemoClientCohort } from "../../lib/demo-cohort";
 import { findUserById } from "../db";
 import { partnerOnboarding } from "../onboarding";
 import { http, HttpResponse } from "msw";
@@ -8,6 +9,7 @@ import {
   currentUser,
   findEamProfileByUserId,
   adviserClients,
+  adminInvestors,
   findAdviserClientById,
   highlights,
   nextHighlightId,
@@ -28,7 +30,17 @@ function unauthorized() {
 
 function stripClient(client: MockAdviserClient) {
   const { eam_user_id: _eam_user_id, investor_id: _investor_id, ...rest } = client;
-  return { ...rest, investor_user_id: _investor_id, client_code: referenceFor(_investor_id) };
+  const investor = adminInvestors().find((row) => row.id === _investor_id);
+  return {
+    ...rest,
+    investor_user_id: _investor_id,
+    client_code: referenceFor(_investor_id),
+    showcase: inDemoClientCohort(
+      _investor_id,
+      investor?.verification_status === "approved",
+      Boolean(investor?.prepared_by_rm),
+    ),
+  };
 }
 
 function myClients(eamUserId: number): MockAdviserClient[] {
@@ -145,7 +157,7 @@ export const eamHandlers = [
   http.get("*/api/v1/eam/dashboard", ({ request }) => {
     const user = currentUser(request);
     if (!user) return unauthorized();
-    const clients = myClients(user.id);
+    const clients = myClients(user.id).filter((client) => stripClient(client).showcase);
 
     const clients_by_stage: Record<ClientStage, number> = {
       prospect: 0,
