@@ -1,0 +1,3504 @@
+{
+  "at": "2026-10-08T00:32:55.297Z",
+  "sourceFiles": 142,
+  "routes": [
+    "/",
+    "/login",
+    "/signup",
+    "/activate",
+    "/confirm",
+    "/forgot-password",
+    "/reset-password",
+    "/workflows",
+    "/ops",
+    "/ops/publication/:id",
+    "/live-demo",
+    "/onboarding",
+    "/onboarding/:section",
+    "/checkout/:fundId",
+    "/funds",
+    "/funds/:id",
+    "/discover",
+    "/discover/:id",
+    "/portfolio",
+    "/documents",
+    "/messages",
+    "/account",
+    "/support",
+    "/luca/deals",
+    "/luca/projects/:assetId",
+    "/luca/deals/:id",
+    "/luca/publication",
+    "/luca",
+    "/luca/subscriptions",
+    "/luca/subscriptions/:id/allocate",
+    "/luca/subscriptions/history",
+    "/luca/onboarding",
+    "/luca/fund-search",
+    "/luca/eam-search",
+    "/luca/investors/:id",
+    "/luca/partners",
+    "/luca/partners/:firm",
+    "/luca/clients",
+    "/luca/clients/:id/review",
+    "/luca/analytics",
+    "/luca/opportunities",
+    "/luca/reports",
+    "/luca/reporting",
+    "/luca/support",
+    "/luca/client-documents",
+    "/luca/compliance",
+    "/luca/documents",
+    "/luca/communications",
+    "/luca/communications/new",
+    "/luca/communications/:id",
+    "/rm",
+    "/rm/clients",
+    "/rm/onboarding",
+    "/rm/onboarding/new",
+    "/rm/onboarding/:id",
+    "/rm/clients/:id/status",
+    "/rm/opportunities",
+    "/rm/documents",
+    "/rm/communications",
+    "/rm/opportunities/:id",
+    "/rm/partners",
+    "/rm/partners/:firm",
+    "/rm/reports",
+    "/rm/support",
+    "/eam",
+    "/eam/clients",
+    "/eam/clients/:id",
+    "/eam/opportunities",
+    "/eam/opportunities/:id",
+    "/eam/documents",
+    "/eam/support",
+    "/eam/reports",
+    "/eam/revenue",
+    "/eam/profile",
+    "/dashboard"
+  ],
+  "links": [
+    {
+      "file": "src/App.tsx",
+      "line": 107,
+      "value": "/login"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 125,
+      "value": "/onboarding"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 135,
+      "value": "/funds"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 143,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 148,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 152,
+      "value": "/workflows"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 156,
+      "value": "/workflows"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 165,
+      "value": "/funds"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 213,
+      "value": "/messages"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 243,
+      "value": "/luca/clients?tab=onboarding"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 247,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 251,
+      "value": "/luca/partners"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 261,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 265,
+      "value": "/luca/partners"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 273,
+      "value": "/luca/communications"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 277,
+      "value": "/luca/compliance?tab=clients"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 282,
+      "value": "/luca/compliance"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 315,
+      "value": "/rm/communications"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 321,
+      "value": "/rm"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 324,
+      "value": "/rm/communications"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 339,
+      "value": "/eam"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 346,
+      "value": "/portfolio"
+    },
+    {
+      "file": "src/components/app-layout.tsx",
+      "line": 28,
+      "value": "/portfolio"
+    },
+    {
+      "file": "src/components/app-layout.tsx",
+      "line": 29,
+      "value": "/funds"
+    },
+    {
+      "file": "src/components/app-layout.tsx",
+      "line": 30,
+      "value": "/documents"
+    },
+    {
+      "file": "src/components/app-layout.tsx",
+      "line": 31,
+      "value": "/messages"
+    },
+    {
+      "file": "src/components/app-layout.tsx",
+      "line": 32,
+      "value": "/account"
+    },
+    {
+      "file": "src/components/app-layout.tsx",
+      "line": 95,
+      "value": "/funds"
+    },
+    {
+      "file": "src/components/app-layout.tsx",
+      "line": 156,
+      "value": "/live-demo"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 28,
+      "value": "/eam"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 29,
+      "value": "/eam/reports"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 30,
+      "value": "/eam/opportunities"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 31,
+      "value": "/eam/documents"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 32,
+      "value": "/eam/clients"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 33,
+      "value": "/eam/revenue"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 34,
+      "value": "/eam/profile"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 85,
+      "value": "/eam"
+    },
+    {
+      "file": "src/components/eam-layout.tsx",
+      "line": 125,
+      "value": "/live-demo"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 29,
+      "value": "/luca"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 30,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 31,
+      "value": "/luca/publication"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 32,
+      "value": "/luca/analytics"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 33,
+      "value": "/luca/subscriptions"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 34,
+      "value": "/luca/clients"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 35,
+      "value": "/luca/partners"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 36,
+      "value": "/luca/compliance"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 37,
+      "value": "/luca/communications"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 49,
+      "value": "/rm"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 50,
+      "value": "/rm/clients"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 51,
+      "value": "/rm/onboarding"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 52,
+      "value": "/rm/opportunities"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 53,
+      "value": "/rm/partners"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 54,
+      "value": "/rm/communications"
+    },
+    {
+      "file": "src/components/luca-layout.tsx",
+      "line": 145,
+      "value": "/live-demo"
+    },
+    {
+      "file": "src/features/admin/allocation.tsx",
+      "line": 53,
+      "value": "/luca/subscriptions"
+    },
+    {
+      "file": "src/features/admin/analytics.tsx",
+      "line": 370,
+      "value": "/luca/subscriptions"
+    },
+    {
+      "file": "src/features/admin/client-review.tsx",
+      "line": 213,
+      "value": "/luca/clients?tab=onboarding"
+    },
+    {
+      "file": "src/features/admin/client-review.tsx",
+      "line": 251,
+      "value": "/luca/compliance?tab=clients"
+    },
+    {
+      "file": "src/features/admin/communications/compose.tsx",
+      "line": 1013,
+      "value": "/luca/communications"
+    },
+    {
+      "file": "src/features/admin/communications/detail.tsx",
+      "line": 51,
+      "value": "/luca/communications"
+    },
+    {
+      "file": "src/features/admin/communications/index.tsx",
+      "line": 70,
+      "value": "/luca/communications/new"
+    },
+    {
+      "file": "src/features/admin/compliance.tsx",
+      "line": 157,
+      "value": "/luca/communications/new?purpose=request"
+    },
+    {
+      "file": "src/features/admin/compliance.tsx",
+      "line": 207,
+      "value": "filed"
+    },
+    {
+      "file": "src/features/admin/compliance.tsx",
+      "line": 214,
+      "value": "reviewing"
+    },
+    {
+      "file": "src/features/admin/compliance.tsx",
+      "line": 223,
+      "value": "on_hold"
+    },
+    {
+      "file": "src/features/admin/compliance.tsx",
+      "line": 263,
+      "value": "filed"
+    },
+    {
+      "file": "src/features/admin/compliance.tsx",
+      "line": 264,
+      "value": "on_hold"
+    },
+    {
+      "file": "src/features/admin/compliance.tsx",
+      "line": 265,
+      "value": "reviewing"
+    },
+    {
+      "file": "src/features/admin/dashboard.tsx",
+      "line": 313,
+      "value": "/luca/subscriptions?status=under_luca_review"
+    },
+    {
+      "file": "src/features/admin/dashboard.tsx",
+      "line": 325,
+      "value": "/luca/subscriptions?status=payment_unmatched"
+    },
+    {
+      "file": "src/features/admin/dashboard.tsx",
+      "line": 337,
+      "value": "/luca/subscriptions?status=allocation_pending"
+    },
+    {
+      "file": "src/features/admin/dashboard.tsx",
+      "line": 353,
+      "value": "/luca/subscriptions?status=information_requested"
+    },
+    {
+      "file": "src/features/admin/dashboard.tsx",
+      "line": 375,
+      "value": "/luca/compliance?tab=review"
+    },
+    {
+      "file": "src/features/admin/dashboard.tsx",
+      "line": 538,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/features/admin/dashboard.tsx",
+      "line": 596,
+      "value": "/luca/compliance?tab=expiring"
+    },
+    {
+      "file": "src/features/admin/dashboard.tsx",
+      "line": 614,
+      "value": "/luca/subscriptions"
+    },
+    {
+      "file": "src/features/admin/investors/investor-detail.tsx",
+      "line": 104,
+      "value": "/luca/clients"
+    },
+    {
+      "file": "src/features/admin/subscription-history.tsx",
+      "line": 72,
+      "value": "/luca/subscriptions"
+    },
+    {
+      "file": "src/features/admin/subscription-inbox.tsx",
+      "line": 107,
+      "value": "approved"
+    },
+    {
+      "file": "src/features/admin/subscription-inbox.tsx",
+      "line": 120,
+      "value": "approved"
+    },
+    {
+      "file": "src/features/admin/subscription-inbox.tsx",
+      "line": 122,
+      "value": "information_requested"
+    },
+    {
+      "file": "src/features/admin/subscription-inbox.tsx",
+      "line": 124,
+      "value": "rejected"
+    },
+    {
+      "file": "src/features/admin/subscription-inbox.tsx",
+      "line": 407,
+      "value": "/luca/subscriptions/history"
+    },
+    {
+      "file": "src/features/admin/vehicles/deal-review.tsx",
+      "line": 48,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/features/admin/vehicles/deal-review.tsx",
+      "line": 141,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/features/admin/vehicles/project.tsx",
+      "line": 134,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/features/admin/vehicles/project.tsx",
+      "line": 152,
+      "value": "/luca/deals"
+    },
+    {
+      "file": "src/features/eam/clients/client-detail.tsx",
+      "line": 271,
+      "value": "/eam/opportunities"
+    },
+    {
+      "file": "src/features/eam/clients/client-detail.tsx",
+      "line": 611,
+      "value": "/eam/clients"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 146,
+      "value": "/eam/opportunities"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 156,
+      "value": "/eam/clients"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 234,
+      "value": "/eam/clients"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 276,
+      "value": "/eam/reports"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 387,
+      "value": "/eam/opportunities"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 400,
+      "value": "/eam/opportunities"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 408,
+      "value": "/eam/clients"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 425,
+      "value": "/eam/documents"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 429,
+      "value": "/eam/revenue"
+    },
+    {
+      "file": "src/features/eam/dashboard.tsx",
+      "line": 439,
+      "value": "/eam/clients"
+    },
+    {
+      "file": "src/features/investor/checkout.tsx",
+      "line": 1034,
+      "value": "/funds"
+    },
+    {
+      "file": "src/features/investor/checkout.tsx",
+      "line": 1037,
+      "value": "/portfolio"
+    },
+    {
+      "file": "src/features/investor/checkout.tsx",
+      "line": 1192,
+      "value": "/funds"
+    },
+    {
+      "file": "src/features/investor/discover-detail.tsx",
+      "line": 39,
+      "value": "/discover"
+    },
+    {
+      "file": "src/features/investor/discover.tsx",
+      "line": 36,
+      "value": "/funds"
+    },
+    {
+      "file": "src/features/investor/funds.tsx",
+      "line": 296,
+      "value": "/discover"
+    },
+    {
+      "file": "src/features/investor/messages.tsx",
+      "line": 223,
+      "value": "/documents"
+    },
+    {
+      "file": "src/features/investor/onboarding/onboarding.tsx",
+      "line": 1605,
+      "value": "/dashboard"
+    },
+    {
+      "file": "src/features/investor/onboarding/onboarding.tsx",
+      "line": 1629,
+      "value": "/dashboard"
+    },
+    {
+      "file": "src/features/investor/onboarding/onboarding.tsx",
+      "line": 1667,
+      "value": "/dashboard"
+    },
+    {
+      "file": "src/features/investor/onboarding/onboarding.tsx",
+      "line": 1679,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/investor/portfolio/components/subscription-activity.tsx",
+      "line": 293,
+      "value": "/funds"
+    },
+    {
+      "file": "src/features/investor/portfolio/components/subscriptions.tsx",
+      "line": 927,
+      "value": "/portfolio?section=activity"
+    },
+    {
+      "file": "src/features/investor/portfolio/components/subscriptions.tsx",
+      "line": 931,
+      "value": "/funds"
+    },
+    {
+      "file": "src/features/investor/review-status.tsx",
+      "line": 60,
+      "value": "/documents"
+    },
+    {
+      "file": "src/features/rm/client-onboarding.tsx",
+      "line": 198,
+      "value": "/rm/onboarding"
+    },
+    {
+      "file": "src/features/rm/client-onboarding.tsx",
+      "line": 272,
+      "value": "/rm/onboarding"
+    },
+    {
+      "file": "src/features/rm/client-status.tsx",
+      "line": 28,
+      "value": "/rm/onboarding"
+    },
+    {
+      "file": "src/features/rm/onboarding-list.tsx",
+      "line": 140,
+      "value": "/rm/onboarding/new"
+    },
+    {
+      "file": "src/features/unauthenticated/activate.tsx",
+      "line": 39,
+      "value": "/onboarding"
+    },
+    {
+      "file": "src/features/unauthenticated/activate.tsx",
+      "line": 63,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/unauthenticated/confirm.tsx",
+      "line": 15,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/unauthenticated/forgot-password.tsx",
+      "line": 46,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/unauthenticated/forgot-password.tsx",
+      "line": 70,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/unauthenticated/landing.tsx",
+      "line": 8,
+      "value": "/"
+    },
+    {
+      "file": "src/features/unauthenticated/landing.tsx",
+      "line": 11,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/unauthenticated/landing.tsx",
+      "line": 38,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/unauthenticated/landing.tsx",
+      "line": 43,
+      "value": "/signup"
+    },
+    {
+      "file": "src/features/unauthenticated/login.tsx",
+      "line": 120,
+      "value": "/forgot-password"
+    },
+    {
+      "file": "src/features/unauthenticated/login.tsx",
+      "line": 177,
+      "value": "/signup"
+    },
+    {
+      "file": "src/features/unauthenticated/reset-password.tsx",
+      "line": 40,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/unauthenticated/reset-password.tsx",
+      "line": 57,
+      "value": "/forgot-password"
+    },
+    {
+      "file": "src/features/unauthenticated/signup.tsx",
+      "line": 41,
+      "value": "/onboarding"
+    },
+    {
+      "file": "src/features/unauthenticated/signup.tsx",
+      "line": 122,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/workspace/live-compare.tsx",
+      "line": 181,
+      "value": "/workflows"
+    },
+    {
+      "file": "src/features/workspace/workflow-page.tsx",
+      "line": 816,
+      "value": "/rm/communications"
+    },
+    {
+      "file": "src/features/workspace/workflow-page.tsx",
+      "line": 1223,
+      "value": "/login"
+    },
+    {
+      "file": "src/features/workspace/workflow-page.tsx",
+      "line": 1392,
+      "value": "/live-demo"
+    },
+    {
+      "file": "src/features/workspace/workflow-page.tsx",
+      "line": 1419,
+      "value": "/live-demo"
+    }
+  ],
+  "missingLinks": [],
+  "endpoints": [
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 269,
+      "method": "GET",
+      "route": "/api/v1/admin/activity"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 289,
+      "method": "GET",
+      "route": "/api/v1/admin/subscriptions"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 327,
+      "method": "POST",
+      "route": "/api/v1/admin/subscriptions/:id/transition"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 356,
+      "method": "PATCH",
+      "route": "/api/v1/admin/subscriptions/:id/hold"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 380,
+      "method": "POST",
+      "route": "/api/v1/admin/subscriptions/bulk_transition"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 398,
+      "method": "GET",
+      "route": "/api/v1/admin/bank_transfers"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 410,
+      "method": "POST",
+      "route": "/api/v1/admin/bank_transfers/:id/match"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 426,
+      "method": "GET",
+      "route": "/api/v1/admin/investors"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 463,
+      "method": "GET",
+      "route": "/api/v1/admin/investors/:id"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 483,
+      "method": "PATCH",
+      "route": "/api/v1/admin/investors/:id/notes"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 495,
+      "method": "GET",
+      "route": "/api/v1/admin/documents"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 529,
+      "method": "POST",
+      "route": "/api/v1/admin/documents"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 581,
+      "method": "GET",
+      "route": "/api/v1/admin/document_requests"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 604,
+      "method": "POST",
+      "route": "/api/v1/admin/document_requests"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 656,
+      "method": "POST",
+      "route": "/api/v1/admin/document_requests/:id/remind"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 666,
+      "method": "DELETE",
+      "route": "/api/v1/admin/document_requests/:id"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 676,
+      "method": "DELETE",
+      "route": "/api/v1/admin/documents/:id"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 689,
+      "method": "POST",
+      "route": "/api/v1/tags"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 704,
+      "method": "GET",
+      "route": "/api/v1/admin/investor_pricing"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 711,
+      "method": "GET",
+      "route": "/api/v1/admin/funds/:id/investor_pricing"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 742,
+      "method": "PUT",
+      "route": "/api/v1/admin/funds/:id/investor_pricing/:investorId"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 807,
+      "method": "DELETE",
+      "route": "/api/v1/admin/funds/:id/investor_pricing/:investorId"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 819,
+      "method": "PATCH",
+      "route": "/api/v1/admin/documents/:id"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 845,
+      "method": "GET",
+      "route": "/api/v1/admin/partners"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 862,
+      "method": "GET",
+      "route": "/api/v1/admin/partners/:id"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 897,
+      "method": "POST",
+      "route": "/api/v1/funds"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 1044,
+      "method": "PATCH",
+      "route": "/api/v1/funds/:id"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 1162,
+      "method": "GET",
+      "route": "/api/v1/admin/communications"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 1180,
+      "method": "GET",
+      "route": "/api/v1/admin/communications/:id"
+    },
+    {
+      "file": "src/mocks/handlers/admin.ts",
+      "line": 1197,
+      "method": "POST",
+      "route": "/api/v1/admin/communications"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 24,
+      "method": "GET",
+      "route": "/api/v1/me"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 32,
+      "method": "POST",
+      "route": "/api/v1/login"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 60,
+      "method": "DELETE",
+      "route": "/api/v1/logout"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 65,
+      "method": "POST",
+      "route": "/api/v1/public/signup"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 126,
+      "method": "GET",
+      "route": "/api/v1/public/confirm"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 137,
+      "method": "POST",
+      "route": "/api/v1/public/password"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 141,
+      "method": "PATCH",
+      "route": "/api/v1/public/password"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 156,
+      "method": "POST",
+      "route": "/api/v1/two_factor/setup"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 166,
+      "method": "POST",
+      "route": "/api/v1/two_factor/verify"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 178,
+      "method": "PATCH",
+      "route": "/api/v1/two_factor"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 185,
+      "method": "DELETE",
+      "route": "/api/v1/two_factor"
+    },
+    {
+      "file": "src/mocks/handlers/auth.ts",
+      "line": 198,
+      "method": "PATCH",
+      "route": "/api/v1/account/password"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 37,
+      "method": "GET",
+      "route": "/api/v1/public/referral"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 49,
+      "method": "GET",
+      "route": "/api/v1/admin/rms"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 58,
+      "method": "GET",
+      "route": "/api/v1/admin/investors/:id/review"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 64,
+      "method": "POST",
+      "route": "/api/v1/admin/investors/:id/review"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 77,
+      "method": "GET",
+      "route": "/api/v1/clients/:id/events"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 84,
+      "method": "GET",
+      "route": "/api/v1/rm/clients"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 97,
+      "method": "GET",
+      "route": "/api/v1/rm/clients/:id/status"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 109,
+      "method": "GET",
+      "route": "/api/v1/rm/referral"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 120,
+      "method": "GET",
+      "route": "/api/v1/eam/referral"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 129,
+      "method": "GET",
+      "route": "/api/v1/onboarding/review"
+    },
+    {
+      "file": "src/mocks/handlers/client.ts",
+      "line": 134,
+      "method": "POST",
+      "route": "/api/v1/onboarding/resubmit"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 120,
+      "method": "GET",
+      "route": "/api/v1/eam/profile"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 129,
+      "method": "PATCH",
+      "route": "/api/v1/eam/profile"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 143,
+      "method": "GET",
+      "route": "/api/v1/eam/dashboard"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 216,
+      "method": "GET",
+      "route": "/api/v1/eam/documents"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 243,
+      "method": "GET",
+      "route": "/api/v1/eam/reports"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 259,
+      "method": "GET",
+      "route": "/api/v1/eam/revenue"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 371,
+      "method": "GET",
+      "route": "/api/v1/eam/clients"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 378,
+      "method": "GET",
+      "route": "/api/v1/eam/clients/:id"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 389,
+      "method": "PATCH",
+      "route": "/api/v1/eam/clients/:id"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 404,
+      "method": "GET",
+      "route": "/api/v1/eam/opportunities"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 439,
+      "method": "GET",
+      "route": "/api/v1/eam/opportunities/:id"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 451,
+      "method": "GET",
+      "route": "/api/v1/eam/highlights"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 463,
+      "method": "POST",
+      "route": "/api/v1/eam/highlights"
+    },
+    {
+      "file": "src/mocks/handlers/eam.ts",
+      "line": 496,
+      "method": "DELETE",
+      "route": "/api/v1/eam/highlights/:id"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 68,
+      "method": "GET",
+      "route": "/api/v1/demo/investor-segment"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 73,
+      "method": "PATCH",
+      "route": "/api/v1/demo/investor-segment"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 84,
+      "method": "GET",
+      "route": "/api/v1/rm_highlights"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 95,
+      "method": "GET",
+      "route": "/api/v1/investor_profile"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 110,
+      "method": "POST",
+      "route": "/api/v1/investor_profile"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 111,
+      "method": "PATCH",
+      "route": "/api/v1/investor_profile"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 114,
+      "method": "GET",
+      "route": "/api/v1/funds"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 146,
+      "method": "GET",
+      "route": "/api/v1/funds/:id"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 181,
+      "method": "GET",
+      "route": "/api/v1/discover"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 186,
+      "method": "GET",
+      "route": "/api/v1/discover/:id"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 192,
+      "method": "GET",
+      "route": "/api/v1/portfolio/history"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 198,
+      "method": "GET",
+      "route": "/api/v1/onboarding/documents"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 210,
+      "method": "POST",
+      "route": "/api/v1/onboarding/documents/:id/confirm"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 224,
+      "method": "POST",
+      "route": "/api/v1/onboarding/documents"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 281,
+      "method": "GET",
+      "route": "/api/v1/holdings"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 292,
+      "method": "GET",
+      "route": "/api/v1/subscriptions"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 305,
+      "method": "POST",
+      "route": "/api/v1/subscriptions"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 383,
+      "method": "GET",
+      "route": "/api/v1/subscriptions/:id"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 394,
+      "method": "PATCH",
+      "route": "/api/v1/subscriptions/:id"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 428,
+      "method": "GET",
+      "route": "/api/v1/subscriptions/:id/acknowledgements"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 435,
+      "method": "POST",
+      "route": "/api/v1/subscriptions/:id/acknowledgements"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 453,
+      "method": "DELETE",
+      "route": "/api/v1/subscriptions/:id/acknowledgements/:termId"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 467,
+      "method": "POST",
+      "route": "/api/v1/signwell/sign_subscription"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 496,
+      "method": "POST",
+      "route": "/api/v1/signwell/check_subscription"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 535,
+      "method": "POST",
+      "route": "/api/v1/signwell/nda_session"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 549,
+      "method": "POST",
+      "route": "/api/v1/signwell/check_nda"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 569,
+      "method": "GET",
+      "route": "/api/v1/persona/config"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 581,
+      "method": "POST",
+      "route": "/api/v1/persona/complete"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 592,
+      "method": "GET",
+      "route": "/api/v1/messages"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 637,
+      "method": "POST",
+      "route": "/api/v1/messages/:id/read"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 654,
+      "method": "GET",
+      "route": "/api/v1/document_requests"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 667,
+      "method": "POST",
+      "route": "/api/v1/document_requests/:id/upload"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 709,
+      "method": "POST",
+      "route": "/api/v1/documents"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 757,
+      "method": "GET",
+      "route": "/api/v1/documents"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 777,
+      "method": "GET",
+      "route": "/api/v1/watchlist"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 788,
+      "method": "POST",
+      "route": "/api/v1/watchlist"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 815,
+      "method": "DELETE",
+      "route": "/api/v1/watchlist/:fundId"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 826,
+      "method": "POST",
+      "route": "/api/v1/onboarding/skip"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 841,
+      "method": "GET",
+      "route": "/api/v1/tags"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 846,
+      "method": "GET",
+      "route": "/api/v1/fund_managers"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 851,
+      "method": "GET",
+      "route": "/api/v1/consents"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 858,
+      "method": "POST",
+      "route": "/api/v1/consents"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 884,
+      "method": "DELETE",
+      "route": "/api/v1/consents/:id"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 891,
+      "method": "POST",
+      "route": "/api/v1/subscriptions/:id/information_response"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 910,
+      "method": "POST",
+      "route": "/api/v1/subscriptions/:id/proceed_to_funding"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 930,
+      "method": "POST",
+      "route": "/api/v1/subscriptions/:id/refund_request"
+    },
+    {
+      "file": "src/mocks/handlers/investor.ts",
+      "line": 948,
+      "method": "POST",
+      "route": "/api/v1/subscriptions/:id/payment_proof"
+    },
+    {
+      "file": "src/mocks/handlers/public.ts",
+      "line": 6,
+      "method": "GET",
+      "route": "/api/v1/public/ticker"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 216,
+      "method": "GET",
+      "route": "/api/v1/rm/communications"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 232,
+      "method": "POST",
+      "route": "/api/v1/rm/communications"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 294,
+      "method": "GET",
+      "route": "/api/v1/rm/onboarding"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 305,
+      "method": "POST",
+      "route": "/api/v1/rm/clients"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 419,
+      "method": "GET",
+      "route": "/api/v1/rm/clients/:id/onboarding"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 426,
+      "method": "PATCH",
+      "route": "/api/v1/rm/clients/:id/onboarding"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 462,
+      "method": "POST",
+      "route": "/api/v1/rm/clients/:id/documents"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 528,
+      "method": "DELETE",
+      "route": "/api/v1/rm/clients/:id/documents/:docId"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 546,
+      "method": "POST",
+      "route": "/api/v1/rm/clients/:id/invite"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 561,
+      "method": "GET",
+      "route": "/api/v1/public/activation"
+    },
+    {
+      "file": "src/mocks/handlers/rm.ts",
+      "line": 575,
+      "method": "POST",
+      "route": "/api/v1/public/activate"
+    },
+    {
+      "file": "src/mocks/handlers/workflow.ts",
+      "line": 7,
+      "method": "GET",
+      "route": "/api/v1/workflows"
+    },
+    {
+      "file": "src/mocks/handlers/workflow.ts",
+      "line": 13,
+      "method": "POST",
+      "route": "/api/v1/workflows"
+    },
+    {
+      "file": "src/mocks/handlers/workflow.ts",
+      "line": 22,
+      "method": "GET",
+      "route": "/api/v1/workflows/export"
+    }
+  ],
+  "formButtons": [
+    {
+      "file": "src/features/admin/allocation.tsx",
+      "line": 155,
+      "label": "Confirm allocation"
+    },
+    {
+      "file": "src/features/rm/communications.tsx",
+      "line": 128,
+      "label": "Send to client"
+    }
+  ],
+  "probes": [
+    {
+      "route": "/api/v1/admin/activity",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/activity",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/activity",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/activity",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/activity",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/activity",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/activity",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/subscriptions",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/subscriptions",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/subscriptions",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/subscriptions",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/subscriptions",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/subscriptions",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/subscriptions",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/bank_transfers",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/bank_transfers",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/bank_transfers",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/bank_transfers",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/bank_transfers",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/bank_transfers",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/bank_transfers",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investors",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/investors",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/investors",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investors",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investors",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investors",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investors",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/documents",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/documents",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/documents",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/documents",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/documents",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/documents",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/documents",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/document_requests",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/document_requests",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/document_requests",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/document_requests",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/document_requests",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/document_requests",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/document_requests",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investor_pricing",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/investor_pricing",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/investor_pricing",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investor_pricing",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investor_pricing",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investor_pricing",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/investor_pricing",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/partners",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/partners",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/partners",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/partners",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/partners",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/partners",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/partners",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/communications",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/communications",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/communications",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/communications",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/communications",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/communications",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/communications",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/me",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/me",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/me",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/me",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/me",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/me",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/me",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/rms",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/admin/rms",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/admin/rms",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/rms",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/rms",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/rms",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/admin/rms",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/clients",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/rm/clients",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/clients",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/clients",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/clients",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/clients",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/clients",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/referral",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/rm/referral",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/referral",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/referral",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/referral",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/referral",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/referral",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/referral",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/referral",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/referral",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/referral",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/referral",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/referral",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/referral",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/onboarding/review",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/review",
+      "role": "luca",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/review",
+      "role": "investment_team",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/review",
+      "role": "rm",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/review",
+      "role": "ops",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/review",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/onboarding/review",
+      "role": "eam",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/profile",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/profile",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/profile",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/profile",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/profile",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/profile",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/profile",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/eam/dashboard",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/dashboard",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/dashboard",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/dashboard",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/dashboard",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/dashboard",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/dashboard",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/eam/documents",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/documents",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/documents",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/documents",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/documents",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/documents",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/documents",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/eam/reports",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/reports",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/reports",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/reports",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/reports",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/reports",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/reports",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/eam/revenue",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/revenue",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/revenue",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/revenue",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/revenue",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/revenue",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/revenue",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/eam/clients",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/clients",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/clients",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/clients",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/clients",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/clients",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/clients",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/eam/opportunities",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/opportunities",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/opportunities",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/opportunities",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/opportunities",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/opportunities",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/opportunities",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/eam/highlights",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/eam/highlights",
+      "role": "luca",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/highlights",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/highlights",
+      "role": "rm",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/highlights",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/highlights",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/eam/highlights",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/demo/investor-segment",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/demo/investor-segment",
+      "role": "luca",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/demo/investor-segment",
+      "role": "investment_team",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/demo/investor-segment",
+      "role": "rm",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/demo/investor-segment",
+      "role": "ops",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/demo/investor-segment",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/demo/investor-segment",
+      "role": "eam",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/rm_highlights",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/rm_highlights",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm_highlights",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm_highlights",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm_highlights",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm_highlights",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm_highlights",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/investor_profile",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/investor_profile",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/investor_profile",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/investor_profile",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/investor_profile",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/investor_profile",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/investor_profile",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/funds",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/funds",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/funds",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/funds",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/funds",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/funds",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/funds",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/discover",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/discover",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/discover",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/discover",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/discover",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/discover",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/discover",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/portfolio/history",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/portfolio/history",
+      "role": "luca",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/portfolio/history",
+      "role": "investment_team",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/portfolio/history",
+      "role": "rm",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/portfolio/history",
+      "role": "ops",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/portfolio/history",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/portfolio/history",
+      "role": "eam",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/documents",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/documents",
+      "role": "luca",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/documents",
+      "role": "investment_team",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/documents",
+      "role": "rm",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/documents",
+      "role": "ops",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/onboarding/documents",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/onboarding/documents",
+      "role": "eam",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/holdings",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/holdings",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/holdings",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/holdings",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/holdings",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/holdings",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/holdings",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/subscriptions",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/subscriptions",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/subscriptions",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/subscriptions",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/subscriptions",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/subscriptions",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/subscriptions",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/persona/config",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/persona/config",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/persona/config",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/persona/config",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/persona/config",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/persona/config",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/persona/config",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/messages",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/messages",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/messages",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/messages",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/messages",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/messages",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/messages",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/document_requests",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/document_requests",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/document_requests",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/document_requests",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/document_requests",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/document_requests",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/document_requests",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/documents",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/documents",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/documents",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/documents",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/documents",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/documents",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/documents",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/watchlist",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/watchlist",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/watchlist",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/watchlist",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/watchlist",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/watchlist",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/watchlist",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/tags",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/tags",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/tags",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/tags",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/tags",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/tags",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/tags",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/fund_managers",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/fund_managers",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/fund_managers",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/fund_managers",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/fund_managers",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/fund_managers",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/fund_managers",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/consents",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/consents",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/consents",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/consents",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/consents",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/consents",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/consents",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/communications",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/rm/communications",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/communications",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/communications",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/communications",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/communications",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/communications",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/onboarding",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/rm/onboarding",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/onboarding",
+      "role": "investment_team",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/onboarding",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/rm/onboarding",
+      "role": "ops",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/onboarding",
+      "role": "investor",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/rm/onboarding",
+      "role": "eam",
+      "status": 403
+    },
+    {
+      "route": "/api/v1/workflows",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/workflows",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows",
+      "role": "eam",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows/export",
+      "role": "guest",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/workflows/export",
+      "role": "luca",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows/export",
+      "role": "investment_team",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows/export",
+      "role": "rm",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows/export",
+      "role": "ops",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows/export",
+      "role": "investor",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/workflows/export",
+      "role": "eam",
+      "status": 200
+    }
+  ],
+  "seedDocumentsWithoutBytes": [
+    {
+      "id": 1,
+      "name": "Solara Grid — Subscription Agreement",
+      "fund": 1,
+      "status": "signed"
+    },
+    {
+      "id": 2,
+      "name": "Solara Grid — Factsheet",
+      "fund": 1,
+      "status": "available"
+    },
+    {
+      "id": 3,
+      "name": "Kestrel Robotics — Term Sheet",
+      "fund": 2,
+      "status": "issued"
+    },
+    {
+      "id": 4,
+      "name": "Ledgerline Financial — Q3 Statement",
+      "fund": 4,
+      "status": "available"
+    },
+    {
+      "id": 5,
+      "name": "Atlas Defense Systems — Pitch Deck",
+      "fund": 5,
+      "status": "available"
+    },
+    {
+      "id": 7,
+      "name": "Kestrel Robotics — Subscription Agreement",
+      "fund": 2,
+      "status": "signed"
+    },
+    {
+      "id": 8,
+      "name": "Kestrel Robotics — Factsheet",
+      "fund": 2,
+      "status": "available"
+    },
+    {
+      "id": 9,
+      "name": "Priya Nair — KYC Passport Copy",
+      "fund": null,
+      "status": "available"
+    },
+    {
+      "id": 10,
+      "name": "Julian Ortiz — Subscription Agreement",
+      "fund": 1,
+      "status": "signed"
+    },
+    {
+      "id": 11,
+      "name": "Sofia Reyes — Accreditation Letter",
+      "fund": null,
+      "status": "action_required"
+    },
+    {
+      "id": 12,
+      "name": "Orbis Space Systems — Memo",
+      "fund": 3,
+      "status": "available"
+    },
+    {
+      "id": 13,
+      "name": "Aiko Tanaka — Accredited investor evidence",
+      "fund": null,
+      "status": "submitted"
+    },
+    {
+      "id": 14,
+      "name": "Priyanka Rao — Proof of address",
+      "fund": null,
+      "status": "submitted"
+    },
+    {
+      "id": 15,
+      "name": "Isabella Marchetti — Tax self-certification (CRS)",
+      "fund": null,
+      "status": "submitted"
+    },
+    {
+      "id": 16,
+      "name": "Harbourview Capital LP — Authorised signatory list",
+      "fund": null,
+      "status": "submitted"
+    },
+    {
+      "id": 31,
+      "name": "Kestrel Robotics — Subscription Agreement",
+      "fund": 2,
+      "status": "signed"
+    },
+    {
+      "id": 32,
+      "name": "Orbis Space Systems — Subscription Agreement",
+      "fund": 3,
+      "status": "signed"
+    },
+    {
+      "id": 33,
+      "name": "Ledgerline Financial — Subscription Agreement",
+      "fund": 4,
+      "status": "signed"
+    },
+    {
+      "id": 34,
+      "name": "Atlas Defense Systems — Subscription Agreement",
+      "fund": 5,
+      "status": "signed"
+    },
+    {
+      "id": 35,
+      "name": "Solara Grid — Subscription Agreement",
+      "fund": 1,
+      "status": "signed"
+    },
+    {
+      "id": 36,
+      "name": "Kestrel Robotics — Subscription Agreement",
+      "fund": 2,
+      "status": "signed"
+    },
+    {
+      "id": 37,
+      "name": "Orbis Space Systems — Subscription Agreement",
+      "fund": 3,
+      "status": "signed"
+    },
+    {
+      "id": 38,
+      "name": "Ledgerline Financial — Subscription Agreement",
+      "fund": 4,
+      "status": "signed"
+    },
+    {
+      "id": 39,
+      "name": "Atlas Defense Systems — Subscription Agreement",
+      "fund": 5,
+      "status": "signed"
+    },
+    {
+      "id": 40,
+      "name": "Atlas Defense Systems — Subscription Agreement",
+      "fund": 5,
+      "status": "signed"
+    },
+    {
+      "id": 41,
+      "name": "Ledgerline Financial — Subscription Agreement",
+      "fund": 4,
+      "status": "signed"
+    },
+    {
+      "id": 42,
+      "name": "Solara Grid — Subscription Agreement",
+      "fund": 1,
+      "status": "signed"
+    },
+    {
+      "id": 43,
+      "name": "Kestrel Robotics — Subscription Agreement",
+      "fund": 2,
+      "status": "signed"
+    },
+    {
+      "id": 44,
+      "name": "Kestrel Robotics — Subscription Agreement",
+      "fund": 2,
+      "status": "signed"
+    },
+    {
+      "id": 45,
+      "name": "Atlas Defense Systems — Subscription Agreement",
+      "fund": 5,
+      "status": "signed"
+    },
+    {
+      "id": 46,
+      "name": "Orbis Space Systems — Subscription Agreement",
+      "fund": 3,
+      "status": "signed"
+    },
+    {
+      "id": 47,
+      "name": "Solara Grid — Subscription Agreement",
+      "fund": 1,
+      "status": "signed"
+    },
+    {
+      "id": 48,
+      "name": "Ledgerline Financial — Subscription Agreement",
+      "fund": 4,
+      "status": "signed"
+    },
+    {
+      "id": 49,
+      "name": "Kestrel Robotics — Subscription Agreement",
+      "fund": 2,
+      "status": "signed"
+    },
+    {
+      "id": 50,
+      "name": "Atlas Defense Systems — Subscription Agreement",
+      "fund": 5,
+      "status": "signed"
+    },
+    {
+      "id": 51,
+      "name": "Helix Therapeutics — Subscription Agreement",
+      "fund": 6,
+      "status": "signed"
+    },
+    {
+      "id": 52,
+      "name": "Helix Therapeutics — Subscription Agreement",
+      "fund": 6,
+      "status": "signed"
+    },
+    {
+      "id": 53,
+      "name": "Helix Therapeutics — Subscription Agreement",
+      "fund": 6,
+      "status": "signed"
+    },
+    {
+      "id": 54,
+      "name": "Northwind Cyber — Subscription Agreement",
+      "fund": 7,
+      "status": "signed"
+    },
+    {
+      "id": 55,
+      "name": "Northwind Cyber — Subscription Agreement",
+      "fund": 7,
+      "status": "signed"
+    },
+    {
+      "id": 56,
+      "name": "Northwind Cyber — Subscription Agreement",
+      "fund": 7,
+      "status": "signed"
+    },
+    {
+      "id": 57,
+      "name": "Quanta Compute — Subscription Agreement",
+      "fund": 8,
+      "status": "signed"
+    },
+    {
+      "id": 58,
+      "name": "Quanta Compute — Subscription Agreement",
+      "fund": 8,
+      "status": "signed"
+    },
+    {
+      "id": 59,
+      "name": "Quanta Compute — Subscription Agreement",
+      "fund": 8,
+      "status": "signed"
+    },
+    {
+      "id": 60,
+      "name": "Quanta Compute — Subscription Agreement",
+      "fund": 8,
+      "status": "signed"
+    },
+    {
+      "id": 61,
+      "name": "Tidewater Carbon — Subscription Agreement",
+      "fund": 9,
+      "status": "signed"
+    },
+    {
+      "id": 62,
+      "name": "Tidewater Carbon — Subscription Agreement",
+      "fund": 9,
+      "status": "signed"
+    },
+    {
+      "id": 63,
+      "name": "Helix Therapeutics — Subscription Agreement",
+      "fund": 6,
+      "status": "signed"
+    },
+    {
+      "id": 64,
+      "name": "Northwind Cyber — Subscription Agreement",
+      "fund": 7,
+      "status": "signed"
+    },
+    {
+      "id": 65,
+      "name": "Quanta Compute — Subscription Agreement",
+      "fund": 8,
+      "status": "signed"
+    },
+    {
+      "id": 66,
+      "name": "Solara Grid — Subscription Agreement",
+      "fund": 1,
+      "status": "signed"
+    },
+    {
+      "id": 67,
+      "name": "Tidewater Carbon — Subscription Agreement",
+      "fund": 9,
+      "status": "signed"
+    },
+    {
+      "id": 68,
+      "name": "Orbis Space Systems — Subscription Agreement",
+      "fund": 3,
+      "status": "signed"
+    },
+    {
+      "id": 69,
+      "name": "Quanta Compute — Subscription Agreement",
+      "fund": 8,
+      "status": "signed"
+    },
+    {
+      "id": 70,
+      "name": "Helix Therapeutics — Subscription Agreement",
+      "fund": 6,
+      "status": "signed"
+    },
+    {
+      "id": 71,
+      "name": "Northwind Cyber — Subscription Agreement",
+      "fund": 7,
+      "status": "signed"
+    },
+    {
+      "id": 72,
+      "name": "Solara Grid — Subscription Agreement",
+      "fund": 1,
+      "status": "signed"
+    },
+    {
+      "id": 73,
+      "name": "Helix Therapeutics — Subscription Agreement",
+      "fund": 6,
+      "status": "signed"
+    },
+    {
+      "id": 74,
+      "name": "Quanta Compute — Subscription Agreement",
+      "fund": 8,
+      "status": "signed"
+    },
+    {
+      "id": 75,
+      "name": "Atlas Defense Systems — Subscription Agreement",
+      "fund": 5,
+      "status": "signed"
+    },
+    {
+      "id": 76,
+      "name": "Kestrel Robotics — Subscription Agreement",
+      "fund": 2,
+      "status": "signed"
+    },
+    {
+      "id": 77,
+      "name": "Orbis Space Systems — Subscription Agreement",
+      "fund": 3,
+      "status": "signed"
+    },
+    {
+      "id": 78,
+      "name": "Tidewater Carbon — Subscription Agreement",
+      "fund": 9,
+      "status": "signed"
+    },
+    {
+      "id": 79,
+      "name": "Atlas Defense Systems — Subscription Agreement",
+      "fund": 5,
+      "status": "signed"
+    },
+    {
+      "id": 80,
+      "name": "Kestrel Robotics — Subscription Agreement",
+      "fund": 2,
+      "status": "signed"
+    }
+  ],
+  "downloadHandlerPresent": false,
+  "browserCoverage": {
+    "captures": 100,
+    "uniquePaths": 75,
+    "renderedLinkOccurrences": 1090,
+    "missingRenderedLinks": [],
+    "externalLinks": ["https://nightjarlabs.example.com"]
+  }
+}

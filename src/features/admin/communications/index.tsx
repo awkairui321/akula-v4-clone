@@ -59,7 +59,7 @@ export default function CommunicationsPage() {
   const summary = data?.summary;
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="mx-auto w-full max-w-6xl min-w-0">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Communications</h1>
@@ -74,7 +74,7 @@ export default function CommunicationsPage() {
       </div>
 
       {summary && (
-        <div className="mb-4 grid gap-x-8 gap-y-4 border-y py-5 sm:grid-cols-3">
+        <div className="mb-5 grid grid-cols-3 gap-4 rounded-lg border bg-card px-4 py-4 sm:gap-8 sm:px-5">
           <SummaryFigure label="Sent" value={String(summary.sent)} />
           <SummaryFigure label="Scheduled" value={String(summary.scheduled)} />
           <SummaryFigure label="Drafts" value={String(summary.draft)} />
@@ -84,7 +84,7 @@ export default function CommunicationsPage() {
         <input
           aria-label="Search communications"
           placeholder="Search subject or audience"
-          className="h-9 min-w-56 flex-1 rounded-md border bg-background px-3 text-sm"
+          className="h-9 w-full min-w-0 flex-1 rounded-md border bg-background px-3 text-sm sm:min-w-56"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -108,8 +108,8 @@ export default function CommunicationsPage() {
       )}
 
       {communications.length > 0 && (
-        <div className="rounded-lg border">
-          <Table>
+        <div className="min-w-0 overflow-hidden rounded-lg border">
+          <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Subject</TableHead>
@@ -127,8 +127,8 @@ export default function CommunicationsPage() {
                   className="cursor-pointer"
                   onClick={() => navigate(`/luca/communications/${c.id}`)}
                 >
-                  <TableCell className="font-medium">{c.subject}</TableCell>
-                  <TableCell className="truncate text-muted-foreground">
+                  <TableCell className="max-w-72 py-4 font-medium">{c.subject}</TableCell>
+                  <TableCell className="max-w-80 whitespace-normal text-muted-foreground">
                     {c.audience_description}
                   </TableCell>
                   <TableCell>

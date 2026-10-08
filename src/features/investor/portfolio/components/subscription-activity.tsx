@@ -143,7 +143,16 @@ function SubscriptionRow({
         </div>
       </div>
 
-      {!isClosed && <StepTracker variant="flow" steps={SUBSCRIPTION_STEPS} getState={getState} />}
+      {!isClosed && (
+        <div className="overflow-x-auto pb-2">
+          <StepTracker
+            variant="flow"
+            steps={SUBSCRIPTION_STEPS}
+            getState={getState}
+            className="min-w-144 sm:min-w-0"
+          />
+        </div>
+      )}
 
       {action && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/50 px-4 py-3">

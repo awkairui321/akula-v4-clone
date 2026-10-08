@@ -183,6 +183,7 @@ function Hero({ fund, hideSupply = false }: { fund: Fund; hideSupply?: boolean }
               </Badge>
               {closingSoon && <Badge variant="destructive">Closing soon</Badge>}
             </div>
+            <p className="text-sm font-medium text-primary">{fund.name}</p>
             {asset.tagline && <p className="text-lg text-muted-foreground">{asset.tagline}</p>}
             <p className="text-sm text-muted-foreground">{asset.description}</p>
           </div>
