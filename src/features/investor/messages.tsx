@@ -118,9 +118,9 @@ export default function MessagesPage() {
           No messages yet. Updates and requests from LUCA will appear here.
         </p>
       ) : (
-        <div className="grid gap-8 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-[22rem_minmax(0,1fr)]">
           {/* List */}
-          <ul className={`divide-y border-y ${selected ? "hidden lg:block" : ""}`}>
+          <ul className={`min-w-0 divide-y border-y ${selected ? "hidden lg:block" : ""}`}>
             {messages.map((m) => {
               const needsAction = m.requests.some((r) => r.status === "requested");
               return (

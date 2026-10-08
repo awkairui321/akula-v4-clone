@@ -1087,6 +1087,13 @@
   .rm-main .rm-header {
     margin: 0 -12px 18px;
     padding: 10px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .rm-header-tools {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
   }
 }
 

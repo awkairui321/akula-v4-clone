@@ -156,7 +156,10 @@ export default function AdminSubscriptionHistoryPage() {
                   to={`/luca/deals/${s.fund_id}`}
                   className="order-3 col-span-2 truncate text-sm hover:underline lg:order-none lg:col-span-1"
                 >
-                  {s.asset_name}
+                  <span className="block truncate">{s.asset_name}</span>
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {s.fund_name}
+                  </span>
                 </Link>
                 <span className="text-right text-sm font-medium tabular-nums">
                   {formatPrice(s.amount)}

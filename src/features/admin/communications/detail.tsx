@@ -46,7 +46,7 @@ export default function CommunicationDetailPage() {
   const { communication, recipients } = data;
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="mx-auto w-full max-w-6xl min-w-0">
       <Link
         to="/luca/communications"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -65,7 +65,7 @@ export default function CommunicationDetailPage() {
         </Badge>
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-3 gap-3 sm:gap-4">
         <SummaryTile label="Recipients" value={String(communication.recipient_count)} />
         <SummaryTile label="Delivered" value={String(communication.delivered_count)} />
         <SummaryTile label="Opened" value={String(communication.opened_count)} />
@@ -114,8 +114,8 @@ export default function CommunicationDetailPage() {
       {recipients.length === 0 ? (
         <p className="py-8 text-center text-muted-foreground">No recipients yet.</p>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
+        <div className="min-w-0 overflow-hidden rounded-lg border">
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Investor</TableHead>
@@ -157,9 +157,9 @@ export default function CommunicationDetailPage() {
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
     <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-bold">{value}</p>
+      <CardContent className="px-3 pt-4 sm:px-6 sm:pt-6">
+        <p className="text-xs text-muted-foreground sm:text-sm">{label}</p>
+        <p className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">{value}</p>
       </CardContent>
     </Card>
   );

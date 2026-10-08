@@ -1,0 +1,57 @@
+[
+  {
+    "id": "A03",
+    "result": "reproduced",
+    "workingFee": "2.75",
+    "approvedFee": "2",
+    "eamFee": "2.75",
+    "investorFee": "2"
+  },
+  {
+    "id": "A03",
+    "result": "reproduced",
+    "draftFundId": 10,
+    "eamDraftStatus": 200,
+    "investorDraftStatus": 404
+  },
+  {
+    "id": "A04",
+    "result": "reproduced",
+    "documentId": 1,
+    "name": "Solara Grid — Subscription Agreement",
+    "handler": "missing"
+  },
+  {
+    "id": "A06",
+    "result": "reproduced",
+    "subscriptionId": 3,
+    "status": 200,
+    "newDocuments": 0,
+    "savedFilename": null,
+    "savedFileBytes": null,
+    "paymentClaimed": true
+  },
+  {
+    "id": "permission-check",
+    "result": "passed",
+    "investorClientBook": 403,
+    "teamClientBook": 403,
+    "teamDocumentScope": "fund materials only"
+  },
+  {
+    "id": "A10",
+    "result": "reproduced",
+    "scheduledAt": "2026-10-07T00:36:52.145Z",
+    "status": "scheduled",
+    "inInvestorInbox": false
+  },
+  {
+    "id": "A17",
+    "result": "reproduced",
+    "overviewEndpointStatus": 200,
+    "overviewResponse": {
+      "documents": []
+    },
+    "managerFundDocumentCount": 3
+  }
+]

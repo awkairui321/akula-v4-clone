@@ -149,7 +149,7 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           if (value !== visibleTab) setSearchParams({ tab: String(value) });
         }}
       >
-        <TabsList variant="line" className="w-full justify-start border-b">
+        <TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
           {pending && (
             <TabsTrigger value="review" className="flex-none">
               <span className="flex items-center gap-2">

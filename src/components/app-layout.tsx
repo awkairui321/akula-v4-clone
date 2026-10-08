@@ -140,7 +140,7 @@ export default function AppLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col bg-background">
-        <header className="flex items-center border-b px-6 py-4">
+        <header className="flex flex-wrap items-center gap-y-2 border-b px-3 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center">
             <Button
               variant="ghost"
@@ -152,7 +152,7 @@ export default function AppLayout() {
             </Button>
             {activeItem && <span className="ml-2">{activeItem.label}</span>}
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
             <Button variant="outline" size="sm" onClick={() => navigate("/live-demo")}>
               Compare roles live
             </Button>

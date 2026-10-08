@@ -558,7 +558,8 @@ export default function AdminDashboard() {
                       >
                         <Ring pct={pct} />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">
+                          <span className="block truncate text-sm font-medium">{fund.name}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
                             {fund.codename}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground tabular-nums">

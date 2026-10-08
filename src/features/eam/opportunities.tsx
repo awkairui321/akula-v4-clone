@@ -175,6 +175,7 @@ function DealRow({
               {fund.codename} · {fund.fund_manager.name}
             </p>
             <h3 className="mt-1 truncate text-lg font-medium">{fund.asset.name}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">{fund.name}</p>
           </div>
           <Badge
             variant={fund.state === "open" ? "default" : "secondary"}
@@ -229,7 +230,7 @@ function DealRow({
               <p className="text-xs tracking-wide text-muted-foreground uppercase">
                 Selected opportunity
               </p>
-              <h3 className="mt-1 text-lg font-semibold">{fund.codename}</h3>
+              <h3 className="mt-1 text-lg font-semibold">{fund.name}</h3>
               <p className="text-sm text-muted-foreground">
                 Underlying holding: {fund.asset.name}
                 {fund.fund_manager?.name ? ` · ${fund.fund_manager.name}` : ""}

@@ -458,7 +458,7 @@ function Analytics({ data: d }: { data: WorkflowView }) {
           <option value="all">All offerings in my scope</option>
           {d.funds.map((f) => (
             <option key={f.id} value={f.id}>
-              {f.name}
+              {f.fundName ?? f.name}
             </option>
           ))}
         </select>
@@ -1937,7 +1937,7 @@ function WorkflowPageContent({
                   <article key={v.id} className="wf-doc-row">
                     <div>
                       <h3>
-                        {v.snapshot.codename} · v{v.number}
+                        {v.snapshot.name} · v{v.number}
                       </h3>
                       <p>
                         {v.status} · {date(v.at)}
@@ -2020,7 +2020,7 @@ function WorkflowPageContent({
                   >
                     <strong>{fund.company}</strong>
                     <span>
-                      {fund.name} · {fund.state}
+                      {fund.fundName ?? fund.name} · {fund.state}
                     </span>
                     <small>{ops ? "Edit deal →" : "Open deal →"}</small>
                   </Link>
