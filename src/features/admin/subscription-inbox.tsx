@@ -629,17 +629,28 @@ export default function AdminSubscriptionsPage() {
                             />
                           )}
                           <div className="min-w-0">
-                            <Link
-                              to={`/luca/deals/${sub.fund_id}`}
-                              className="text-sm font-medium hover:underline"
-                            >
-                              {sub.asset_name}
-                            </Link>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {sub.fund_name} · #{sub.id}
-                              {customTerms.has(`${sub.fund_id}:${sub.investor_id}`) &&
-                                " · Custom terms"}
-                            </p>
+                            {deal === "all" ? (
+                              <>
+                                <Link
+                                  to={`/luca/deals/${sub.fund_id}`}
+                                  className="text-sm font-medium hover:underline"
+                                >
+                                  {sub.asset_name}
+                                </Link>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {sub.fund_name} · #{sub.id}
+                                  {customTerms.has(`${sub.fund_id}:${sub.investor_id}`) &&
+                                    " · Custom terms"}
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-sm font-medium">Subscription #{sub.id}</p>
+                                {customTerms.has(`${sub.fund_id}:${sub.investor_id}`) && (
+                                  <p className="mt-1 text-xs text-muted-foreground">Custom terms</p>
+                                )}
+                              </>
+                            )}
                           </div>
                         </div>
                         <div>
