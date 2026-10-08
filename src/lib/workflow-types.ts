@@ -168,6 +168,7 @@ export type WorkflowView = WorkflowState & {
     eamFirm?: string | null;
   }[];
   subscriptions: {
+    paymentProofs: { id: number; name: string; file_data_url: string | null; created_at: string }[];
     commercial_terms?: CommercialTerms;
     id: number;
     investor_id: number;

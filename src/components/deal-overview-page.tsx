@@ -274,7 +274,13 @@ function OverviewSection({ asset }: { asset: Asset }) {
         <div className="grid gap-4 sm:grid-cols-2">
           {asset.how_it_works.map((row) => (
             <div key={row.label} className="space-y-1">
-              <h3 className="text-sm font-semibold">{row.label}</h3>
+              <h3 className="text-sm font-semibold">
+                {asset.name !== "Solara Grid" && row.label === "What Solara Grid provides"
+                  ? `What ${asset.name} provides`
+                  : asset.name !== "Solara Grid" && row.label === "The grid problem"
+                    ? "The customer problem"
+                    : row.label}
+              </h3>
               <p className="text-sm text-muted-foreground">{row.text}</p>
             </div>
           ))}
@@ -675,7 +681,7 @@ function DocumentsSection({
   fund: Fund;
   viewer: "investor" | "luca" | "ops" | "eam" | "rm";
 }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["documents", { fund_id: fund.id }],
     queryFn: () => api<{ documents: Document[] }>(`/api/v1/documents?fund_id=${fund.id}`),
   });
@@ -723,7 +729,12 @@ function DocumentsSection({
       <div className="space-y-3">
         <h3 className="text-sm font-semibold">Deal materials</h3>
         {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
-        {!isLoading && documents.length === 0 && (
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error.message}
+          </p>
+        )}
+        {!isLoading && !error && documents.length === 0 && (
           <p className="text-sm text-muted-foreground">No deal documents available yet.</p>
         )}
         {documents.length > 0 && (
@@ -761,7 +772,10 @@ function DocumentsSection({
       {viewer === "luca" && (
         <p className="text-xs text-muted-foreground">
           Upload additional materials from{" "}
-          <Link to={`/luca/deals/${fund.id}`} className="underline underline-offset-2">
+          <Link
+            to={`/luca/deals/${fund.id}?tab=documents`}
+            className="underline underline-offset-2"
+          >
             this deal's Documents tab
           </Link>
           .

@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronDownIcon } from "lucide-react";
 import { api } from "@/lib/api";
+import { readUpload } from "@/lib/file-upload";
+import FileDropzone from "@/components/file-dropzone";
 import type { Subscription, SubscriptionStatus } from "@/lib/types";
 import {
   STATUS_LABELS,
@@ -229,11 +231,14 @@ function UploadProofDialog({
   const [file, setFile] = useState<File | null>(null);
 
   const uploadMutation = useMutation({
-    mutationFn: () =>
-      api(`/api/v1/subscriptions/${subscriptionId}/payment_proof`, {
+    mutationFn: async () => {
+      if (!file) throw new Error("Choose a file first.");
+      const upload = await readUpload(file);
+      return api(`/api/v1/subscriptions/${subscriptionId}/payment_proof`, {
         method: "POST",
-        body: { filename: file?.name },
-      }),
+        body: upload,
+      });
+    },
     onSuccess: () => {
       toast.success("Proof of payment uploaded. Ops will review it shortly.");
       onUploaded();
@@ -249,12 +254,13 @@ function UploadProofDialog({
           Attach a bank transfer receipt or screenshot so ops can match your payment to this
           subscription.
         </p>
-        <input
-          type="file"
-          accept="image/*,application/pdf"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:bg-transparent file:px-2 file:py-1 file:text-xs file:font-medium"
+        <FileDropzone
+          disabled={uploadMutation.isPending}
+          onFiles={async (files) => {
+            setFile(files[0] ?? null);
+          }}
         />
+        {file && <p className="text-sm">{file.name}</p>}
         <Button
           className="w-full"
           disabled={!file || uploadMutation.isPending}

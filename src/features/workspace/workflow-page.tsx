@@ -1644,6 +1644,33 @@ function WorkflowPageContent({
                 )}
                 {(!ops || !opsArchive) && (
                   <Panel title="Cash receipts & matching">
+                    {sub.paymentProofs?.length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="font-medium">Client payment evidence</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Uploaded evidence does not confirm receipt or matching.
+                        </p>
+                        {sub.paymentProofs.map((proof) => (
+                          <div
+                            key={proof.id}
+                            className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                          >
+                            <span>
+                              {proof.name} · {date(proof.created_at)}
+                            </span>
+                            {proof.file_data_url && (
+                              <a
+                                href={proof.file_data_url}
+                                download={proof.name}
+                                className="text-primary underline"
+                              >
+                                Download receipt
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {sub.needsReview && (
                       <div className="wf-banner">
                         Updated offering document requires investor acknowledgment. Review version #

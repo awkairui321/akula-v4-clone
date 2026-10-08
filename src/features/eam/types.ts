@@ -78,6 +78,7 @@ export type ClientDocument = {
   kind: string;
   status: string;
   has_file: boolean;
+  file_data_url?: string | null;
   created_at: string;
 };
 

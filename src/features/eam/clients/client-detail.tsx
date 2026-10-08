@@ -557,6 +557,18 @@ function DocumentsTab({ detail }: { detail: ClientDetail }) {
               </span>
               <span className="text-right text-muted-foreground">
                 {new Date(doc.created_at).toLocaleDateString()}
+                {doc.file_data_url ? (
+                  <a
+                    href={doc.file_data_url}
+                    download={doc.name}
+                    aria-label={`Download ${doc.name}`}
+                    className="mt-2 block text-primary underline"
+                  >
+                    Download
+                  </a>
+                ) : (
+                  <span className="mt-2 block text-xs">File unavailable</span>
+                )}
               </span>
             </div>
           ))}
@@ -585,7 +597,11 @@ export default function ClientDetailPage() {
     ? requestedTab
     : "overview";
 
-  const { data: detail, isLoading } = useQuery({
+  const {
+    data: detail,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["eamClient", id],
     refetchInterval: 2000,
     queryFn: () => api<ClientDetail>(`/api/v1/eam/clients/${id}`),
@@ -598,13 +614,23 @@ export default function ClientDetailPage() {
     enabled: !!id,
   });
 
-  if (isLoading || !detail) {
+  if (isLoading) {
     return (
       <div>
         <p className="py-12 text-center text-muted-foreground">Loading...</p>
       </div>
     );
   }
+
+  if (!detail || error)
+    return (
+      <div className="space-y-4 py-8">
+        <p role="alert">{error?.message ?? "Client not found."}</p>
+        <Link to="/eam/clients" className="text-primary underline">
+          Back to clients
+        </Link>
+      </div>
+    );
 
   return (
     <div>

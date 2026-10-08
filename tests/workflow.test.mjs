@@ -67,6 +67,90 @@ const manager = () => db.users.find((u) => u.role === "luca"),
   rm = () => db.users.find((u) => u.id === 6),
   investor = () => db.users.find((u) => u.id === 2);
 const funded = () => db.subscriptions.find((s) => s.status === "allocation_pending");
+
+test("advisers see published terms and never unpublished working changes", async () => {
+  const eam = db.users.find((u) => u.id === 4);
+  const fund = db.funds.find((f) => f.id === 1201);
+  const published = structuredClone(w.currentVersion(fund.id).snapshot);
+  fund.subscription_fee_pct = "97";
+  fund.hook = "Unpublished wording";
+  const listing = await (await request("eam/opportunities", eam)).json();
+  const detail = await (await request(`eam/opportunities/${fund.id}`, eam)).json();
+  assert.equal(
+    listing.funds.find((f) => f.id === fund.id).subscription_fee_pct,
+    published.subscription_fee_pct,
+  );
+  assert.equal(detail.fund.hook, published.hook);
+  const draft = db.funds.find((f) => f.state === "draft");
+  assert.ok(draft);
+  assert.equal((await request(`eam/opportunities/${draft.id}`, eam)).status, 404);
+  assert.ok(!listing.funds.some((f) => f.id === draft.id));
+});
+
+test("staff overview documents include fund materials but exclude private client files", async () => {
+  const fundId = 1201;
+  const materials = db.documents.filter(
+    (d) => d.fund_id === fundId && d.owner_name === "LUCA SGP" && d.subscription_id === null,
+  );
+  assert.equal(materials.length, 3);
+  const privateFile = structuredClone(materials[0]);
+  privateFile.id = db.nextDocumentId();
+  privateFile.owner_id = investor().id;
+  privateFile.owner_name = "Elena Cross";
+  privateFile.subscription_id = 59;
+  db.documents.push(privateFile);
+  for (const user of [manager(), ops(), db.users.find((u) => u.role === "investment_team")]) {
+    const response = await request(`documents?fund_id=${fundId}`, user);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.documents.length, 3);
+    assert.ok(!result.documents.some((d) => d.id === privateFile.id));
+  }
+});
+
+test("payment evidence retains bytes without creating cash or changing allocation", async () => {
+  const user = investor();
+  const sub = db.subscriptions.find(
+    (s) => s.investor_id === user.id && s.status === "payment_unmatched" && !s.on_hold,
+  );
+  assert.ok(sub);
+  const count = db.documents.length;
+  const oldStatus = sub.status;
+  const oldCash = structuredClone(w.workflow.receipts);
+  assert.equal(
+    (await request(`subscriptions/${sub.id}/payment_proof`, user, "POST", { name: "receipt.pdf" }))
+      .status,
+    422,
+  );
+  assert.equal(db.documents.length, count);
+  const file = { name: "receipt.pdf", file_data_url: "data:application/pdf;base64,JVBERi0xLjQ=" };
+  const foreign = db.subscriptions.find((s) => s.investor_id !== user.id);
+  assert.equal(
+    (await request(`subscriptions/${foreign.id}/payment_proof`, user, "POST", file)).status,
+    404,
+  );
+  assert.equal(
+    (await request(`subscriptions/${sub.id}/payment_proof`, user, "POST", file)).status,
+    200,
+  );
+  const evidence = db.documents.at(-1);
+  assert.equal(evidence.owner_id, user.id);
+  assert.equal(evidence.subscription_id, sub.id);
+  assert.equal(evidence.fund_id, sub.fund_id);
+  assert.equal(evidence.file_data_url, file.file_data_url);
+  assert.equal(sub.status, oldStatus);
+  assert.deepEqual(w.workflow.receipts, oldCash);
+  assert.equal(
+    w
+      .view(ops())
+      .subscriptions.find((s) => s.id === sub.id)
+      .paymentProofs.at(-1).file_data_url,
+    file.file_data_url,
+  );
+  const saved = db.exportDemoState();
+  db.restoreDemoState(saved);
+  assert.equal(db.documents.find((d) => d.id === evidence.id).file_data_url, file.file_data_url);
+});
 test("document uploads retain bytes, stay owner scoped and require LUCA review", async () => {
   const file = { name: "Evidence.pdf", file_data_url: "data:application/pdf;base64,JVBERi0xLjQ=" };
   const user = investor();

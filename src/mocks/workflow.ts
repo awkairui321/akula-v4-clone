@@ -631,6 +631,22 @@ export function view(user: db.MockUser): WorkflowView {
       needsReview: s.needs_review_version_id,
       allocationBlockers: investmentBlockers(s),
       issuanceBlockers: investmentBlockers(s, true),
+      paymentProofs:
+        ["luca", "ops"].includes(user.role) || user.id === s.investor_id
+          ? db.documents
+              .filter(
+                (d) =>
+                  d.subscription_id === s.id &&
+                  d.owner_id === s.investor_id &&
+                  d.kind === "payment_proof",
+              )
+              .map((d) => ({
+                id: d.id,
+                name: d.name,
+                file_data_url: d.file_data_url ?? null,
+                created_at: d.created_at,
+              }))
+          : [],
     })),
     holdings,
     funds: db.funds
