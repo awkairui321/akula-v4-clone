@@ -194,6 +194,7 @@ export type WorkflowView = WorkflowState & {
     topup_declared_at?: string | null;
     topup_matched_amount?: number;
     holdingId: number | null;
+    approved_at?: string | null;
   }[];
   holdings: {
     id: number;

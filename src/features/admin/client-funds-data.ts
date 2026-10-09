@@ -40,8 +40,40 @@ export function buildClientFunds(
             .flatMap((p) => p.funds)
             .find((f) => f.fundId === id)
             ?.clients.find((c) => c.id === investor.id);
+          const papers = subs
+            .filter((sub) => sub.fund_id === id && !["cancelled", "rejected"].includes(sub.status))
+            .map((sub) => {
+              const total = Number(sub.amount) + Number(sub.subscription_fee);
+              const receipts = workflow.receipts.filter(
+                (r) => r.subscriptionId === sub.id && r.matched && !r.supersededBy,
+              );
+              return {
+                subscription: sub,
+                signature: signatures.find((x) => x.subscriptionId === sub.id),
+                agreement: ownDocs.find(
+                  (d) => d.kind === "agreement" && d.subscription_id === sub.id,
+                ),
+                call: {
+                  principal: Number(sub.amount),
+                  fee: Number(sub.subscription_fee),
+                  total,
+                  // The call goes out once the subscription is signed off for funding.
+                  issued: !["reserved", "documents_pending", "institution_review"].includes(
+                    sub.status,
+                  ),
+                  issuedAt: (sub as { approved_at?: string | null }).approved_at ?? null,
+                  received: receipts.reduce((n, r) => n + r.amount, 0),
+                  receivedAt: receipts.at(-1)?.at ?? null,
+                },
+              };
+            });
+          const agreementIds = new Set(
+            papers.flatMap((p) => (p.agreement ? [p.agreement.id] : [])),
+          );
           return {
             id,
+            papers,
+            otherCount: ownDocs.filter((d) => !agreementIds.has(d.id)).length + ownRequests.length,
             name:
               fund?.fundName ?? ownDocs[0]?.fund_name ?? ownRequests[0]?.fund_name ?? `Fund #${id}`,
             project: fund?.name ?? subs.find((s) => s.fund_id === id)?.asset_name ?? "",

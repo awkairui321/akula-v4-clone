@@ -1,5 +1,5 @@
-import { Fragment, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Fragment, useEffect, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -14,6 +14,7 @@ import {
   type PlatformEvent,
 } from "../types";
 import { KanbanCard, SubscriptionDialog } from "../subscriptions";
+import { ClientDocuments } from "../client-documents";
 import type { Holding } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ function daysUntil(value: string | null): number | null {
 
 export default function AdminInvestorDetailPage() {
   const { id } = useParams();
+  const { hash } = useLocation();
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "investors", id],
@@ -72,6 +74,12 @@ export default function AdminInvestorDetailPage() {
     queryKey: ["admin", "partners", "all"],
     queryFn: () => api<{ partners: AdminPartner[] }>("/api/v1/admin/partners"),
   });
+
+  // A link such as /luca/investors/4#documents opens at that section.
+  const loaded = Boolean(data);
+  useEffect(() => {
+    if (loaded && hash) document.getElementById(hash.slice(1))?.scrollIntoView();
+  }, [loaded, hash]);
 
   if (isLoading) {
     return <p className="py-12 text-center text-muted-foreground">Loading...</p>;
@@ -186,10 +194,14 @@ export default function AdminInvestorDetailPage() {
             <SubscriptionsTab subscriptions={subscriptions} />
           </section>
 
+          <section id="documents" className="scroll-mt-8">
+            <ClientDocuments investorId={investor.id} />
+          </section>
+
           <section id="evidence" className="scroll-mt-8">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Evidence</CardTitle>
+                <CardTitle className="text-base">Verification evidence</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 {verification_documents.length === 0 && (

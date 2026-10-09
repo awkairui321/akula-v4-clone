@@ -1,6 +1,6 @@
 import { demoClientBook } from "@/lib/demo-client-book";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRightIcon, FolderIcon, SearchIcon } from "lucide-react";
 import { api } from "@/lib/api";
@@ -231,7 +231,12 @@ function ByName({ rows, workflow, actions, meta }: ViewProps) {
                   <ChevronRightIcon className={`${CHEVRON} group-open/client:rotate-90`} />
                   <span className="min-w-0 flex-1 basis-48">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-base font-semibold">{row.investor.full_name}</span>
+                      <Link
+                        to={`/luca/investors/${row.investor.id}`}
+                        className="text-base font-semibold hover:underline"
+                      >
+                        {row.investor.full_name}
+                      </Link>
                       <Attention count={needsReview(row)} />
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
@@ -336,7 +341,12 @@ function ByProject({ rows, workflow, actions, meta }: ViewProps) {
                         <ChevronRightIcon className={`${CHEVRON} group-open/client:rotate-90`} />
                         <span className="min-w-0 flex-1 basis-40">
                           <span className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold">{row.investor.full_name}</span>
+                            <Link
+                              to={`/luca/investors/${row.investor.id}`}
+                              className="text-sm font-semibold hover:underline"
+                            >
+                              {row.investor.full_name}
+                            </Link>
                             <Attention
                               count={
                                 [...own.docs].filter((d) =>
