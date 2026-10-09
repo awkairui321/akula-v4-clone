@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { SearchIcon, XIcon } from "lucide-react";
 import type { Fund } from "@/lib/types";
 import type { InvestorSegment } from "@/lib/investor-access";
@@ -104,6 +105,7 @@ export function AudiencePicker({
   value,
   onChange,
   legacy,
+  inProgress = [],
 }: {
   fund: Fund;
   clients: AdminInvestor[];
@@ -111,6 +113,8 @@ export function AudiencePicker({
   onChange: (next: AudienceDraft) => void;
   /** The deal still follows the original audience rule and has not been set explicitly. */
   legacy: boolean;
+  /** Subscriptions still under way in this fund; one held by an excluded client carries on. */
+  inProgress?: { id: number; investor_id: number; investor_name: string }[];
 }) {
   const [showAll, setShowAll] = useState(false);
   const everyone = value.classes.length === 2;
@@ -281,6 +285,27 @@ export function AudiencePicker({
         selected={value.excluded}
         onToggle={toggleExcluded}
       />
+      {inProgress.filter((s) => value.excluded.includes(s.investor_id)).length > 0 && (
+        <div className="space-y-1 border-l-2 border-amber-500 pl-3 text-sm">
+          <p className="font-medium">Subscriptions in progress will carry on</p>
+          <ul className="space-y-0.5 text-muted-foreground">
+            {inProgress
+              .filter((s) => value.excluded.includes(s.investor_id))
+              .map((s) => (
+                <li key={s.id}>
+                  {s.investor_name} has subscription #{s.id} in progress. They can finish it but
+                  cannot start another.{" "}
+                  <Link
+                    to={`/luca/subscriptions?deal=${fund.id}&q=${encodeURIComponent(s.investor_name)}`}
+                    className="text-foreground underline underline-offset-2"
+                  >
+                    Open it to cancel
+                  </Link>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Button type="button" variant="ghost" size="sm" onClick={() => setShowAll((open) => !open)}>

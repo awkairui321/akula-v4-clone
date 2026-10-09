@@ -1059,6 +1059,12 @@ export default function PublishedDealEditor({
                 clients={audienceClients}
                 value={audience}
                 legacy={legacyAudience}
+                inProgress={(subsData?.subscriptions ?? []).filter(
+                  (s: AdminSubscription) =>
+                    s.fund_id === fund.id &&
+                    !s.holding_id &&
+                    !CLOSED_SUBSCRIPTION_STATUSES.includes(s.status),
+                )}
                 onChange={(next) => {
                   setAudience(next);
                   setAudienceTouched(true);

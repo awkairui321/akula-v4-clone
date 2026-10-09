@@ -6,7 +6,11 @@ export type CommercialTerms = {
   subscriptionFeePct: string;
   allocationPriority: "standard" | "partner_priority";
 };
-export type InvestorAccess = CommercialTerms & { canSubscribe: boolean };
+export type InvestorAccess = CommercialTerms & {
+  canSubscribe: boolean;
+  /** An open subscription of this investor's in the fund, to continue when they cannot start another. */
+  continueSubscriptionId?: number | null;
+};
 
 export const SEGMENT_LABELS: Record<InvestorSegment, string> = {
   independent: "Independent investor",
@@ -73,11 +77,24 @@ export function commercialTerms(segment: InvestorSegment, fund: Fund): Commercia
     allocationPriority: segment === "partner_referred" ? "partner_priority" : "standard",
   };
 }
-export function fundForSegment(fund: Fund, segment: InvestorSegment): Fund {
+export function fundForSegment(
+  fund: Fund,
+  segment: InvestorSegment,
+  options: { who?: AudienceMember; continueSubscriptionId?: number | null } = {},
+): Fund {
   const terms = commercialTerms(segment, fund);
+  // With a named investor the whole audience decides, not just their class: a client included by
+  // partner firm or by name can subscribe, and one who is excluded cannot.
+  const canSubscribe = options.who
+    ? audienceIncludes(fund, options.who, fund.id)
+    : segmentCanAccess(segment, fund.id, fund);
   return {
     ...fund,
     subscription_fee_pct: terms.subscriptionFeePct,
-    investor_access: { ...terms, canSubscribe: segmentCanAccess(segment, fund.id, fund) },
+    investor_access: {
+      ...terms,
+      canSubscribe,
+      continueSubscriptionId: options.continueSubscriptionId ?? null,
+    },
   };
 }

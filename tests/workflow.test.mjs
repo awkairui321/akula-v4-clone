@@ -2247,3 +2247,37 @@ test("dates read as people write them and are stored as plain dates; free text i
     assert.equal(storedDate(odd), odd);
   assert.equal(storedDate(friendlyDate("2026-12-01T00:00:00.000Z")), "2026-12-01");
 });
+
+test("subscribe access follows the whole audience: named clients can subscribe; excluded ones can only continue", async () => {
+  const fm = manager();
+  const publish = async (fundId, fund) => {
+    assert.equal((await request(`funds/${fundId}`, fm, "PATCH", { fund })).status, 200);
+    w.command(fm, { type: "stage", id: fundId });
+    const v = w.workflow.versions.find((v) => v.fundId === fundId && v.status === "review");
+    w.command(fm, { type: "approve", id: v.id });
+  };
+  // Included by name only, not by class: they can subscribe.
+  await publish(6, { eligible_segments: [], audience_investors: [2] });
+  const named = (await (await request("funds/6", investor())).json()).fund.investor_access;
+  assert.equal(named.canSubscribe, true);
+  // Excluded with a subscription already under way: cannot start another, can continue it.
+  const open = db.subscriptions.find(
+    (s) =>
+      s.investor_id === 2 &&
+      s.fund_id === 1 &&
+      !s._convertedToHoldingId &&
+      !["cancelled", "rejected", "funds_returned", "not_allocated"].includes(s.status),
+  );
+  assert.ok(open, "the client has an open subscription in fund 1");
+  await publish(1, {
+    eligible_segments: ["independent", "partner_referred"],
+    audience_excluded: [2],
+  });
+  const excluded = (await (await request("funds/1", investor())).json()).fund.investor_access;
+  assert.equal(excluded.canSubscribe, false);
+  assert.equal(excluded.continueSubscriptionId, open.id);
+  assert.equal(
+    (await request("subscriptions", investor(), "POST", { fund_id: 1, amount: "25000" })).status,
+    403,
+  );
+});

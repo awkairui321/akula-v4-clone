@@ -843,6 +843,24 @@ function SubscribeCalculator({ fund }: { fund: Fund }) {
   const valid = numAmount >= minSub && (!maxSub || numAmount <= maxSub);
 
   if (fund.investor_access && !fund.investor_access.canSubscribe) {
+    // A subscription already under way can still be finished; a new one cannot be started.
+    const open = fund.investor_access.continueSubscriptionId;
+    if (open)
+      return (
+        <div className="space-y-3 rounded-lg border bg-card p-4">
+          <p className="text-sm font-semibold">Your subscription is in progress</p>
+          <p className="text-sm text-muted-foreground">
+            You can finish the subscription you started. New subscriptions in this deal are not
+            available to your investor profile.
+          </p>
+          <Button
+            className="w-full"
+            onClick={() => navigate(`/checkout/${fund.id}?subscription_id=${open}`)}
+          >
+            Continue subscription
+          </Button>
+        </div>
+      );
     return (
       <div className="rounded-lg border bg-card p-4 text-center text-sm text-muted-foreground">
         This deal remains available for your investment history. Your current investor profile does

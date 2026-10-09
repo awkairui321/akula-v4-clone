@@ -3,6 +3,8 @@ import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { DOCUMENT_REQUEST_KINDS } from "@/lib/document-catalogue";
 import {
   segmentFor,
+  audienceMember,
+  openSubscriptionId,
   investorAudience,
   mayDiscover,
   hasInvestmentHistory,
@@ -136,6 +138,10 @@ export const investorHandlers = [
                     user.id,
                   ),
                   segmentFor(user),
+                  {
+                    who: audienceMember(user),
+                    continueSubscriptionId: openSubscriptionId(user.id, f.id),
+                  },
                 )
               : { ...(currentVersion(f.id)?.snapshot ?? f), state: f.state },
         ),
@@ -172,6 +178,10 @@ export const investorHandlers = [
                 user.id,
               ),
               segmentFor(user),
+              {
+                who: audienceMember(user),
+                continueSubscriptionId: openSubscriptionId(user.id, fund.id),
+              },
             )
           : { ...(currentVersion(fund.id)?.snapshot ?? fund), state: fund.state },
     });
