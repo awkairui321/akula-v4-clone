@@ -130,18 +130,27 @@ function DealWorkspace({ fund }: { fund: Fund }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPreview("eam")}>
-              Preview as EAM
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreview("investor")}>
-              Preview as investor
-            </Button>
+            {!manager && (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setPreview("eam")}>
+                  Preview as EAM
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPreview("investor")}>
+                  Preview as investor
+                </Button>
+              </>
+            )}
+            {manager && (
+              <Button variant="outline" size="sm" onClick={() => setEditorOpen(true)}>
+                Edit working overview
+              </Button>
+            )}
             <PublicationBar fund={fund} actionsOnly />
           </div>
         </div>
       </div>
 
-      <PublicationBar fund={fund} onEdit={() => setEditorOpen(true)} />
+      {!manager && <PublicationBar fund={fund} onEdit={() => setEditorOpen(true)} />}
 
       <Tabs
         value={visibleTab}

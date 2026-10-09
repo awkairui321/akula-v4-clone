@@ -247,13 +247,13 @@ export default function ProjectPage() {
               <article
                 key={fund.id}
                 aria-label={fund.name}
-                className="flex flex-col overflow-hidden rounded-xl border bg-card"
+                className="relative flex flex-col overflow-hidden rounded-xl border bg-card transition-colors focus-within:border-primary/50 hover:border-primary/50"
               >
                 <header className="space-y-3 border-b px-6 py-5">
                   <div className="flex items-center justify-between gap-3">
                     <Link
                       to={`/luca/deals/${fund.id}`}
-                      className="text-lg font-semibold hover:underline"
+                      className="text-lg font-semibold after:absolute after:inset-0 hover:underline"
                     >
                       {fundLabel(fund)}
                     </Link>
@@ -310,7 +310,7 @@ export default function ProjectPage() {
                               <div>
                                 <Link
                                   to={`/luca/investors/${client.id}`}
-                                  className="font-medium hover:underline"
+                                  className="relative z-10 font-medium hover:underline"
                                 >
                                   {client.name}
                                 </Link>
@@ -331,12 +331,13 @@ export default function ProjectPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="relative z-10"
                                   nativeButton={false}
                                   render={
                                     <Link
                                       to={
                                         client.pending.length === 1
-                                          ? `/luca/subscriptions/${client.pending[0].id}/allocate`
+                                          ? `/luca/subscriptions?allocate=${client.pending[0].id}`
                                           : `/luca/subscriptions?deal=${fund.id}&stage=ready_allocation&q=${encodeURIComponent(client.name)}`
                                       }
                                     />
@@ -363,7 +364,7 @@ export default function ProjectPage() {
                   {user?.role === "luca" && (
                     <Link
                       to={`/luca/subscriptions?deal=${fund.id}`}
-                      className="text-muted-foreground hover:underline"
+                      className="relative z-10 text-muted-foreground hover:underline"
                     >
                       All subscriptions
                     </Link>
