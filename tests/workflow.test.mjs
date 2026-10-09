@@ -986,7 +986,7 @@ test("reassigning an RM is recorded and an RM only sees their own clients", asyn
   assert.equal((await request(`rm/clients/${mine.id}/status`, rm())).status, 403);
   assert.equal((await request(`rm/clients/${mine.id}/status`, other)).status, 200);
 });
-test("institution review and information-response loop respect client ownership and holds", async () => {
+test("the adviser's sign-off releases a partner subscription straight to funding; LUCA has no review step", async () => {
   const adviser = db.users.find((u) => u.id === 4);
   const sub = db.subscriptions.find(
     (s) =>
@@ -1004,44 +1004,51 @@ test("institution review and information-response loop respect client ownership 
   );
   db.findSubscriptionById(sub.id).on_hold = false;
   w.command(adviser, { type: "institution-review", id: sub.id });
-  assert.equal(db.findSubscriptionById(sub.id).status, "under_luca_review");
-  w.command(manager(), {
-    type: "subscription-decision",
-    id: sub.id,
-    status: "information_requested",
-    text: "Please explain the source of funds",
-  });
-  assert.throws(
-    () =>
-      w.command(investor(), { type: "respond-information", id: sub.id, text: "Wrong investor" }),
-    /not found|Assigned|Investor/,
+  const released = db.findSubscriptionById(sub.id);
+  assert.equal(released.status, "approved");
+  assert.equal(released.next_action, "proceed_to_funding");
+  assert.ok(released.approved_at);
+  // The retired review step cannot be entered any more, and old saved data moves on.
+  assert.ok(!db.TRANSITIONS.documents_pending.includes("under_luca_review"));
+  assert.ok(
+    !db.subscriptions.some((s) =>
+      ["under_luca_review", "information_requested"].includes(s.status),
+    ),
   );
+  const legacy = db.exportDemoState();
+  legacy.arrays.subscriptions.find((s) => s.id === sub.id).status = "under_luca_review";
+  db.restoreDemoState(legacy);
+  assert.equal(db.findSubscriptionById(sub.id).status, "approved");
+});
+
+test("LUCA can decline an allocation: funds return, the investor is told and Ops gets the return", () => {
+  const s = db.subscriptions.find((x) => x.status === "allocation_pending");
+  assert.ok(s);
+  const messagesBefore = db.communicationRecipients.filter(
+    (r) => r.investor_id === s.investor_id,
+  ).length;
   assert.throws(
-    () => w.command(adviser, { type: "respond-information", id: sub.id, text: " " }),
+    () => w.command(manager(), { type: "decline-allocation", id: s.id }),
     /description/,
   );
-  // Failed commands restore records; reload the object reference.
-  const current = db.findSubscriptionById(sub.id);
-  const owner = { ...investor(), id: current.investor_id, email: current.investor_email };
-  db.users.push(owner);
-  const result = await request(`subscriptions/${current.id}/information_response`, owner, "POST", {
-    text: "Proceeds from employment savings",
-  });
-  assert.equal(result.status, 200);
-  const updated = db.findSubscriptionById(current.id);
-  assert.equal(updated.status, "under_luca_review");
-  assert.equal(updated.information_response_note, "Proceeds from employment savings");
-  assert.ok(updated.information_responded_at);
-  assert.equal(
-    (
-      await request(`subscriptions/${updated.id}/information_response`, owner, "POST", {
-        text: "Duplicate",
-      })
-    ).status,
-    422,
+  assert.throws(
+    () => w.command(ops(), { type: "decline-allocation", id: s.id, text: "x" }),
+    /another role/,
   );
-  w.command(manager(), { type: "subscription-decision", id: updated.id, status: "approved" });
-  assert.equal(db.findSubscriptionById(updated.id).status, "approved");
+  w.command(manager(), { type: "decline-allocation", id: s.id, text: "Fund is over-subscribed." });
+  const declined = db.findSubscriptionById(s.id);
+  assert.equal(declined.status, "not_allocated");
+  assert.equal(declined.owner, "akula_ops");
+  assert.equal(declined.rejection_note, "Fund is over-subscribed.");
+  assert.ok(w.workflow.returns.some((r) => r.subscriptionId === s.id && r.status === "required"));
+  assert.equal(
+    db.communicationRecipients.filter((r) => r.investor_id === s.investor_id).length,
+    messagesBefore + 1,
+  );
+  assert.throws(
+    () => w.command(manager(), { type: "decline-allocation", id: s.id, text: "again" }),
+    /waiting for allocation/,
+  );
 });
 
 test("validated referral binds new client to the matching institution without granting eligibility", async () => {

@@ -1,20 +1,7 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import {
-  HistoryIcon,
-  LinkIcon,
-  SearchIcon,
-  MoreHorizontalIcon,
-  ArrowRightIcon,
-} from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { HistoryIcon, LinkIcon, SearchIcon, ArrowRightIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
 import { SUBSCRIPTION_STAGES, stageOfStatus } from "@/lib/types";
@@ -22,17 +9,15 @@ import {
   OWNER_LABELS,
   STATUS_LABELS,
   type AdminSubscription,
-  type BulkTransitionResponse,
   type InvestorPricingRow,
   type PartnersResponse,
   type SubscriptionStatus,
   type SubscriptionsResponse,
 } from "./types";
-import { PaymentMatchingDialog, SubscriptionDialog, REJECTION_REASONS } from "./subscriptions";
+import { PaymentMatchingDialog, SubscriptionDialog } from "./subscriptions";
+import { AllocateDialog } from "./allocate-dialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -40,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
 const OVERDUE_DAYS = 5;
 const DAY = 24 * 60 * 60 * 1000;
@@ -51,10 +35,6 @@ const isActive = (s: AdminSubscription) => !s.holding_id && stageOfStatus(s.stat
 /** When the subscription entered its current stage, for "waiting" ages. */
 function stageSince(s: AdminSubscription): string | null {
   switch (s.status) {
-    case "under_luca_review":
-      return s.institution_reviewed_at ?? s.confirmed_at ?? s.created_at;
-    case "information_requested":
-      return s.information_requested_at ?? s.created_at;
     case "approved":
     case "awaiting_funds":
       return s.approved_at ?? s.created_at;
@@ -80,176 +60,7 @@ function stageSince(s: AdminSubscription): string | null {
 const ageInDays = (s: AdminSubscription) =>
   Math.max(0, Math.floor((Date.now() - new Date(stageSince(s) ?? s.created_at).getTime()) / DAY));
 
-/* ─── One-click decisions (with a confirmation step) ─── */
-
-type Decision = { kind: "approve" | "info" | "decline"; subs: AdminSubscription[] };
-
-function DecisionDialog({
-  decision,
-  onClose,
-  onDone,
-}: {
-  decision: Decision;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const { kind, subs } = decision;
-  const single = subs.length === 1 ? subs[0] : null;
-  const total = subs.reduce((n, s) => n + parseFloat(s.amount), 0);
-  const [note, setNote] = useState("");
-  const [reason, setReason] = useState<string | null>(null);
-
-  const send = useMutation({
-    mutationFn: async () => {
-      if (kind === "approve" && subs.length > 1) {
-        const result = await api<BulkTransitionResponse>(
-          "/api/v1/admin/subscriptions/bulk_transition",
-          { method: "POST", body: { ids: subs.map((s) => s.id), to: "approved" } },
-        );
-        if (result.errors.length > 0)
-          throw new Error(
-            `${result.errors.length} could not be approved: ${result.errors[0].error}`,
-          );
-        return;
-      }
-      const sub = subs[0];
-      await api(`/api/v1/admin/subscriptions/${sub.id}/transition`, {
-        method: "POST",
-        body:
-          kind === "approve"
-            ? { to: "approved" }
-            : kind === "info"
-              ? { to: "information_requested", information_request_note: note.trim() }
-              : {
-                  to: "rejected",
-                  rejection_reason: reason ?? undefined,
-                  rejection_note: note.trim() || undefined,
-                },
-      });
-    },
-    onSuccess: () => {
-      toast.success(
-        kind === "approve"
-          ? `${subs.length === 1 ? "Subscription" : `${subs.length} subscriptions`} approved. Investors will be asked to fund.`
-          : kind === "info"
-            ? "Information request sent."
-            : "Subscription declined.",
-      );
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const title =
-    kind === "approve"
-      ? single
-        ? "Approve this subscription?"
-        : `Approve ${subs.length} subscriptions?`
-      : kind === "info"
-        ? "Request more information"
-        : "Decline this subscription";
-
-  const ready = kind === "info" ? note.trim() !== "" : kind === "decline" ? reason !== null : true;
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogTitle>{title}</DialogTitle>
-
-        {single ? (
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{single.investor_name}</span> ·{" "}
-            {single.asset_name} · {formatPrice(single.amount)}
-          </p>
-        ) : (
-          <div className="text-sm text-muted-foreground">
-            <p>
-              {subs.length} subscriptions totalling{" "}
-              <span className="font-medium text-foreground">{formatPrice(total)}</span>
-            </p>
-            <ul className="mt-2 max-h-40 divide-y overflow-y-auto border-y">
-              {subs.map((s) => (
-                <li key={s.id} className="flex justify-between gap-3 py-1.5">
-                  <span className="truncate">
-                    {s.investor_name} · {s.asset_name}
-                  </span>
-                  <span className="tabular-nums">{formatPrice(s.amount)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {kind === "approve" && (
-          <p className="text-sm text-muted-foreground">
-            The investor{subs.length === 1 ? "" : "s"} will be notified to transfer funds. This is
-            recorded in the audit trail.
-          </p>
-        )}
-
-        {kind === "info" && (
-          <div className="space-y-1.5">
-            <Label htmlFor="decision-note">What’s missing or needed?</Label>
-            <Textarea
-              id="decision-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Updated proof of address dated within the last 3 months"
-            />
-          </div>
-        )}
-
-        {kind === "decline" && (
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Reason</Label>
-              <Select value={reason ?? undefined} onValueChange={(v) => setReason(v as string)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a reason…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REJECTION_REASONS.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="decision-note">
-                Note <span className="text-muted-foreground">(optional)</span>
-              </Label>
-              <Textarea id="decision-note" value={note} onChange={(e) => setNote(e.target.value)} />
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            className="flex-1"
-            variant={kind === "decline" ? "destructive" : "default"}
-            disabled={!ready || send.isPending}
-            onClick={() => send.mutate()}
-          >
-            {send.isPending
-              ? "Saving..."
-              : kind === "approve"
-                ? "Approve"
-                : kind === "info"
-                  ? "Send request"
-                  : "Decline subscription"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/* ─── The subscriptions page: active stages, worked from the top ─── */
+/* ─── The subscriptions page: by fund, then by stage ─── */
 
 type StageFilter = "ready_allocation" | "all" | (typeof SUBSCRIPTION_STAGES)[number]["key"];
 
@@ -260,6 +71,8 @@ const stageLabel = (key: StageFilter) =>
       ? "All stages"
       : (SUBSCRIPTION_STAGES.find((st) => st.key === key)?.label ?? key);
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 export default function AdminSubscriptionsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -267,6 +80,7 @@ export default function AdminSubscriptionsPage() {
   const stageFromUrl = searchParams.get("stage");
   const dealFromUrl = searchParams.get("deal");
   const queryFromUrl = searchParams.get("q") ?? "";
+  const allocateFromUrl = Number(searchParams.get("allocate")) || null;
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "subscriptions", "board"],
@@ -313,10 +127,8 @@ export default function AdminSubscriptionsPage() {
   const [onlyMine, setOnlyMine] = useState(!filteredByUrl);
   const [deal, setDeal] = useState(dealFromUrl ?? "all");
   const [search, setSearch] = useState(queryFromUrl);
-  const [bulkMode, setBulkMode] = useState(false);
-  const [selected, setSelected] = useState<number[]>([]);
-  const [decision, setDecision] = useState<Decision | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [allocateId, setAllocateId] = useState<number | null>(allocateFromUrl);
   const [matchingOpen, setMatchingOpen] = useState(false);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "subscriptions"] });
@@ -326,7 +138,7 @@ export default function AdminSubscriptionsPage() {
     [active],
   );
 
-  // Everything except the stage filter, so each stage tab can show its own count.
+  // Everything except the stage filter, so each stage option can show its own count.
   const scoped = useMemo(() => {
     const q = search.trim().toLowerCase();
     return active.filter(
@@ -369,23 +181,32 @@ export default function AdminSubscriptionsPage() {
     [scoped, stage],
   );
 
-  const groups = useMemo(() => {
+  // Fund first; funds with something waiting on LUCA come first.
+  const funds = useMemo(() => {
     const book = new Map<number, AdminSubscription[]>();
     for (const sub of rows) {
-      const group = book.get(sub.investor_id) ?? [];
-      group.push(sub);
-      book.set(sub.investor_id, group);
+      const list = book.get(sub.fund_id) ?? [];
+      list.push(sub);
+      book.set(sub.fund_id, list);
     }
-    return [...book.values()];
+    return [...book.values()].sort(
+      (a, b) =>
+        b.filter((s) => s.owner === "luca").length - a.filter((s) => s.owner === "luca").length ||
+        a[0].fund_name.localeCompare(b[0].fund_name),
+    );
   }, [rows]);
 
-  const approvable = rows.filter((s) => s.available_transitions.includes("approved"));
-  const selectedSubs = approvable.filter((s) => selected.includes(s.id));
   const detail = all.find((s) => s.id === detailId) ?? null;
+  const allocating = all.find((s) => s.id === allocateId && s.status === "allocation_pending");
   const rowTotal = rows.reduce((n, s) => n + parseFloat(s.amount), 0);
+  const clients = new Set(rows.map((s) => s.investor_id)).size;
 
   const clearUrl = () => {
     if (filteredByUrl) setSearchParams({});
+  };
+  const closeAllocate = () => {
+    setAllocateId(null);
+    if (searchParams.has("allocate")) setSearchParams({}, { replace: true });
   };
 
   return (
@@ -429,7 +250,6 @@ export default function AdminSubscriptionsPage() {
             aria-selected={onlyMine === queue.mine}
             onClick={() => {
               setOnlyMine(queue.mine);
-              setSelected([]);
               clearUrl();
             }}
             className={`flex items-center gap-2 border-b-2 pb-3 text-sm ${onlyMine === queue.mine ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}
@@ -441,7 +261,7 @@ export default function AdminSubscriptionsPage() {
           </button>
         ))}
       </div>
-      {/* Filters */}
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-60 flex-1 sm:max-w-sm">
           <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -459,13 +279,13 @@ export default function AdminSubscriptionsPage() {
             clearUrl();
           }}
         >
-          <SelectTrigger className="w-52">
+          <SelectTrigger className="w-52" aria-label="Fund">
             <SelectValue>
-              {deal === "all" ? "All deals" : deals.find(([id]) => String(id) === deal)?.[1]}
+              {deal === "all" ? "All funds" : deals.find(([id]) => String(id) === deal)?.[1]}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All deals</SelectItem>
+            <SelectItem value="all">All funds</SelectItem>
             {deals.map(([id, name]) => (
               <SelectItem key={id} value={String(id)}>
                 {name}
@@ -477,20 +297,18 @@ export default function AdminSubscriptionsPage() {
           value={stage}
           onValueChange={(value) => {
             setStage(value as StageFilter);
-            setSelected([]);
             clearUrl();
           }}
         >
-          <SelectTrigger className="w-52" aria-label="Subscription stage">
+          <SelectTrigger className="w-56" aria-label="Subscription stage">
             <SelectValue>{stageLabel(stage)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {(
               [
                 "all",
-                ...SUBSCRIPTION_STAGES.slice(0, -1).map((st) => st.key),
+                ...SUBSCRIPTION_STAGES.map((st) => st.key),
                 "ready_allocation",
-                SUBSCRIPTION_STAGES.at(-1)!.key,
               ] as StageFilter[]
             ).map((key) => (
               <SelectItem key={key} value={key}>
@@ -499,45 +317,11 @@ export default function AdminSubscriptionsPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            setBulkMode(!bulkMode);
-            setSelected([]);
-          }}
-        >
-          {bulkMode ? "Done selecting" : "Select multiple"}
-        </Button>
         <p className="ml-auto text-sm text-muted-foreground tabular-nums">
-          {groups.length} client{groups.length === 1 ? "" : "s"} · {rows.length} subscription
-          {rows.length === 1 ? "" : "s"} · {formatPrice(rowTotal)}
+          {plural(clients, "client")} · {plural(rows.length, "subscription")} ·{" "}
+          {formatPrice(rowTotal)}
         </p>
       </div>
-
-      {stage !== "all" && (
-        <p className="-mt-2 text-sm text-muted-foreground">
-          {stage === "ready_allocation"
-            ? "Review the received funds and record the allocation for each subscription."
-            : SUBSCRIPTION_STAGES.find((st) => st.key === stage)?.detail}
-        </p>
-      )}
-
-      {/* Bulk approval */}
-      {selectedSubs.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-md bg-muted/50 px-4 py-2.5 text-sm">
-          <span>
-            <strong>{selectedSubs.length}</strong> selected ·{" "}
-            {formatPrice(selectedSubs.reduce((n, s) => n + parseFloat(s.amount), 0))}
-          </span>
-          <Button size="sm" onClick={() => setDecision({ kind: "approve", subs: selectedSubs })}>
-            Approve selected
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
-            Clear
-          </Button>
-        </div>
-      )}
 
       {isLoading ? (
         <p className="py-12 text-center text-muted-foreground">Loading...</p>
@@ -550,225 +334,139 @@ export default function AdminSubscriptionsPage() {
               : "No subscriptions match these filters."}
         </p>
       ) : (
-        <div className="space-y-4">
-          {bulkMode && approvable.length > 0 && (
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={selectedSubs.length === approvable.length}
-                onChange={(e) => setSelected(e.target.checked ? approvable.map((s) => s.id) : [])}
-              />
-              Select all awaiting approval
-            </label>
-          )}
-          {groups.map((subs) => {
-            const client = subs[0];
-            const total = subs.reduce((sum, s) => sum + Number(s.amount), 0);
-            const firmId = client.eam_firm ? partnerIdByFirm.get(client.eam_firm) : undefined;
+        <div className="space-y-10">
+          {funds.map((subs) => {
+            const lead = subs[0];
+            const mine = subs.filter((s) => s.owner === "luca").length;
+            const total = subs.reduce((n, s) => n + parseFloat(s.amount), 0);
             return (
-              <section
-                key={client.investor_id}
-                aria-label={client.investor_name}
-                className="overflow-hidden rounded-xl border bg-card"
-              >
-                <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-5 py-4 sm:px-6">
+              <section key={lead.fund_id} aria-label={lead.fund_name} className="space-y-5">
+                <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1 border-b pb-3">
                   <div>
                     <Link
-                      to={`/luca/investors/${client.investor_id}`}
-                      className="text-base font-semibold hover:underline"
+                      to={`/luca/deals/${lead.fund_id}`}
+                      className="text-xl font-semibold hover:underline"
                     >
-                      {client.investor_name}
+                      {lead.fund_name}
                     </Link>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {firmId ? (
-                        <Link
-                          to={`/luca/partners/${encodeURIComponent(client.eam_firm ?? "")}`}
-                          className="hover:underline"
-                        >
-                          {client.eam_firm}
-                        </Link>
-                      ) : (
-                        (client.eam_firm ?? "Direct client")
-                      )}{" "}
-                      <span className="mx-1">·</span> {subs.length} subscription
-                      {subs.length === 1 ? "" : "s"}
-                    </p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{lead.asset_name}</p>
                   </div>
-                  {subs.length > 1 && (
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Total subscribed</p>
-                      <p className="mt-1 text-sm font-medium tabular-nums">{formatPrice(total)}</p>
-                    </div>
-                  )}
+                  <p className="text-sm text-muted-foreground tabular-nums">
+                    {plural(subs.length, "subscription")} · {formatPrice(total)}
+                    {mine > 0 && (
+                      <span className="ml-2 font-medium text-amber-700">{mine} for you</span>
+                    )}
+                  </p>
                 </header>
-                <ul className="divide-y">
-                  {subs.map((sub) => {
-                    const age = ageInDays(sub);
-                    const canApprove = sub.available_transitions.includes("approved");
-                    const canInfo = sub.available_transitions.includes("information_requested");
-                    const canDecline = sub.available_transitions.includes("rejected");
-                    const allocating = sub.status === "allocation_pending";
-                    return (
-                      <li
-                        key={sub.id}
-                        className="grid items-center gap-4 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_7rem_12.5rem]"
-                      >
-                        <div className="flex items-center gap-3">
-                          {bulkMode && canApprove && (
-                            <input
-                              type="checkbox"
-                              aria-label={`Select ${sub.asset_name} subscription for ${sub.investor_name}`}
-                              checked={selected.includes(sub.id)}
-                              onChange={(e) =>
-                                setSelected((previous) =>
-                                  e.target.checked
-                                    ? [...previous, sub.id]
-                                    : previous.filter((id) => id !== sub.id),
-                                )
-                              }
-                            />
-                          )}
-                          <div className="min-w-0">
-                            {deal === "all" ? (
-                              <>
+
+                {SUBSCRIPTION_STAGES.map((st) => {
+                  const inStage = subs.filter((s) => stageOfStatus(s.status)?.key === st.key);
+                  if (inStage.length === 0) return null;
+                  return (
+                    <div key={st.key} className="space-y-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                        <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                          {st.label} ({inStage.length})
+                        </h3>
+                        <p className="text-xs text-muted-foreground">{st.detail}</p>
+                      </div>
+                      <ul className="divide-y border-y">
+                        {inStage.map((sub) => {
+                          const age = ageInDays(sub);
+                          const readyToAllocate = sub.status === "allocation_pending";
+                          const firmId = sub.eam_firm
+                            ? partnerIdByFirm.get(sub.eam_firm)
+                            : undefined;
+                          return (
+                            <li
+                              key={sub.id}
+                              className="grid items-center gap-x-4 gap-y-1 py-3.5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.3fr)_7rem_11rem]"
+                            >
+                              <div className="min-w-0">
                                 <Link
-                                  to={`/luca/deals/${sub.fund_id}`}
-                                  className="text-sm font-medium hover:underline"
+                                  to={`/luca/investors/${sub.investor_id}`}
+                                  className="block truncate text-sm font-medium hover:underline"
                                 >
-                                  {sub.asset_name}
+                                  {sub.investor_name}
                                 </Link>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {sub.fund_name} · #{sub.id}
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                  {firmId ? (
+                                    <Link
+                                      to={`/luca/partners/${encodeURIComponent(sub.eam_firm ?? "")}`}
+                                      className="hover:underline"
+                                    >
+                                      {sub.eam_firm}
+                                    </Link>
+                                  ) : (
+                                    (sub.eam_firm ?? "Direct")
+                                  )}{" "}
+                                  · #{sub.id}
                                   {customTerms.has(`${sub.fund_id}:${sub.investor_id}`) &&
                                     " · Custom terms"}
                                 </p>
-                              </>
-                            ) : (
-                              <>
-                                <p className="text-sm font-medium">Subscription #{sub.id}</p>
-                                {customTerms.has(`${sub.fund_id}:${sub.investor_id}`) && (
-                                  <p className="mt-1 text-xs text-muted-foreground">Custom terms</p>
+                              </div>
+                              <div>
+                                <p className="text-sm">
+                                  {readyToAllocate
+                                    ? "Ready for allocation"
+                                    : STATUS_LABELS[sub.status]}
+                                  {sub.on_hold ? " · On hold" : ""}
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {sub.owner === "luca"
+                                    ? "Waiting for your decision"
+                                    : "With " + (OWNER_LABELS[sub.owner] ?? sub.owner)}{" "}
+                                  <span className="mx-1">·</span>
+                                  <span
+                                    className={
+                                      sub.owner === "luca" && age > OVERDUE_DAYS
+                                        ? "text-amber-700"
+                                        : ""
+                                    }
+                                  >
+                                    {plural(age, "day")}
+                                  </span>
+                                </p>
+                              </div>
+                              <p className="text-sm font-semibold tabular-nums lg:text-right">
+                                {formatPrice(sub.amount)}
+                              </p>
+                              <div className="lg:flex lg:justify-end">
+                                {readyToAllocate ? (
+                                  <Button variant="outline" onClick={() => setAllocateId(sub.id)}>
+                                    Allocate
+                                    <ArrowRightIcon className="size-3.5" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    onClick={() =>
+                                      sub.status === "payment_unmatched"
+                                        ? setMatchingOpen(true)
+                                        : setDetailId(sub.id)
+                                    }
+                                  >
+                                    {sub.status === "payment_unmatched"
+                                      ? "Match payment"
+                                      : "View subscription"}
+                                    <ArrowRightIcon className="size-3.5" />
+                                  </Button>
                                 )}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-sm">
-                            {allocating ? "Ready for allocation" : STATUS_LABELS[sub.status]}
-                            {sub.on_hold ? " · On hold" : ""}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {sub.owner === "luca"
-                              ? "Waiting for your decision"
-                              : "With " + (OWNER_LABELS[sub.owner] ?? sub.owner)}{" "}
-                            <span className="mx-1">·</span>
-                            <span
-                              className={
-                                sub.owner === "luca" && age > OVERDUE_DAYS ? "text-amber-700" : ""
-                              }
-                            >
-                              {age} day{age === 1 ? "" : "s"}
-                            </span>
-                          </p>
-                        </div>
-                        <div className="lg:text-right">
-                          <p className="text-xs text-muted-foreground lg:hidden">
-                            Subscribed capital
-                          </p>
-                          <p className="text-sm font-semibold tabular-nums">
-                            {formatPrice(sub.amount)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 lg:justify-end">
-                          {allocating ? (
-                            <Button
-                              variant="outline"
-                              nativeButton={false}
-                              render={<Link to={`/luca/subscriptions/${sub.id}/allocate`} />}
-                            >
-                              Allocate
-                              <ArrowRightIcon className="size-3.5" />
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              onClick={() =>
-                                sub.status === "payment_unmatched"
-                                  ? setMatchingOpen(true)
-                                  : setDetailId(sub.id)
-                              }
-                            >
-                              {sub.status === "payment_unmatched"
-                                ? "Match payment"
-                                : canApprove
-                                  ? "Review application"
-                                  : "View subscription"}
-                              <ArrowRightIcon className="size-3.5" />
-                            </Button>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label={`More actions for ${sub.asset_name} subscription #${sub.id}`}
-                                />
-                              }
-                            >
-                              <MoreHorizontalIcon className="size-4" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="min-w-44">
-                              <DropdownMenuItem onClick={() => setDetailId(sub.id)}>
-                                View details
-                              </DropdownMenuItem>
-                              {canApprove && (
-                                <DropdownMenuItem
-                                  onClick={() => setDecision({ kind: "approve", subs: [sub] })}
-                                >
-                                  Approve application
-                                </DropdownMenuItem>
-                              )}
-                              {canInfo && (
-                                <DropdownMenuItem
-                                  onClick={() => setDecision({ kind: "info", subs: [sub] })}
-                                >
-                                  Request information
-                                </DropdownMenuItem>
-                              )}
-                              {canDecline && (
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onClick={() => setDecision({ kind: "decline", subs: [sub] })}
-                                >
-                                  Decline application
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })}
               </section>
             );
           })}
         </div>
       )}
 
-      {decision && (
-        <DecisionDialog
-          decision={decision}
-          onClose={() => setDecision(null)}
-          onDone={() => {
-            setDecision(null);
-            setSelected([]);
-            refresh();
-          }}
-        />
-      )}
+      {allocating && <AllocateDialog subscription={allocating} onClose={closeAllocate} />}
 
       {detail && (
         <SubscriptionDialog

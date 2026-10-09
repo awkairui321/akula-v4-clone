@@ -47,8 +47,6 @@ const STATUS_VARIANT: Record<
   reserved: "outline",
   documents_pending: "outline",
   institution_review: "secondary",
-  under_luca_review: "secondary",
-  information_requested: "secondary",
   approved: "default",
   awaiting_funds: "secondary",
   payment_unmatched: "destructive",
@@ -77,12 +75,8 @@ const STAGE_GUIDANCE: Record<SubscriptionStatus, string> = {
   documents_pending:
     "The investor needs to sign the subscription documents before review can begin.",
   institution_review:
-    "The external institution or EAM reviews the investor before LUCA makes its decision.",
-  under_luca_review:
-    "LUCA reviews eligibility and the investor file. Choose approve, request information, or decline below.",
-  information_requested:
-    "The investor or their adviser must provide the requested information before LUCA can continue.",
-  approved: "LUCA approved the subscription. The investor now follows the funding instructions.",
+    "The partner's adviser signs off the subscription before funding instructions are released.",
+  approved: "Signed and cleared for funding. The investor now follows the funding instructions.",
   awaiting_funds:
     "The investor is arranging the transfer. Akula Ops records and matches the incoming funds.",
   payment_unmatched:
@@ -101,8 +95,6 @@ const STAGE_GUIDANCE: Record<SubscriptionStatus, string> = {
 
 const TRANSITION_LABELS: Partial<Record<SubscriptionStatus, string>> = {
   institution_review: "Route to institution review",
-  under_luca_review: "Send to LUCA review",
-  information_requested: "Request missing information",
   approved: "Approve subscription",
   awaiting_funds: "Confirm approval and notify investor",
   reconciliation: "Record funds reconciled",
@@ -296,7 +288,7 @@ export function SubscriptionDialog({
   // deciding on this investor — auto-open it then, keep it tucked away
   // otherwise rather than always taking up space regardless of context.
   const [showVerification, setShowVerification] = useState(
-    subscription.status === "under_luca_review",
+    subscription.status === "allocation_pending",
   );
   const [showTimeline, setShowTimeline] = useState(false);
 
@@ -304,8 +296,6 @@ export function SubscriptionDialog({
   const [pendingAllocation, setPendingAllocation] = useState(false);
   const [units, setUnits] = useState("");
   const [pricePerUnit, setPricePerUnit] = useState("");
-  const [pendingInfoRequest, setPendingInfoRequest] = useState(false);
-  const [infoRequestNote, setInfoRequestNote] = useState("");
   const [pendingRejection, setPendingRejection] = useState(false);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
@@ -323,8 +313,6 @@ export function SubscriptionDialog({
               : undefined,
             units: to === "allocated" ? units.trim() || undefined : undefined,
             price_per_unit: to === "allocated" ? pricePerUnit.trim() || undefined : undefined,
-            information_request_note:
-              to === "information_requested" ? infoRequestNote.trim() : undefined,
             rejection_reason: to === "rejected" ? (rejectionReason ?? undefined) : undefined,
             rejection_note: to === "rejected" ? rejectionNote.trim() || undefined : undefined,
           },
@@ -333,7 +321,6 @@ export function SubscriptionDialog({
     onSuccess: (result) => {
       toast.success(`Moved to ${STATUS_LABELS[result.subscription.status].toLowerCase()}.`);
       setPendingAllocation(false);
-      setPendingInfoRequest(false);
       setPendingRejection(false);
       onMoved(result.subscription);
     },
@@ -451,22 +438,6 @@ export function SubscriptionDialog({
             <p className="text-muted-foreground">{STAGE_GUIDANCE[subscription.status]}</p>
           </div>
 
-          {subscription.information_response_note && (
-            <div className="border-y py-3 text-sm">
-              <p className="font-medium">Response received</p>
-              <p>{subscription.information_response_note}</p>
-              <p className="text-xs text-muted-foreground">
-                {subscription.information_responded_at}
-              </p>
-            </div>
-          )}
-          {subscription.information_request_note && (
-            <div className="rounded-lg border border-dashed p-3 text-sm">
-              <p className="font-medium">Information requested</p>
-              <p className="mt-1 text-muted-foreground">{subscription.information_request_note}</p>
-            </div>
-          )}
-
           {subscription.payment_claimed && (
             <div className="rounded-lg border border-dashed p-3 text-sm">
               <p className="font-medium">The investor says they sent the transfer.</p>
@@ -506,18 +477,6 @@ export function SubscriptionDialog({
                   />
                 </div>
               </div>
-            </div>
-          )}
-
-          {pendingInfoRequest && (
-            <div className="space-y-2 rounded-lg border bg-card p-3">
-              <Label htmlFor="info-request-note">What's missing or needed?</Label>
-              <Textarea
-                id="info-request-note"
-                value={infoRequestNote}
-                onChange={(e) => setInfoRequestNote(e.target.value)}
-                placeholder="e.g. Updated proof of address dated within the last 3 months"
-              />
             </div>
           )}
 
@@ -574,16 +533,11 @@ export function SubscriptionDialog({
                 const label =
                   to === "allocated" && pendingAllocation
                     ? "Confirm allocation"
-                    : to === "information_requested" && pendingInfoRequest
-                      ? "Send information request"
-                      : to === "rejected" && pendingRejection
-                        ? "Confirm rejection"
-                        : (TRANSITION_LABELS[to] ?? `Continue to ${STATUS_LABELS[to]}`);
+                    : to === "rejected" && pendingRejection
+                      ? "Confirm rejection"
+                      : (TRANSITION_LABELS[to] ?? `Continue to ${STATUS_LABELS[to]}`);
                 const disabled =
                   transition.isPending ||
-                  (to === "information_requested" &&
-                    pendingInfoRequest &&
-                    !infoRequestNote.trim()) ||
                   (to === "rejected" && pendingRejection && !rejectionReason);
                 return (
                   <Button
@@ -594,10 +548,6 @@ export function SubscriptionDialog({
                     onClick={() => {
                       if (to === "allocated" && !pendingAllocation) {
                         setPendingAllocation(true);
-                        return;
-                      }
-                      if (to === "information_requested" && !pendingInfoRequest) {
-                        setPendingInfoRequest(true);
                         return;
                       }
                       if (to === "rejected" && !pendingRejection) {

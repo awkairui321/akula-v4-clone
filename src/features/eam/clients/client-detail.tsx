@@ -279,40 +279,6 @@ function OverviewTab({ detail, highlights }: { detail: ClientDetail; highlights:
   );
 }
 
-function InstitutionResponse({ subscription }: { subscription: ClientSubscription }) {
-  const [text, setText] = useState("");
-  const qc = useQueryClient();
-  const response = useMutation({
-    mutationFn: () =>
-      api("/api/v1/workflows", {
-        method: "POST",
-        body: { type: "respond-information", id: subscription.id, text },
-      }),
-    onSuccess: () => {
-      setText("");
-      qc.invalidateQueries();
-    },
-  });
-  return (
-    <div className="mt-2 space-y-2">
-      <p className="text-xs">{subscription.information_request_note}</p>
-      <Textarea
-        aria-label="Response to LUCA"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <Button
-        size="sm"
-        disabled={!text.trim() || response.isPending || subscription.on_hold}
-        onClick={() => response.mutate()}
-      >
-        Submit response to LUCA
-      </Button>
-      {response.isError && <p role="alert">{response.error.message}</p>}
-    </div>
-  );
-}
-
 function HoldingsTab({ detail }: { detail: ClientDetail }) {
   const queryClient = useQueryClient();
   const review = useMutation({
@@ -428,7 +394,6 @@ function HoldingsTab({ detail }: { detail: ClientDetail }) {
                     </Button>
                   )}
                   {s.on_hold && <p className="text-xs">On hold by LUCA</p>}
-                  {s.status === "information_requested" && <InstitutionResponse subscription={s} />}
                 </span>
               </div>
             ))}

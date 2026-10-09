@@ -301,18 +301,6 @@ export default function AdminDashboard() {
       to: `/luca/deals/${v.fundId}?tab=review`,
     })),
     ...allSubs
-      .filter((s) => s.status === "under_luca_review")
-      .map((s) => ({
-        key: `decide-${s.id}`,
-        title: s.investor_name,
-        detail: `${s.asset_name} · ${s.eam_firm ?? "Direct"}`,
-        needs: "Approve or reject subscription",
-        priority: 0,
-        ageDays: daysSince(s.institution_reviewed_at ?? s.created_at),
-        amount: parseFloat(s.amount),
-        to: "/luca/subscriptions?status=under_luca_review",
-      })),
-    ...allSubs
       .filter((s) => s.status === "payment_unmatched")
       .map((s) => ({
         key: `payment-${s.id}`,
@@ -335,22 +323,6 @@ export default function AdminDashboard() {
         ageDays: daysSince(s.reconciled_at ?? s.funds_received_at ?? s.created_at),
         amount: parseFloat(s.amount),
         to: "/luca/subscriptions?status=allocation_pending",
-      })),
-    ...allSubs
-      .filter(
-        (s) =>
-          s.status === "information_requested" &&
-          daysSince(s.information_requested_at) > OVERDUE_DAYS,
-      )
-      .map((s) => ({
-        key: `chase-${s.id}`,
-        title: s.investor_name,
-        detail: `${s.asset_name} · ${s.eam_firm ?? "Direct"}`,
-        needs: "Chase information request",
-        priority: 1,
-        ageDays: daysSince(s.information_requested_at),
-        amount: parseFloat(s.amount),
-        to: "/luca/subscriptions?status=information_requested",
       })),
     ...(investorsData?.investors ?? [])
       .filter((i) => clientStage(i).waitingOn === "luca")

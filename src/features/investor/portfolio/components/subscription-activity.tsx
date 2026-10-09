@@ -67,12 +67,6 @@ const REQUIRED_ACTIONS: Partial<Record<SubscriptionStatus, RequiredAction>> = {
     cta: "Sign subscription form",
     kind: "checkout",
   },
-  information_requested: {
-    title: "Respond to an information request",
-    detail: "LUCA needs additional information to continue its review.",
-    cta: "Review request",
-    kind: "checkout",
-  },
   approved: {
     title: "Arrange your funds transfer",
     detail: "Your investment is approved and ready for funding.",

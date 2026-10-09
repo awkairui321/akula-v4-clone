@@ -790,54 +790,6 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       s.next_action = "match_payment";
       break;
     }
-    case "respond-information": {
-      const s = sub();
-      requireValue(
-        user.id === s.investor_id ||
-          (user.has_eam_profile &&
-            db.adviserClients.some(
-              (client) => client.investor_id === s.investor_id && client.eam_user_id === user.id,
-            )),
-        "Investor or assigned institution required.",
-      );
-      requireValue(
-        s.status === "information_requested" && !s.on_hold,
-        "Information response is not available.",
-      );
-      s.information_response_note = text();
-      s.information_responded_at = now();
-      s.status = "under_luca_review";
-      s.owner = "luca";
-      s.next_action = "luca_to_review";
-      break;
-    }
-    case "subscription-decision": {
-      role("luca");
-      const s = sub();
-      active(s);
-      requireValue(s.status === "under_luca_review", "Subscription must be awaiting LUCA review.");
-      requireValue(
-        ["approved", "information_requested", "rejected"].includes(c.status ?? ""),
-        "Choose a review decision.",
-      );
-      if (c.status === "information_requested") {
-        s.information_request_note = text();
-        s.information_requested_at = now();
-        s.information_request_delivery = "email_pending_integration";
-        s.information_response_note = null;
-        s.information_responded_at = null;
-      }
-      if (c.status === "rejected") {
-        s.rejection_note = text();
-        s.rejection_reason = "other";
-        s.rejected_at = now();
-      }
-      if (c.status === "approved") s.approved_at = now();
-      s.status = c.status as typeof s.status;
-      s.owner = db.ownerFor(s.status, s.origin);
-      s.next_action = db.nextActionFor(s.status);
-      break;
-    }
     case "subscription-hold": {
       role("luca");
       const s = sub();
@@ -860,10 +812,12 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         s.status === "institution_review" && !s.on_hold,
         "Institution review is not available.",
       );
-      s.status = "under_luca_review";
-      s.owner = "luca";
-      s.next_action = "luca_to_review";
+      // LUCA does not approve each subscription; the adviser's sign-off releases it for funding.
+      s.status = "approved";
+      s.owner = db.ownerFor("approved");
+      s.next_action = db.nextActionFor("approved");
       s.institution_reviewed_at = now();
+      s.approved_at = now();
       break;
     }
     case "receipt": {
@@ -968,6 +922,57 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       s.owner = "akula_ops";
       s.next_action = capital ? "confirm_registry_issuance" : "return_funds";
       ensureReturns(s);
+      db.sendInvestorMessage(
+        s.investor_id,
+        capital
+          ? `Your allocation in ${s.asset_name} is confirmed`
+          : `Your ${s.asset_name} subscription was not allocated`,
+        capital
+          ? `LUCA has allocated ${money(capital, 0)} to you in ${s.fund_name}. Akula Ops will now issue your holding.`
+          : `LUCA did not allocate this subscription. Your funds will be returned to you.`,
+        "allocation",
+      );
+      break;
+    }
+    case "decline-allocation": {
+      role("luca");
+      const s = sub();
+      const reason = text();
+      requireValue(
+        s.status === "allocation_pending" &&
+          !workflow.allocations.some((a) => a.subscriptionId === s.id && !a.voided),
+        "Only a subscription waiting for allocation can be declined.",
+      );
+      requireValue(!s.on_hold, "LUCA has placed this subscription on hold.");
+      workflow.allocations.push({
+        id: id(),
+        subscriptionId: s.id,
+        principal: 0,
+        fee: 0,
+        price: Number(db.findFundById(s.fund_id)?.price || 1),
+        at: now(),
+      });
+      s.allocated_principal = 0;
+      s.status = "not_allocated";
+      s.allocated_at = now();
+      s.rejection_reason = "allocation_declined";
+      s.rejection_note = reason;
+      s.rejected_at = now();
+      s.owner = "akula_ops";
+      s.next_action = "return_funds";
+      ensureReturns(s);
+      workflow.events.push({
+        id: id(),
+        actorId: user.id,
+        label: `${user.email} declined the allocation for subscription #${s.id}: ${reason}`,
+        at: now(),
+      });
+      db.sendInvestorMessage(
+        s.investor_id,
+        `Your ${s.asset_name} subscription was not allocated`,
+        `${reason}\n\nYour funds, including the subscription fee, will be returned to you.`,
+        "allocation",
+      );
       break;
     }
     case "issue": {

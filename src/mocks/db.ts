@@ -2298,13 +2298,11 @@ export function findDiscoverCompanyById(id: number): DiscoverCompany | undefined
 export const TRANSITIONS: Record<SubscriptionStatus, SubscriptionStatus[]> = {
   reserved: ["documents_pending", "cancelled"],
   // documents_pending's real next status forks on origin (institution_review for
-  // EAM-submitted, under_luca_review for direct) — decided in code by the
-  // SignWell completion handler, not by an admin picking from this list, so
-  // both are offered here for LUCA's manual override too.
-  documents_pending: ["institution_review", "under_luca_review", "cancelled"],
-  institution_review: ["under_luca_review", "cancelled"],
-  under_luca_review: ["information_requested", "approved", "rejected", "cancelled"],
-  information_requested: ["under_luca_review", "cancelled"],
+  // EAM-submitted, approved for direct) — decided in code by the SignWell completion
+  // handler. LUCA does not approve each subscription; the deal is only shown to investors
+  // LUCA chose, so a signed subscription goes straight to funding.
+  documents_pending: ["institution_review", "approved", "cancelled"],
+  institution_review: ["approved", "cancelled"],
   approved: ["awaiting_funds", "cancelled"],
   awaiting_funds: ["payment_unmatched", "reconciliation", "cancelled"],
   payment_unmatched: ["reconciliation", "cancelled"],
@@ -2321,8 +2319,6 @@ const NEXT_ACTION_BY_STATUS: Record<SubscriptionStatus, string> = {
   reserved: "accept_acknowledgements",
   documents_pending: "sign_documents",
   institution_review: "institution_to_review",
-  under_luca_review: "luca_to_review",
-  information_requested: "respond_information_request",
   approved: "proceed_to_funding",
   awaiting_funds: "transfer_funds",
   payment_unmatched: "match_payment",
@@ -2343,8 +2339,6 @@ const OWNER_BY_STATUS: Record<SubscriptionStatus, SubscriptionOwner> = {
   reserved: "investor",
   documents_pending: "investor",
   institution_review: "eam",
-  under_luca_review: "luca",
-  information_requested: "investor",
   approved: "investor",
   awaiting_funds: "investor",
   payment_unmatched: "akula_ops",
@@ -2357,8 +2351,7 @@ const OWNER_BY_STATUS: Record<SubscriptionStatus, SubscriptionOwner> = {
   cancelled: "complete",
 };
 
-export function ownerFor(status: SubscriptionStatus, origin?: string): SubscriptionOwner {
-  if (status === "information_requested" && origin === "eam") return "eam";
+export function ownerFor(status: SubscriptionStatus): SubscriptionOwner {
   return OWNER_BY_STATUS[status];
 }
 
@@ -2366,11 +2359,7 @@ export function nextActionFor(status: SubscriptionStatus): string {
   return NEXT_ACTION_BY_STATUS[status];
 }
 
-const REVIEW_STATUSES: SubscriptionStatus[] = [
-  "institution_review",
-  "under_luca_review",
-  "information_requested",
-];
+const REVIEW_STATUSES: SubscriptionStatus[] = ["institution_review"];
 
 export function wizardStepFor(sub: MockSubscription): string {
   switch (sub.status) {
@@ -2530,8 +2519,6 @@ function makeSubscription(
   const PIPELINE_ORDER: SubscriptionStatus[] = [
     "documents_pending",
     "institution_review",
-    "under_luca_review",
-    "information_requested",
     "approved",
     "awaiting_funds",
     "payment_unmatched",
@@ -2543,8 +2530,8 @@ function makeSubscription(
     "rejected",
   ];
   const isPast = (step: number) => PIPELINE_ORDER.indexOf(status) >= step || status === "cancelled";
-  const reviewReached = isPast(1); // at or past institution_review/under_luca_review
-  const approvedReached = isPast(4); // at or past approved
+  const reviewReached = isPast(1); // at or past institution_review
+  const approvedReached = isPast(2); // at or past approved
 
   return {
     id,
@@ -2554,7 +2541,7 @@ function makeSubscription(
     amount: amount.toFixed(2),
     currency: "USD",
     status,
-    owner: ownerFor(status, origin),
+    owner: ownerFor(status),
     next_action: nextActionFor(status),
     origin,
     subscription_fee: feeFor(fundId, amount, investor.id),
@@ -2565,12 +2552,8 @@ function makeSubscription(
     eam_firm: investor.eamFirm,
     eam_name: investor.eamName,
     on_hold: false,
-    information_request_note:
-      status === "information_requested"
-        ? "Please provide an updated proof of address (dated within the last 3 months)."
-        : null,
-    information_requested_at:
-      status === "information_requested" ? daysAgo(Math.max(0, ageDays - 4)) : null,
+    information_request_note: null,
+    information_requested_at: null,
     rejection_reason: status === "rejected" ? "accreditation_lapsed" : null,
     rejection_note:
       status === "rejected"
@@ -2735,19 +2718,15 @@ function seedSubscriptions() {
   subscriptions.push(
     makeSubscription(nextSubscriptionId(), 3, 70000, "institution_review", priya, 4),
   );
-  subscriptions.push(
-    makeSubscription(nextSubscriptionId(), 1, 55000, "under_luca_review", julian, 12),
-  );
-  subscriptions.push(
-    makeSubscription(nextSubscriptionId(), 4, 42000, "information_requested", marcus, 11),
-  );
+  subscriptions.push(makeSubscription(nextSubscriptionId(), 1, 55000, "approved", julian, 12));
+  subscriptions.push(makeSubscription(nextSubscriptionId(), 4, 42000, "approved", marcus, 11));
   subscriptions.push(makeSubscription(nextSubscriptionId(), 2, 65000, "approved", sofia, 3));
   subscriptions.push(makeSubscription(nextSubscriptionId(), 5, 38000, "rejected", daniel, 11));
 
   // Made-up activity on the illustrative deals (Helix, Northwind, Quanta, Tidewater).
   type SeedInvestor = Parameters<typeof makeSubscription>[4];
   const extra: [number, number, SubscriptionStatus, SeedInvestor, number][] = [
-    [6, 60000, "under_luca_review", priya, 9],
+    [6, 60000, "approved", priya, 9],
     [6, 100000, "allocated", julian, 40],
     [6, 45000, "awaiting_funds", sofia, 14],
     [7, 35000, "documents_pending", marcus, 6],
@@ -2756,9 +2735,9 @@ function seedSubscriptions() {
     [8, 120000, "allocated", amara, 55],
     [8, 80000, "reconciliation", felix, 20],
     [8, 90000, "payment_unmatched", investor2, 16],
-    [8, 75000, "under_luca_review", priya, 7],
+    [8, 75000, "approved", priya, 7],
     [9, 60000, "allocated", julian, 45],
-    [9, 30000, "information_requested", sofia, 8],
+    [9, 30000, "approved", sofia, 8],
   ];
   for (const [fundId, amount, status, who, age] of extra) {
     subscriptions.push(makeSubscription(nextSubscriptionId(), fundId, amount, status, who, age));
@@ -2813,12 +2792,12 @@ function seedSubscriptions() {
   const journey: [number, number, SubscriptionStatus, SeedInvestor, number][] = [
     [6, 90000, "allocated", isabella, 100],
     [7, 50000, "awaiting_funds", isabella, 12],
-    [8, 85000, "under_luca_review", tomas, 6],
+    [8, 85000, "approved", tomas, 6],
     [1, 40000, "documents_pending", tomas, 3],
     [9, 40000, "documents_pending", rohan, 4],
     [3, 60000, "institution_review", rohan, 2],
     [8, 150000, "reconciliation", omar, 18],
-    [6, 50000, "information_requested", omar, 9],
+    [6, 50000, "approved", omar, 9],
     [7, 60000, "approved", chen, 2],
     [1, 70000, "allocation_pending", chen, 26],
     [6, 25000, "rejected", sofiaL, 40],
@@ -2910,7 +2889,6 @@ export function toAdminSubscription(sub: MockSubscription) {
     rejection_note: sub.rejection_note,
     available_transitions: TRANSITIONS[sub.status].filter(
       (t) =>
-        (t === "under_luca_review" && sub.status === "information_requested") ||
         ![
           "allocated",
           "not_allocated",
@@ -2919,7 +2897,6 @@ export function toAdminSubscription(sub: MockSubscription) {
           "reconciliation",
           "allocation_pending",
           "institution_review",
-          "under_luca_review",
         ].includes(t),
     ),
     payment_claimed: sub.payment_claimed,
@@ -5350,7 +5327,25 @@ export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
   communicationAutoId = high;
   communicationRecipientAutoId = high;
   clientEventAutoId = high;
+  retireSubscriptionReview();
   backfillOnboardingRecords();
+}
+
+/**
+ * LUCA no longer approves each subscription: a deal is only shown to investors LUCA chose, so a
+ * signed subscription goes straight to funding. Demo data saved before that moves on with it.
+ */
+export function retireSubscriptionReview() {
+  for (const sub of subscriptions) {
+    const status = sub.status as string;
+    if (status !== "under_luca_review" && status !== "information_requested") continue;
+    sub.status = "approved";
+    sub.owner = ownerFor("approved");
+    sub.next_action = nextActionFor("approved");
+    sub.approved_at ??= new Date().toISOString();
+    sub.information_request_note = null;
+    sub.information_requested_at = null;
+  }
 }
 
 /**

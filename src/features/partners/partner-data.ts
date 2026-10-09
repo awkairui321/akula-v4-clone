@@ -54,12 +54,7 @@ export type PartnerLine = Capital & {
 };
 
 const INACTIVE = ["cancelled", "rejected", "not_allocated", "funds_returned"];
-const WAITING_ON_CLIENT = [
-  "institution_review",
-  "information_requested",
-  "documents_pending",
-  "awaiting_funds",
-];
+const WAITING_ON_CLIENT = ["institution_review", "documents_pending", "awaiting_funds"];
 
 const empty = (): Capital => ({ committed: 0, funded: 0, allocated: 0 });
 const add = (a: Capital, b: Capital): Capital => ({

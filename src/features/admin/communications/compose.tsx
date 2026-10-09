@@ -69,7 +69,6 @@ const ACTION_GROUPS: { key: string; title: string; suggestPurpose: PurposeKey }[
     title: "Approved but haven’t transferred funds",
     suggestPurpose: "remind_fund",
   },
-  { key: "info", title: "Have an open information request", suggestPurpose: "request" },
   { key: "onboarding", title: "Haven’t finished onboarding", suggestPurpose: "request" },
   { key: "expiring", title: "Accreditation expires within 30 days", suggestPurpose: "request" },
   { key: "overdue", title: "Have overdue document requests", suggestPurpose: "request" },
@@ -310,10 +309,6 @@ export default function ComposeCommunicationPage() {
             return byId(stageSubs("signature").map((s) => s.investor_id));
           case "transfer":
             return byId(stageSubs("transfer").map((s) => s.investor_id));
-          case "info":
-            return byId(
-              subs.filter((s) => s.status === "information_requested").map((s) => s.investor_id),
-            );
           case "onboarding":
             return investors.filter((i) =>
               ["pending", "in_review"].includes(i.verification_status),

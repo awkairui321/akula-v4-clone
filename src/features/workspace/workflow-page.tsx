@@ -475,14 +475,7 @@ function Analytics({ data: d }: { data: WorkflowView }) {
             "Awaiting signature",
             subs.filter((s) => ["reserved", "documents_pending"].includes(s.status)).length,
           ],
-          [
-            "Manager / institution review",
-            subs.filter((s) =>
-              ["under_luca_review", "institution_review", "information_requested"].includes(
-                s.status,
-              ),
-            ).length,
-          ],
+          ["Adviser sign-off", subs.filter((s) => s.status === "institution_review").length],
           [
             "Issuance pending",
             subs.filter(
@@ -558,14 +551,6 @@ const RM_STAGE_GUIDANCE: Record<string, { next: string; rm: string }> = {
     next: "Institution reviews the file",
     rm: "No action while review is in progress.",
   },
-  under_luca_review: {
-    next: "LUCA reviews the file",
-    rm: "Wait for LUCA's decision or information request.",
-  },
-  information_requested: {
-    next: "Client or adviser provides information",
-    rm: "Help the client respond to the request.",
-  },
   approved: {
     next: "Client follows funding instructions",
     rm: "Remind the client about the next step if needed.",
@@ -599,8 +584,6 @@ const RM_STATUS_LABELS: Record<string, string> = {
   reserved: "Application started",
   documents_pending: "Awaiting client signature",
   institution_review: "Institution review",
-  under_luca_review: "LUCA review",
-  information_requested: "Information needed",
   approved: "Approved",
   awaiting_funds: "Awaiting client transfer",
   payment_unmatched: "Payment matching",
@@ -615,13 +598,12 @@ const RM_STATUS_LABELS: Record<string, string> = {
 const RM_ACTION_STATUSES = [
   "reserved",
   "documents_pending",
-  "information_requested",
   "approved",
   "awaiting_funds",
   "not_allocated",
   "rejected",
 ];
-const RM_REVIEW_STATUSES = ["institution_review", "under_luca_review"];
+const RM_REVIEW_STATUSES = ["institution_review"];
 
 function RMOverview({
   data: d,
@@ -1769,48 +1751,6 @@ function WorkflowPageContent({
                         ? "On hold by LUCA"
                         : `Current stage: ${sub.status.replaceAll("_", " ")}`}
                     </p>
-                    {sub.information_request_note && (
-                      <p>
-                        <strong>Information requested:</strong> {sub.information_request_note}
-                      </p>
-                    )}
-                    {sub.information_response_note && (
-                      <p>
-                        <strong>Submitted response:</strong> {sub.information_response_note}
-                      </p>
-                    )}
-                    {manager && sub.status === "under_luca_review" && !sub.on_hold && (
-                      <>
-                        <Action
-                          label="Approve subscription"
-                          command={{
-                            type: "subscription-decision",
-                            id: sub.id,
-                            status: "approved",
-                          }}
-                        />
-                        <Action
-                          label="Request missing information"
-                          command={{
-                            type: "subscription-decision",
-                            id: sub.id,
-                            status: "information_requested",
-                          }}
-                        >
-                          <Field name="text" label="Information needed" />
-                        </Action>
-                        <Action
-                          label="Decline application"
-                          command={{
-                            type: "subscription-decision",
-                            id: sub.id,
-                            status: "rejected",
-                          }}
-                        >
-                          <Field name="text" label="Reason for declining" />
-                        </Action>
-                      </>
-                    )}
                     {manager &&
                       !sub.holdingId &&
                       !["not_allocated", "cancelled", "rejected", "funds_returned"].includes(
@@ -1824,16 +1764,6 @@ function WorkflowPageContent({
                             status: sub.on_hold ? "released" : "held",
                           }}
                         />
-                      )}
-                    {(sub.investor_id === d.actor.id || d.actor.role === "eam") &&
-                      sub.status === "information_requested" && (
-                        <Action
-                          label="Submit response to LUCA"
-                          disabled={sub.on_hold}
-                          command={{ type: "respond-information", id: sub.id }}
-                        >
-                          <Field name="text" label="Response to information request" />
-                        </Action>
                       )}
                     {sub.investor_id === d.actor.id && (
                       <>

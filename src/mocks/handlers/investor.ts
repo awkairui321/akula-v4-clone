@@ -506,13 +506,12 @@ export const investorHandlers = [
     if (sub.status === "documents_pending") {
       sub._signPollCount += 1;
       if (sub._signPollCount >= 2) {
-        // EAM-submitted subscriptions go through institution review before
-        // LUCA ever sees them; direct/self-serve subscriptions go straight
-        // to LUCA. Neither status is in TRANSITIONS' manually-triggerable
-        // set from documents_pending's perspective — this is the automatic
-        // "signing completed" event, same pattern as the rest of this file.
-        sub.status = sub.origin === "eam" ? "institution_review" : "under_luca_review";
-        sub.owner = ownerFor(sub.status, sub.origin);
+        // EAM-submitted subscriptions are signed off by the client's adviser first.
+        // LUCA does not approve each subscription (the deal was only shown to investors it
+        // chose), so a signed direct subscription goes straight to funding.
+        sub.status = sub.origin === "eam" ? "institution_review" : "approved";
+        if (sub.status === "approved") sub.approved_at = new Date().toISOString();
+        sub.owner = ownerFor(sub.status);
         sub.next_action = nextActionFor(sub.status);
         sub.confirmed_at = new Date().toISOString();
         recordSignature(sub, currentUser(request)!.email);
@@ -896,24 +895,6 @@ export const investorHandlers = [
     return HttpResponse.json({ consents: consentsForUser(user.id) });
   }),
 
-  http.post("*/api/v1/subscriptions/:id/information_response", async ({ params, request }) => {
-    const user = currentUser(request);
-    const sub = ownedSubscription(request, Number(params.id));
-    if (!user || !sub)
-      return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
-    const body = (await request.json()) as { text?: string };
-    try {
-      command(user, { type: "respond-information", id: sub.id, text: body.text });
-      return HttpResponse.json({
-        subscription: toSubscription(sub),
-        wizard_step: wizardStepFor(sub),
-        acknowledgements_complete: acknowledgementsResponse(sub).complete,
-      });
-    } catch (error) {
-      return HttpResponse.json({ error: (error as Error).message }, { status: 422 });
-    }
-  }),
-
   // POST /api/v1/subscriptions/:id/proceed_to_funding
   http.post("*/api/v1/subscriptions/:id/proceed_to_funding", ({ params, request }) => {
     const sub = ownedSubscription(request, Number(params.id));
@@ -925,7 +906,7 @@ export const investorHandlers = [
       );
     }
     sub.status = "awaiting_funds";
-    sub.owner = ownerFor(sub.status, sub.origin);
+    sub.owner = ownerFor(sub.status);
     sub.next_action = nextActionFor(sub.status);
     return HttpResponse.json({
       subscription: toSubscription(sub),

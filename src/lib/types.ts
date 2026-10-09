@@ -146,10 +146,6 @@ export type SubscriptionStatus =
   | "documents_pending"
   /** EAM/institution-submitted subscriptions only — skipped entirely for direct/self-serve. */
   | "institution_review"
-  /** Also covers what LUCA calls "Submitted to LUCA" — arrival in the queue and being
-   *  reviewed are the same persisted moment, matching how every other stage here works. */
-  | "under_luca_review"
-  | "information_requested"
   | "approved"
   | "awaiting_funds"
   | "payment_unmatched"
@@ -173,9 +169,7 @@ export type SubscriptionOwner =
 export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   reserved: "Reserved",
   documents_pending: "Documents pending",
-  institution_review: "Institution review",
-  under_luca_review: "Under LUCA review",
-  information_requested: "Information requested",
+  institution_review: "Adviser sign-off",
   approved: "Approved",
   awaiting_funds: "Awaiting funds",
   payment_unmatched: "Payment unmatched",
@@ -194,19 +188,15 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
  *
  * Statuses are the fine-grained backend states that decide who acts next; stages
  * are what people reason about. Several statuses fold into one stage:
- *  - signature: reserved + documents_pending (the investor has not signed yet)
- *  - approval: institution_review + under_luca_review + information_requested
- *    (a decision is being made; a request for information pauses it)
+ *  - signature: reserved + documents_pending + institution_review (the form is not yet signed
+ *    and, for partner clients, signed off by their adviser)
  *  - transfer: approved + awaiting_funds + payment_unmatched (money is due)
  *  - verification: reconciliation + allocation_pending (money is being checked)
+ * LUCA does not approve each subscription: a deal is only shown to investors LUCA chose, so a
+ * signed subscription goes straight to funding. LUCA's decision is the allocation.
  * `allocated` records LUCA's allocation. A separate holding_id confirms Ops issuance.
  */
-export type SubscriptionStageKey =
-  | "signature"
-  | "approval"
-  | "transfer"
-  | "verification"
-  | "issuance";
+export type SubscriptionStageKey = "signature" | "transfer" | "verification" | "issuance";
 
 export const SUBSCRIPTION_STAGES: {
   key: SubscriptionStageKey;
@@ -222,33 +212,26 @@ export const SUBSCRIPTION_STAGES: {
     key: "signature",
     label: "Awaiting signature",
     milestone: "Subscription form signature",
-    detail: "The investor completes and signs the subscription form.",
-    statuses: ["reserved", "documents_pending"],
-  },
-  {
-    key: "approval",
-    label: "Pending approval",
-    milestone: "Approval",
-    detail: "The adviser and LUCA review the investor and decide.",
-    statuses: ["institution_review", "under_luca_review", "information_requested"],
+    detail: "The investor signs the subscription form; a partner's adviser signs it off first.",
+    statuses: ["reserved", "documents_pending", "institution_review"],
   },
   {
     key: "transfer",
-    label: "Awaiting funds",
+    label: "Awaiting fund transfer",
     milestone: "Funds transfer",
     detail: "The investor transfers funds; Akula Ops matches the payment.",
     statuses: ["approved", "awaiting_funds", "payment_unmatched"],
   },
   {
     key: "verification",
-    label: "Verifying funds",
+    label: "Verification of funds",
     milestone: "Fund verification",
     detail: "Akula Ops reconciles the funds; LUCA confirms the allocation.",
     statuses: ["reconciliation", "allocation_pending"],
   },
   {
     key: "issuance",
-    label: "Allocation recorded",
+    label: "Successful allocation",
     milestone: "Allocation",
     detail: "LUCA has recorded allocation. Akula Ops must issue the registry holding separately.",
     statuses: ["allocated"],
@@ -284,7 +267,6 @@ export const NEXT_ACTION_LABELS: Record<string, string> = {
   accept_acknowledgements: "Investor to accept acknowledgements",
   sign_documents: "Investor to sign documents",
   institution_to_review: "Institution to review",
-  luca_to_review: "LUCA to review",
   respond_information_request: "Awaiting response to information request",
   proceed_to_funding: "Investor to proceed to funding",
   transfer_funds: "Investor to transfer funds",

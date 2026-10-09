@@ -88,13 +88,12 @@ export default function EamDashboard() {
   const actionStatuses = [
     "reserved",
     "documents_pending",
-    "information_requested",
     "approved",
     "awaiting_funds",
     "not_allocated",
     "rejected",
   ];
-  const reviewStatuses = ["institution_review", "under_luca_review"];
+  const reviewStatuses = ["institution_review"];
   const progress = dashboard?.investment_progress ?? [];
   const actionCount = new Set(
     progress

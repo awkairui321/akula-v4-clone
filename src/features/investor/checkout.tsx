@@ -66,12 +66,8 @@ const IN_FLIGHT_STATUSES: SubscriptionStatus[] = [
   "allocation_pending",
 ];
 
-/** Statuses shown on the new Review step — institution/LUCA haven't decided yet. */
-const REVIEW_IN_FLIGHT_STATUSES: SubscriptionStatus[] = [
-  "institution_review",
-  "under_luca_review",
-  "information_requested",
-];
+/** Statuses shown on the Review step: the client's adviser has not signed it off yet. */
+const REVIEW_IN_FLIGHT_STATUSES: SubscriptionStatus[] = ["institution_review"];
 
 // ---------------------------------------------------------------------------
 // SignWell script loader
@@ -661,22 +657,6 @@ function ReviewStep({
   });
 
   const subscription = data.subscription;
-  const [responseText, setResponseText] = useState("");
-  const response = useMutation({
-    mutationFn: () =>
-      api<SubscriptionShowResponse>(
-        `/api/v1/subscriptions/${subscription.id}/information_response`,
-        { method: "POST", body: { text: responseText } },
-      ),
-    onSuccess: (res) => {
-      queryClient.setQueryData(["subscription", subscription.id], res);
-      queryClient.invalidateQueries();
-      setResponseText("");
-      toast.success("Response sent to LUCA for review.");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const proceedMutation = useMutation({
     mutationFn: () =>
       api<SubscriptionShowResponse>(`/api/v1/subscriptions/${subscription.id}/proceed_to_funding`, {
@@ -724,53 +704,15 @@ function ReviewStep({
     );
   }
 
-  const waitingOnInstitution = subscription.status === "institution_review";
-
   return (
     <div className="mx-auto max-w-lg py-12 text-center">
       <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-amber-500/10">
         <ClockIcon className="size-7 text-amber-600" />
       </div>
-      <h2 className="text-2xl font-bold">
-        {waitingOnInstitution ? "Your institution is reviewing" : "LUCA is reviewing"}
-      </h2>
+      <h2 className="text-2xl font-bold">Your adviser is reviewing</h2>
       <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-        {waitingOnInstitution
-          ? "Your relationship manager is reviewing this subscription before it's submitted to LUCA."
-          : "LUCA SGP, the fund manager, is reviewing your subscription. This usually takes a few business days."}
+        Your adviser signs off on this subscription before funding instructions are released to you.
       </p>
-
-      {subscription.information_request_note && (
-        <Card className="mx-auto mt-6 max-w-sm text-left">
-          <CardContent className="space-y-1 pt-6 text-sm">
-            <p className="font-medium">More information needed</p>
-            <p className="text-muted-foreground">{subscription.information_request_note}</p>
-            {subscription.status === "information_requested" && (
-              <div className="space-y-2 pt-3">
-                <label htmlFor="information-response">Your response</label>
-                <textarea
-                  id="information-response"
-                  className="w-full rounded border p-2"
-                  value={responseText}
-                  onChange={(e) => setResponseText(e.target.value)}
-                />
-                <Button
-                  disabled={!responseText.trim() || response.isPending || subscription.on_hold}
-                  onClick={() => response.mutate()}
-                >
-                  Submit response to LUCA
-                </Button>
-                {subscription.on_hold && <p>LUCA must release the hold before you can submit.</p>}
-              </div>
-            )}
-            {subscription.information_response_note && (
-              <p className="pt-2">
-                Your submitted response: {subscription.information_response_note}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

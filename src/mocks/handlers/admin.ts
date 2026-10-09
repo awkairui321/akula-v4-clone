@@ -67,7 +67,6 @@ function requireAdmin(request: Request): MockUser | null {
 
 const NEEDS_ACTION_OWNER = "akula_ops";
 const NEEDS_ACTION_STATUSES: SubscriptionStatus[] = [
-  "under_luca_review",
   "payment_unmatched",
   "reconciliation",
   "allocation_pending",
@@ -96,17 +95,8 @@ function applyTransition(
   if (!to || !TRANSITIONS[sub.status].includes(to)) {
     return { error: `Cannot move a subscription from ${sub.status} to ${to ?? "(none)"}` };
   }
-  if (
-    to === "institution_review" ||
-    (to === "under_luca_review" && sub.status !== "information_requested")
-  )
+  if (to === "institution_review")
     return { error: "Complete investor signing and institution review in their own workflows." };
-  if (to === "information_requested" && !extras.informationRequestNote?.trim()) {
-    return { error: "Describe what information is needed" };
-  }
-  if (to === "rejected" && !extras.rejectionReason) {
-    return { error: "Select a rejection reason" };
-  }
 
   if (
     [
@@ -135,26 +125,11 @@ function applyTransition(
   }
   const now = new Date().toISOString();
   sub.status = to;
-  sub.owner = ownerFor(to, sub.origin);
+  sub.owner = ownerFor(to);
   sub.next_action = nextActionFor(to);
 
   if (extras.paymentReference?.trim()) {
     sub.payment_reference = extras.paymentReference.trim();
-  }
-  if (to === "under_luca_review") {
-    sub.institution_reviewed_at = sub.institution_reviewed_at ?? now;
-  }
-  if (to === "information_requested") {
-    sub.information_response_note = null;
-    sub.information_responded_at = null;
-    sub.information_request_note = extras.informationRequestNote!.trim();
-    sub.information_requested_at = now;
-    sub.information_request_delivery = "email_pending_integration";
-  }
-  if (to === "under_luca_review") {
-    // Coming back from an answered information request — clear the old note.
-    sub.information_request_note = null;
-    sub.information_requested_at = null;
   }
   if (to === "approved") {
     sub.approved_at = now;
