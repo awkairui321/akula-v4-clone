@@ -1,4 +1,6 @@
 import { mayDiscover, hasInvestmentHistory, setPublishedAudienceReader } from "./investor-access";
+import { audienceIncludes } from "../lib/investor-access";
+import type { Fund as AudienceFund } from "../lib/types";
 import * as db from "./db";
 import { inDemoClientCohort } from "../lib/demo-cohort";
 import type {
@@ -70,6 +72,8 @@ const CHANGE_LABELS: Record<string, string> = {
   hook: "Headline",
   descriptor: "Descriptor",
   eligible_segments: "Client audience",
+  audience_partners: "Client audience",
+  audience_investors: "Client audience",
   price: "Price per unit",
   min_subscription: "Minimum subscription",
   subscription_fee_pct: "Subscription fee",
@@ -235,6 +239,19 @@ export function recordSignature(sub: db.MockSubscription, name: string) {
     name,
     at: now(),
   });
+}
+/**
+ * What an allocation is for, fixed by the subscription: the capital the investor subscribed and the
+ * unit price in the offering version they signed. The Fund Manager confirms or declines; neither
+ * number is theirs to change.
+ */
+export function allocationTerms(sub: db.MockSubscription) {
+  const signature = workflow.signatures.find((x) => x.subscriptionId === sub.id);
+  const version = workflow.versions.find((v) => v.id === signature?.versionId);
+  return {
+    capital: Number(sub.amount),
+    price: Number(version?.snapshot.price ?? db.findFundById(sub.fund_id)?.price ?? 0),
+  };
 }
 export function matched(sid: number) {
   return round(
@@ -482,6 +499,17 @@ export function assignClientToRm(investorId: number, staffId: number) {
   workflow.assignments = workflow.assignments.filter((a) => a.investorId !== investorId);
   workflow.assignments.push({ investorId, staffId });
 }
+/** The onboarded clients who can see this version of a deal. */
+function audienceOf(fund: AudienceFund | undefined) {
+  if (!fund) return [];
+  return db
+    .adminInvestors()
+    .filter(
+      (c) =>
+        c.verification_status === "approved" &&
+        audienceIncludes(fund, { id: c.id, segment: c.segment, partner: c.partner }, fund.id),
+    );
+}
 export function recordAudit(actorId: number, label: string) {
   workflow.events.push({ id: id(), actorId, label, at: now() });
 }
@@ -637,6 +665,7 @@ export function view(user: db.MockUser): WorkflowView {
       currency: s.currency,
       needsReview: s.needs_review_version_id,
       allocationBlockers: investmentBlockers(s),
+      allocationPrice: allocationTerms(s).price,
       issuanceBlockers: investmentBlockers(s, true),
       paymentProofs:
         ["luca", "ops"].includes(user.role) || user.id === s.investor_id
@@ -1215,6 +1244,8 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       );
       const f = db.findFundById(v.fundId)!;
       requireValue(f.state !== "cancelled", "Cancelled offering cannot publish.");
+      // Who could see the deal before this version, to tell only those newly included.
+      const before = audienceOf(currentVersion(v.fundId)?.snapshot).map((c) => c.id);
       // The Fund Manager approves what they are looking at, including their own edits.
       if (c.type === "approve") v.snapshot = structuredClone(f);
       v.status = "published";
@@ -1222,6 +1253,14 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       v.decision = { by: user.id, at: now(), outcome: "published" };
       Object.assign(f, structuredClone(v.snapshot));
       f.state = "open";
+      // Clients who can now see the deal, and could not before, are told it is available.
+      for (const client of audienceOf(f).filter((c) => !before.includes(c.id)))
+        db.sendInvestorMessage(
+          client.id,
+          `New opportunity: ${f.asset.name}`,
+          `LUCA has made ${f.name} available to you. Open Invest to read the offering and subscribe.`,
+          "opportunity",
+        );
       // Publish reviewed deal materials with this variant; client verification files stay separate.
       for (const doc of db.documents.filter(
         (doc) =>

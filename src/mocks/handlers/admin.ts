@@ -1025,16 +1025,24 @@ export const adminHandlers = [
 
     const body = (await request.json()) as { fund?: Record<string, unknown> };
     const patch = body.fund ?? {};
+    const named = [patch.audience_partners, patch.audience_investors];
     if (
-      patch.eligible_segments !== undefined &&
-      (!Array.isArray(patch.eligible_segments) ||
-        patch.eligible_segments.length === 0 ||
-        patch.eligible_segments.some(
-          (segment) => !["independent", "partner_referred"].includes(segment),
-        ))
+      (patch.eligible_segments !== undefined &&
+        (!Array.isArray(patch.eligible_segments) ||
+          patch.eligible_segments.some(
+            (segment) => !["independent", "partner_referred"].includes(segment),
+          ))) ||
+      named.some((list) => list !== undefined && !Array.isArray(list))
+    )
+      return HttpResponse.json({ error: "Choose a valid client audience." }, { status: 422 });
+    if (
+      Array.isArray(patch.eligible_segments) &&
+      patch.eligible_segments.length === 0 &&
+      !(patch.audience_partners as unknown[] | undefined)?.length &&
+      !(patch.audience_investors as unknown[] | undefined)?.length
     )
       return HttpResponse.json(
-        { error: "Choose at least one valid client class." },
+        { error: "Choose at least one client class, partner firm or client." },
         { status: 422 },
       );
     if (user.role === "investment_team" && patch.state && patch.state !== fund.state)

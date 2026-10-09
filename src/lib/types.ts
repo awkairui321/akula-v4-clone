@@ -84,6 +84,10 @@ export type Fund = {
   investor_access?: InvestorAccess;
   /** Published audience for this fund variant; historical investments retain access. */
   eligible_segments?: import("./investor-access").InvestorSegment[];
+  /** Partner firms whose clients can also see this fund, whatever their client class. */
+  audience_partners?: string[];
+  /** Individual clients (by id) who can also see this fund. */
+  audience_investors?: number[];
   id: number;
   name: string;
   codename: string;

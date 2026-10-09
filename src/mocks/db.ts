@@ -4640,7 +4640,20 @@ export function adminInvestors(): AdminInvestor[] {
     reapplied_at: seed.reapplied_at ?? null,
     prepared_by_rm: findInvestorProfileByUserId(seed.id)?.prepared_by_rm?.rm_name ?? null,
     invite_pending: Boolean(findUserById(seed.id)?.invite_token),
+    segment: segmentOfClient(seed.id),
+    partner: seed.referral?.partner_firm ?? seed.eam_firm ?? null,
   }));
+}
+
+/** Direct or partner-referred: the client's own channel first, then whether an adviser holds them. */
+export function segmentOfClient(investorId: number): "independent" | "partner_referred" {
+  const user = findUserById(investorId);
+  if (user?.investor_segment) return user.investor_segment;
+  const channel = findInvestorProfileByUserId(investorId)?.channel;
+  if (channel) return channel === "eam_referred" ? "partner_referred" : "independent";
+  return adviserClients.some((client) => client.investor_id === investorId)
+    ? "partner_referred"
+    : "independent";
 }
 
 export function findAdminInvestorSeed(id: number): AdminInvestorSeed | undefined {

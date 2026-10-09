@@ -1,5 +1,5 @@
 import * as db from "./db";
-import { segmentCanAccess, type InvestorSegment } from "../lib/investor-access";
+import { audienceIncludes, type InvestorSegment } from "../lib/investor-access";
 
 export function segmentFor(user: db.MockUser): InvestorSegment {
   if (user.investor_segment) return user.investor_segment;
@@ -15,7 +15,9 @@ export function investorAudience(user: db.MockUser) {
 export function mayDiscover(user: db.MockUser, fundId: number) {
   // Read the approved audience, never an unpublished edit to the working fund.
   const fund = publishedAudienceFund?.(fundId) ?? db.findFundById(fundId);
-  return !investorAudience(user) || segmentCanAccess(segmentFor(user), fundId, fund);
+  if (!investorAudience(user)) return true;
+  const partner = db.findInvestorProfileByUserId(user.id)?.eam_firm ?? null;
+  return audienceIncludes(fund, { id: user.id, segment: segmentFor(user), partner }, fundId);
 }
 let publishedAudienceFund: ((id: number) => import("../lib/types").Fund | undefined) | undefined;
 export function setPublishedAudienceReader(read: NonNullable<typeof publishedAudienceFund>) {

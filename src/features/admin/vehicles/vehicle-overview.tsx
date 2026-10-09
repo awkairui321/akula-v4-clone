@@ -20,6 +20,8 @@ import DealVersions from "./deal-versions";
 import { usePublication } from "./use-publication";
 import { useAuth } from "@/contexts/auth-context";
 import { StateBadge, daysUntil, formatClose } from "./deal-status";
+import { fundAudienceLabel } from "@/lib/investor-access";
+import { recipientsOf, useAudienceClients } from "./audience";
 
 const TABS = ["overview", "subscriptions", "documents", "versions"] as const;
 type DealTab = (typeof TABS)[number];
@@ -91,6 +93,8 @@ function DealWorkspace({ fund }: { fund: Fund }) {
       DEAL_DOCUMENT_KINDS.some((kind) => kind.value === d.kind),
   ).length;
 
+  const { clients: audienceClients } = useAudienceClients();
+  const audienceCount = recipientsOf(fund, audienceClients).people.length;
   const days = daysUntil(fund.closes_at);
 
   return (
@@ -120,6 +124,15 @@ function DealWorkspace({ fund }: { fund: Fund }) {
             <p className="mt-1 text-muted-foreground">
               {fund.codename} · {SECTOR_LABELS[fund.asset.sector] ?? fund.asset.sector}
             </p>
+            {manager && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                For{" "}
+                <span className="font-medium text-foreground tabular-nums">
+                  {audienceCount} client{audienceCount === 1 ? "" : "s"}
+                </span>{" "}
+                · {fundAudienceLabel(fund)}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {!manager && (

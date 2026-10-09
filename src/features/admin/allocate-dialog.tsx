@@ -4,12 +4,10 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
 import { formatPrice, formatPricePrecise } from "@/lib/currency";
-import type { Fund } from "@/lib/types";
 import type { WorkflowCommand, WorkflowView } from "@/lib/workflow-types";
 import type { AdminSubscription } from "./types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -26,8 +24,6 @@ export function AllocateDialog({
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [amount, setAmount] = useState<string | null>(null);
-  const [price, setPrice] = useState<string | null>(null);
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState("");
 
@@ -35,11 +31,6 @@ export function AllocateDialog({
     queryKey: ["workflows", user?.id],
     queryFn: () => api<WorkflowView>("/api/v1/workflows"),
   });
-  const { data: fundData } = useQuery({
-    queryKey: ["fund", subscription.fund_id],
-    queryFn: () => api<{ fund: Fund }>(`/api/v1/funds/${subscription.fund_id}`),
-  });
-
   const live = workflow?.subscriptions.find((s) => s.id === subscription.id);
   const blockers = live?.allocationBlockers ?? [];
   const received =
@@ -47,14 +38,11 @@ export function AllocateDialog({
       .filter((r) => r.subscriptionId === subscription.id && r.matched && !r.supersededBy)
       .reduce((n, r) => n + r.amount, 0) ?? 0;
 
-  const capital = Number(amount ?? subscription.amount);
-  const unitPrice = Number(price ?? fundData?.fund.price ?? 0);
+  // Fixed by the subscription: the capital subscribed, at the unit price the investor signed.
+  const capital = Number(subscription.amount);
+  const unitPrice = live?.allocationPrice ?? 0;
   const units = unitPrice > 0 ? capital / unitPrice : 0;
-  const valid =
-    Number.isFinite(capital) &&
-    capital > 0 &&
-    capital <= Number(subscription.amount) &&
-    unitPrice > 0;
+  const ready = capital > 0 && unitPrice > 0;
 
   const run = useMutation({
     mutationFn: (command: WorkflowCommand) =>
@@ -135,37 +123,23 @@ export function AllocateDialog({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="allocated-capital">Allocated capital</Label>
-                <Input
-                  id="allocated-capital"
-                  type="number"
-                  min="0"
-                  max={subscription.amount}
-                  step="0.01"
-                  value={amount ?? subscription.amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
+            <dl className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Class unit price</dt>
+                <dd className="mt-1 font-semibold tabular-nums">
+                  {unitPrice > 0 ? formatPricePrecise(unitPrice) : "—"}
+                </dd>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="unit-price">Class unit price</Label>
-                <Input
-                  id="unit-price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={price ?? fundData?.fund.price ?? ""}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
+              <div>
+                <dt className="text-xs text-muted-foreground">Units to allocate</dt>
+                <dd className="mt-1 font-semibold tabular-nums">
+                  {units.toLocaleString("en-GB", { maximumFractionDigits: 2 })}
+                </dd>
               </div>
-            </div>
-            <p className="text-sm text-muted-foreground tabular-nums">
-              {valid
-                ? `${formatPrice(capital)} allocated at ${formatPricePrecise(unitPrice)} is ${units.toLocaleString("en-GB", { maximumFractionDigits: 2 })} units.`
-                : capital > Number(subscription.amount)
-                  ? "Allocation cannot exceed the subscribed capital."
-                  : "Enter the capital and unit price to see the units."}
+            </dl>
+            <p className="text-sm text-muted-foreground">
+              The full subscribed capital, at the unit price in the offering version the investor
+              signed. You confirm it, or decline and return the funds.
             </p>
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setDeclining(true)}>
@@ -173,7 +147,7 @@ export function AllocateDialog({
               </Button>
               <Button
                 className="flex-1"
-                disabled={!valid || blockers.length > 0 || run.isPending}
+                disabled={!ready || blockers.length > 0 || run.isPending}
                 onClick={() =>
                   run.mutate({
                     type: "allocate",

@@ -2,13 +2,14 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CheckCircle2Icon, CircleIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Fund } from "@/lib/types";
 import type { Version, WorkflowCommand, WorkflowView } from "@/lib/workflow-types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { fundAudienceLabel } from "@/lib/investor-access";
+import { recipientsOf, sourceOf, useAudienceClients } from "./audience";
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -29,7 +30,6 @@ export default function DealReview({ fund, version }: { fund: Fund; version: Ver
   const [confirming, setConfirming] = useState(false);
   const [sendingBack, setSendingBack] = useState(false);
   const [reason, setReason] = useState("");
-  const [showChanges, setShowChanges] = useState(false);
 
   const run = useMutation({
     mutationFn: (command: WorkflowCommand) =>
@@ -47,12 +47,14 @@ export default function DealReview({ fund, version }: { fund: Fund; version: Ver
   const material = diff.filter((row) => row.material);
   const fromManager = version.note === "Edited by the Fund Manager.";
 
+  const { clients } = useAudienceClients();
+  const audience = recipientsOf(fund, clients);
   const waiting = daysWaiting(version.at);
   const summary = impact?.newOffering
     ? `New offering · ${version.checklist?.filter((item) => item.done).length ?? 0} of ${version.checklist?.length ?? 0} checks complete`
     : diff.length === 0
       ? "No content differs from the live version"
-      : `Changed: ${diff.map((row) => row.label).join(", ")}`;
+      : `Changed: ${[...new Set(diff.map((row) => row.label))].join(", ")}`;
 
   return (
     <section aria-label="Submitted for your approval" className="space-y-3 border-y py-4">
@@ -67,26 +69,7 @@ export default function DealReview({ fund, version }: { fund: Fund; version: Ver
           {version.note && !fromManager && (
             <p className="text-sm text-muted-foreground">“{version.note}”</p>
           )}
-          <p className="text-sm text-muted-foreground">
-            {summary}
-            {(impact?.newOffering ? !!version.checklist?.length : diff.length > 0) && (
-              <>
-                {" · "}
-                <button
-                  type="button"
-                  aria-expanded={showChanges}
-                  onClick={() => setShowChanges((open) => !open)}
-                  className="text-foreground underline underline-offset-2"
-                >
-                  {showChanges
-                    ? "Hide details"
-                    : impact?.newOffering
-                      ? "Show checks"
-                      : "Show changes"}
-                </button>
-              </>
-            )}
-          </p>
+          <p className="text-sm text-muted-foreground">{summary}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!fromManager && (
@@ -99,48 +82,6 @@ export default function DealReview({ fund, version }: { fund: Fund; version: Ver
           </Button>
         </div>
       </div>
-
-      {showChanges &&
-        (impact?.newOffering ? (
-          <ul className="space-y-2 border-t pt-3">
-            {version.checklist?.map((item) => (
-              <li key={item.label} className="flex items-center gap-2 text-sm">
-                {item.done ? (
-                  <CheckCircle2Icon className="size-4 text-green-600" />
-                ) : (
-                  <CircleIcon className="size-4 text-muted-foreground/50" />
-                )}
-                <span className={item.done ? "" : "text-muted-foreground"}>{item.label}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="divide-y border-t">
-            <div className="grid grid-cols-[10rem_1fr_1fr] gap-4 py-2 text-xs text-muted-foreground max-md:hidden">
-              <span>Field</span>
-              <span>Live now</span>
-              <span>Proposed</span>
-            </div>
-            {diff.map((row, index) => (
-              <div
-                key={`${row.label}-${index}`}
-                className="grid gap-x-4 gap-y-1 py-3 text-sm md:grid-cols-[10rem_1fr_1fr]"
-              >
-                <div>
-                  <p className="font-medium">{row.label}</p>
-                  {row.material && <p className="text-xs text-amber-700">Investor terms</p>}
-                  {row.editedByManager && (
-                    <p className="text-xs text-muted-foreground">Edited by you</p>
-                  )}
-                </div>
-                <p className="text-muted-foreground line-through decoration-muted-foreground/40">
-                  {row.before}
-                </p>
-                <p className="font-medium text-green-800">{row.after}</p>
-              </div>
-            ))}
-          </div>
-        ))}
 
       <Dialog open={confirming} onOpenChange={setConfirming}>
         <DialogContent className="sm:max-w-md">
@@ -164,6 +105,34 @@ export default function DealReview({ fund, version }: { fund: Fund; version: Ver
                 Investor terms change: {material.map((row) => row.label).join(", ")}.
               </p>
             )}
+            <div className="space-y-1.5 border-t pt-3">
+              <p className="font-medium">
+                Goes to {audience.people.length} client{audience.people.length === 1 ? "" : "s"}
+                <span className="font-normal text-muted-foreground">
+                  {" "}
+                  · {fundAudienceLabel(fund)}
+                </span>
+              </p>
+              {audience.people.length === 0 ? (
+                <p className="text-amber-700">
+                  No client can see this deal. Edit the audience before publishing.
+                </p>
+              ) : (
+                <ul className="max-h-40 divide-y overflow-y-auto border-y text-sm">
+                  {audience.people.map((client) => (
+                    <li key={client.id} className="flex justify-between gap-3 py-1.5">
+                      <span className="truncate">{client.full_name}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {sourceOf(client)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Clients who could not see it before are told it is available.
+              </p>
+            </div>
             <p className="text-muted-foreground">Recorded as approved by you today.</p>
           </div>
           <div className="flex justify-end gap-2 pt-2">

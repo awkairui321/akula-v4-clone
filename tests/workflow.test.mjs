@@ -2120,3 +2120,73 @@ test("saved demos gain the two-fund example once while preserving edits and hist
     counts,
   );
 });
+
+test("a deal's audience combines client classes, partner firms and named clients, and newly included clients are told on publication", async () => {
+  const fm = manager();
+  assert.equal(db.adminInvestors().find((c) => c.id === 2).segment, "independent");
+  // Fund 6 follows the original rule, so a direct client cannot see it yet.
+  const before = await (await request("funds", investor())).json();
+  assert.ok(!before.funds.some((f) => f.id === 6));
+
+  // Validation: an audience cannot be empty, and unknown classes are refused.
+  const bad = (fund) => request("funds/6", fm, "PATCH", { fund });
+  assert.equal((await bad({ eligible_segments: [] })).status, 422);
+  assert.equal((await bad({ eligible_segments: ["nobody"] })).status, 422);
+  assert.equal((await bad({ eligible_segments: [], audience_partners: "Meridian" })).status, 422);
+
+  const saved = await bad({
+    eligible_segments: [],
+    audience_partners: ["Straits Family Office"],
+    audience_investors: [2],
+  });
+  assert.equal(saved.status, 200);
+  // Nothing changes for investors until the version is approved and published.
+  assert.ok(!(await (await request("funds", investor())).json()).funds.some((f) => f.id === 6));
+  w.command(fm, { type: "stage", id: 6 });
+  const version = w.workflow.versions.find((v) => v.fundId === 6 && v.status === "review");
+  assert.ok(version);
+  const told = () =>
+    db.communicationRecipients.filter(
+      (r) =>
+        r.investor_id === 2 &&
+        db.communications
+          .find((c) => c.id === r.communication_id)
+          ?.subject.startsWith("New opportunity"),
+    ).length;
+  const messages = told();
+  w.command(fm, { type: "approve", id: version.id });
+  assert.equal(told(), messages + 1);
+  const after = await (await request("funds", investor())).json();
+  assert.ok(
+    after.funds.some((f) => f.id === 6),
+    "the named client now sees the deal",
+  );
+  // A client outside every selector still cannot.
+  const other = db.users.find((u) => u.id === 3);
+  assert.ok(!(await (await request("funds", other)).json()).funds?.some?.((f) => f.id === 6));
+  // The partner firm's clients are included by name of the firm.
+  const straits = db
+    .adminInvestors()
+    .filter((c) => c.partner === "Straits Family Office" && c.verification_status === "approved");
+  assert.ok(straits.length > 0);
+});
+
+test("an allocation is fixed by the subscription: the subscribed capital at the signed unit price", async () => {
+  const s = funded();
+  const terms = w.allocationTerms(s);
+  assert.equal(terms.capital, Number(s.amount));
+  assert.ok(terms.price > 0);
+  const view = await (await request("workflows", manager())).json();
+  assert.equal(view.subscriptions.find((x) => x.id === s.id).allocationPrice, terms.price);
+  const attempt = (body) =>
+    request("workflows", manager(), "POST", { type: "allocate", id: s.id, ...body });
+  for (const body of [
+    { amount: terms.capital / 2, price: terms.price },
+    { amount: terms.capital, price: terms.price + 1 },
+    { amount: 0, price: terms.price },
+  ])
+    assert.equal((await attempt(body)).status, 422);
+  assert.equal(db.findSubscriptionById(s.id).status, "allocation_pending");
+  assert.equal((await attempt({ amount: terms.capital, price: terms.price })).status, 200);
+  assert.equal(db.findSubscriptionById(s.id).status, "allocated");
+});

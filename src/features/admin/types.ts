@@ -159,6 +159,10 @@ export type AdminInvestor = {
   reapplied_at: string | null;
   /** The LUCA RM covering this client. */
   rm_id?: number | null;
+  /** Direct or partner-referred, which decides which deals the client can discover. */
+  segment: "independent" | "partner_referred";
+  /** The partner firm that brought the client in, if any. */
+  partner: string | null;
 };
 
 export type InvestorsResponse = {

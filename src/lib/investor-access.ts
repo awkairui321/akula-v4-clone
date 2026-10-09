@@ -12,13 +12,36 @@ export const SEGMENT_LABELS: Record<InvestorSegment, string> = {
   independent: "Independent investor",
   partner_referred: "Partner-referred investor",
 };
+/** Who a deal is for: client classes, named partner firms and named clients, combined. */
+export type AudienceMember = {
+  id: number;
+  segment: InvestorSegment;
+  /** The partner firm that brought the client in, if any. */
+  partner: string | null;
+};
+
 export function fundAudienceLabel(fund: Fund) {
   if (!fund.eligible_segments) return "Existing client audience";
-  return fund.eligible_segments.length === 2
-    ? "All client classes"
-    : fund.eligible_segments[0] === "independent"
-      ? "Direct clients"
-      : "Partner-referred clients";
+  const classes =
+    fund.eligible_segments.length === 2
+      ? "All client classes"
+      : fund.eligible_segments[0] === "independent"
+        ? "Direct clients"
+        : fund.eligible_segments[0] === "partner_referred"
+          ? "Partner-referred clients"
+          : "";
+  const partners = fund.audience_partners ?? [];
+  const named = fund.audience_investors ?? [];
+  const parts = [
+    classes,
+    partners.length === 1
+      ? partners[0]
+      : partners.length > 1
+        ? `${partners.length} partner firms`
+        : "",
+    named.length ? `${named.length} named client${named.length === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" + ") : "No clients";
 }
 
 // Illustrative commercial policy, separate from KYC, record ownership and sourcing tags.
@@ -27,6 +50,14 @@ export const INDEPENDENT_FUND_IDS = [1, 3, 4];
 export function segmentCanAccess(segment: InvestorSegment, fundId: number, fund?: Fund) {
   if (fund?.eligible_segments) return fund.eligible_segments.includes(segment);
   return segment === "partner_referred" || INDEPENDENT_FUND_IDS.includes(fundId);
+}
+/** Whether one client is in a deal's audience: their class, their partner firm, or by name. */
+export function audienceIncludes(fund: Fund | undefined, who: AudienceMember, fundId: number) {
+  return (
+    segmentCanAccess(who.segment, fundId, fund) ||
+    Boolean(who.partner && fund?.audience_partners?.includes(who.partner)) ||
+    Boolean(fund?.audience_investors?.includes(who.id))
+  );
 }
 export function commercialTerms(segment: InvestorSegment, fund: Fund): CommercialTerms {
   return {
