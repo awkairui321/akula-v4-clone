@@ -1,3 +1,4 @@
+import { friendlyDate } from "@/lib/format-date";
 import { type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -230,7 +231,9 @@ function MarketTab({ fund }: { fund: Fund }) {
                     )}
                   </div>
                   <div className="pb-4">
-                    <p className="font-mono text-xs text-muted-foreground">{d.date}</p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {friendlyDate(d.date)}
+                    </p>
                     <p className="text-sm">{d.text}</p>
                   </div>
                 </div>

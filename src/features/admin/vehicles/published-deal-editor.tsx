@@ -19,6 +19,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { CheckIcon, TriangleAlertIcon, MinusIcon } from "lucide-react";
+import { friendlyDate, storedDate } from "@/lib/format-date";
 import { AudiencePicker } from "./audience-picker";
 import { audienceDraftFrom, useAudienceClients, type AudienceDraft } from "./audience";
 
@@ -150,7 +151,7 @@ function draftFrom(fund: Fund): Draft {
     key_metrics: toLines((fund.key_metrics ?? []).map((m) => [m.label, m.value, m.note ?? ""])),
     revenue_points: toLines((fund.revenue_points ?? []).map((p) => [p.period, p.value ?? ""])),
     peers: toLines((fund.peers ?? []).map((p) => [p.name, p.multiple])),
-    activities: toLines((fund.activities ?? []).map((a) => [a.date, a.text, a.kind])),
+    activities: toLines((fund.activities ?? []).map((a) => [friendlyDate(a.date), a.text, a.kind])),
     subscription_fee_pct: str(fund.subscription_fee_pct),
     management_fee_pct: str(fund.management_fee_pct),
     carried_interest_pct: str(fund.carried_interest_pct),
@@ -166,7 +167,7 @@ function draftFrom(fund: Fund): Draft {
     highlights: (asset.highlights ?? []).join("\n"),
     risks: toLines((asset.risks ?? []).map((r) => [r.title, r.body])),
     team: toLines((asset.team ?? []).map((t) => [t.role, t.name, t.note ?? ""])),
-    developments: toLines((asset.developments ?? []).map((d) => [d.date, d.text])),
+    developments: toLines((asset.developments ?? []).map((d) => [friendlyDate(d.date), d.text])),
     funding_rounds: toLines(
       (asset.funding_rounds ?? []).map((r) => [
         r.date,
@@ -233,7 +234,7 @@ function parseTeam(text: string): Asset["team"] {
 function parseDevelopments(text: string): Asset["developments"] {
   return linesOf(text).map((line) => {
     const [date, ...rest] = columnsOf(line);
-    return { date, text: rest.join(" | ") };
+    return { date: storedDate(date), text: rest.join(" | ") };
   });
 }
 
@@ -325,7 +326,7 @@ function parseActivities(text: string): Fund["activities"] {
     const [date, update = "", kind = ""] = columnsOf(line);
     const normalised = kind.toLowerCase();
     return {
-      date,
+      date: storedDate(date),
       text: update,
       kind: ACTIVITY_KINDS.includes(normalised) ? normalised : "update",
     };
@@ -512,6 +513,7 @@ function payloadFrom(
             eligible_segments: audience.classes,
             audience_partners: audience.partners,
             audience_investors: audience.investors,
+            audience_excluded: audience.excluded,
           }
         : {}),
       vehicle_type: draft.vehicle_type,

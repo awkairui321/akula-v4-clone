@@ -88,6 +88,8 @@ export type Fund = {
   audience_partners?: string[];
   /** Individual clients (by id) who can also see this fund. */
   audience_investors?: number[];
+  /** Clients who must not see this fund, whatever else would include them. */
+  audience_excluded?: number[];
   id: number;
   name: string;
   codename: string;

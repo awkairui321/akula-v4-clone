@@ -74,6 +74,7 @@ const CHANGE_LABELS: Record<string, string> = {
   eligible_segments: "Client audience",
   audience_partners: "Client audience",
   audience_investors: "Client audience",
+  audience_excluded: "Client audience",
   price: "Price per unit",
   min_subscription: "Minimum subscription",
   subscription_fee_pct: "Subscription fee",

@@ -1027,7 +1027,7 @@ export const adminHandlers = [
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
 
     const patch = body.fund ?? {};
-    const named = [patch.audience_partners, patch.audience_investors];
+    const named = [patch.audience_partners, patch.audience_investors, patch.audience_excluded];
     if (
       (patch.eligible_segments !== undefined &&
         (!Array.isArray(patch.eligible_segments) ||

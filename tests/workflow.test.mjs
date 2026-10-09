@@ -17,6 +17,7 @@ for (const file of [
   "src/features/admin/client-funds-data.ts",
   "src/features/admin/analytics-data.ts",
   "src/lib/document-catalogue.ts",
+  "src/lib/format-date.ts",
   "src/lib/demo-cohort.ts",
   "src/mocks/communications.ts",
   "src/features/eam/revenue-statement.ts",
@@ -2189,4 +2190,60 @@ test("an allocation is fixed by the subscription: the subscribed capital at the 
   assert.equal(db.findSubscriptionById(s.id).status, "allocation_pending");
   assert.equal((await attempt({ amount: terms.capital, price: terms.price })).status, 200);
   assert.equal(db.findSubscriptionById(s.id).status, "allocated");
+});
+
+test("an excluded client never sees a deal, whatever else would include them, and is not told about it", async () => {
+  const fm = manager();
+  const patch = (fund) => request("funds/6", fm, "PATCH", { fund });
+  assert.equal((await patch({ audience_excluded: "2" })).status, 422);
+  // Everyone onboarded, except client 2 (Elena Cross, a direct client).
+  assert.equal(
+    (
+      await patch({
+        eligible_segments: ["independent", "partner_referred"],
+        audience_partners: [],
+        audience_investors: [2],
+        audience_excluded: [2],
+      })
+    ).status,
+    200,
+  );
+  w.command(fm, { type: "stage", id: 6 });
+  const version = w.workflow.versions.find((v) => v.fundId === 6 && v.status === "review");
+  const told = (id) =>
+    db.communicationRecipients.filter(
+      (r) =>
+        r.investor_id === id &&
+        db.communications
+          .find((c) => c.id === r.communication_id)
+          ?.subject.startsWith("New opportunity"),
+    ).length;
+  const others = db
+    .adminInvestors()
+    // Direct clients could not see fund 6 before, so they are newly included.
+    .filter(
+      (c) => c.verification_status === "approved" && c.id !== 2 && c.segment === "independent",
+    );
+  assert.ok(others.length > 0);
+  const [excludedBefore, otherBefore] = [told(2), told(others[0].id)];
+  w.command(fm, { type: "approve", id: version.id });
+  // Named and excluded at once: exclusion wins, and no message is sent.
+  assert.ok(!(await (await request("funds", investor())).json()).funds.some((f) => f.id === 6));
+  assert.equal(told(2), excludedBefore);
+  // A client who is not excluded and is newly included is told.
+  assert.ok(told(others[0].id) > otherBefore);
+  assert.equal((await request("funds/6", investor())).status, 403);
+});
+
+test("dates read as people write them and are stored as plain dates; free text is left alone", async () => {
+  const { friendlyDate, storedDate } = await import("../.test-runtime/src/lib/format-date.mjs");
+  assert.equal(friendlyDate("2026-09-19T03:42:57.144Z"), "19 Sep 2026");
+  assert.equal(friendlyDate("2026-09-19"), "19 Sep 2026");
+  for (const free of ["Nov 2021", "H2 2024", "Q3", ""]) assert.equal(friendlyDate(free), free);
+  assert.equal(storedDate("19 Sep 2026"), "2026-09-19");
+  assert.equal(storedDate("5 Jan 2027"), "2027-01-05");
+  // Not a real day, or not in the written form: unchanged rather than guessed.
+  for (const odd of ["31 Feb 2026", "Mar 2025", "2026-09-19", "19 September 2026"])
+    assert.equal(storedDate(odd), odd);
+  assert.equal(storedDate(friendlyDate("2026-12-01T00:00:00.000Z")), "2026-12-01");
 });

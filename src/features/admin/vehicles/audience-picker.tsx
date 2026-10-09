@@ -13,10 +13,90 @@ const CLASS_LABELS: Record<InvestorSegment, string> = {
   partner_referred: "Partner-referred clients",
 };
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const kindOf = (client: AdminInvestor) =>
+  client.investor_type === "institutional" ? "Entity" : "Individual";
+
+/** Pick clients by name: chips for those chosen, a search, and a list to tick from. */
+function ClientChooser({
+  label,
+  hint,
+  clients,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  hint?: string;
+  clients: AdminInvestor[];
+  selected: number[];
+  onToggle: (id: number) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const matches = clients
+    .filter(
+      (c) =>
+        !q ||
+        `${c.full_name} ${c.reference ?? ""} ${c.email} ${sourceOf(c)}`.toLowerCase().includes(q),
+    )
+    .slice(0, 50);
+  const chosen = clients.filter((c) => selected.includes(c.id));
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-medium">{label}</legend>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {chosen.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {chosen.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onClick={() => onToggle(c.id)}
+                className="inline-flex items-center gap-1.5 rounded-full border bg-secondary px-3 py-1 text-sm"
+                aria-label={`Remove ${c.full_name} from ${label.toLowerCase()}`}
+              >
+                {c.full_name}
+                <XIcon className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="relative">
+        <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label={`Search clients for ${label.toLowerCase()}`}
+          placeholder="Search a client by name, reference or partner"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+      <ul className="max-h-56 divide-y overflow-y-auto border-y">
+        {matches.map((c) => (
+          <li key={c.id}>
+            <label className="flex cursor-pointer items-center gap-3 py-2.5 text-sm">
+              <Checkbox checked={selected.includes(c.id)} onChange={() => onToggle(c.id)} />
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{c.full_name}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {c.reference ?? c.client_code} · {kindOf(c)} · {sourceOf(c)}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+        {matches.length === 0 && (
+          <li className="py-4 text-sm text-muted-foreground">No onboarded client matches.</li>
+        )}
+      </ul>
+    </fieldset>
+  );
+}
 
 /**
  * Choose who this deal is sent to: every onboarded client, or a selection built from client
- * classes, partner firms and named clients, with a live list of who that reaches.
+ * classes, partner firms and named clients, less anyone excluded, with a live list of who that
+ * reaches.
  */
 export function AudiencePicker({
   fund,
@@ -32,7 +112,6 @@ export function AudiencePicker({
   /** The deal still follows the original audience rule and has not been set explicitly. */
   legacy: boolean;
 }) {
-  const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
   const everyone = value.classes.length === 2;
   const result = useMemo(
@@ -51,16 +130,33 @@ export function AudiencePicker({
 
   const toggle = <T,>(list: T[], item: T) =>
     list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
-  const q = search.trim().toLowerCase();
-  const matches = clients
-    .filter(
-      (c) =>
-        !q ||
-        `${c.full_name} ${c.reference ?? ""} ${c.email} ${sourceOf(c)}`.toLowerCase().includes(q),
-    )
-    .slice(0, 50);
-  const named = clients.filter((c) => value.investors.includes(c.id));
+  // A client is either named or excluded, never both.
+  const toggleNamed = (id: number) =>
+    onChange({
+      ...value,
+      investors: toggle(value.investors, id),
+      excluded: value.excluded.filter((x) => x !== id),
+    });
+  const toggleExcluded = (id: number) =>
+    onChange({
+      ...value,
+      excluded: toggle(value.excluded, id),
+      investors: value.investors.filter((x) => x !== id),
+    });
   const partnerClassOn = value.classes.includes("partner_referred");
+  const summary = [
+    plural(result.individuals, "individual"),
+    result.entities === 1 ? "1 entity" : `${result.entities} entities`,
+    ...result.bySource
+      .slice(0, 3)
+      .map(([name, n]) =>
+        name === "Direct"
+          ? `${n} direct`
+          : name === "RM referral"
+            ? `${n} RM-referred`
+            : `${n} via ${name}`,
+      ),
+  ].join(" · ");
 
   return (
     <div className="space-y-6">
@@ -68,20 +164,14 @@ export function AudiencePicker({
         <div>
           <p className="text-2xl font-semibold tabular-nums">
             {plural(result.people.length, "client")}
+            {value.excluded.length > 0 && (
+              <span className="ml-3 text-base font-normal text-muted-foreground">
+                {value.excluded.length} excluded
+              </span>
+            )}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {result.people.length === 0
-              ? "Nobody can see this deal yet."
-              : `${plural(result.individuals, "individual")} · ${result.entities === 1 ? "1 entity" : `${result.entities} entities`} · ${result.bySource
-                  .slice(0, 3)
-                  .map(([name, n]) =>
-                    name === "Direct"
-                      ? `${n} direct`
-                      : name === "RM referral"
-                        ? `${n} RM-referred`
-                        : `${n} via ${name}`,
-                  )
-                  .join(" · ")}${result.bySource.length > 3 ? " · …" : ""}`}
+            {result.people.length === 0 ? "Nobody can see this deal yet." : summary}
           </p>
         </div>
         <div
@@ -102,12 +192,13 @@ export function AudiencePicker({
                 onClick={() =>
                   onChange(
                     mode.key === "all"
-                      ? { classes: ALL_CLASSES, partners: [], investors: [] }
-                      : {
-                          classes: everyone ? [] : value.classes,
-                          partners: value.partners,
-                          investors: value.investors,
-                        },
+                      ? {
+                          classes: ALL_CLASSES,
+                          partners: [],
+                          investors: [],
+                          excluded: value.excluded,
+                        }
+                      : { ...value, classes: everyone ? [] : value.classes },
                   )
                 }
                 className={`rounded-md px-3 py-1.5 ${on ? "bg-secondary font-medium" : "text-muted-foreground"}`}
@@ -174,68 +265,22 @@ export function AudiencePicker({
             </fieldset>
           </div>
 
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Named clients</legend>
-            {named.length > 0 && (
-              <ul className="flex flex-wrap gap-2">
-                {named.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onChange({
-                          ...value,
-                          investors: value.investors.filter((id) => id !== c.id),
-                        })
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-full border bg-secondary px-3 py-1 text-sm"
-                      aria-label={`Remove ${c.full_name}`}
-                    >
-                      {c.full_name}
-                      <XIcon className="size-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="relative">
-              <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                aria-label="Search clients to add"
-                placeholder="Search a client by name, reference or partner"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <ul className="max-h-64 divide-y overflow-y-auto border-y">
-              {matches.map((c) => (
-                <li key={c.id}>
-                  <label className="flex cursor-pointer items-center gap-3 py-2.5 text-sm">
-                    <Checkbox
-                      checked={value.investors.includes(c.id)}
-                      onChange={() =>
-                        onChange({ ...value, investors: toggle(value.investors, c.id) })
-                      }
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{c.full_name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {c.reference ?? c.client_code} ·{" "}
-                        {c.investor_type === "institutional" ? "Entity" : "Individual"} ·{" "}
-                        {sourceOf(c)}
-                      </span>
-                    </span>
-                  </label>
-                </li>
-              ))}
-              {matches.length === 0 && (
-                <li className="py-4 text-sm text-muted-foreground">No onboarded client matches.</li>
-              )}
-            </ul>
-          </fieldset>
+          <ClientChooser
+            label="Named clients"
+            clients={clients}
+            selected={value.investors}
+            onToggle={toggleNamed}
+          />
         </div>
       )}
+
+      <ClientChooser
+        label="Excluded clients"
+        hint="These clients never see this deal, even if a class, partner firm or name above would include them. Their existing investments are unaffected."
+        clients={clients}
+        selected={value.excluded}
+        onToggle={toggleExcluded}
+      />
 
       <div className="space-y-2">
         <Button type="button" variant="ghost" size="sm" onClick={() => setShowAll((open) => !open)}>
@@ -247,10 +292,20 @@ export function AudiencePicker({
           <ul className="max-h-56 divide-y overflow-y-auto border-y text-sm">
             {result.people.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-4 py-2">
-                <span className="truncate font-medium">{c.full_name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {c.investor_type === "institutional" ? "Entity" : "Individual"} · {sourceOf(c)}
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{c.full_name}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {kindOf(c)} · {sourceOf(c)}
+                  </span>
                 </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleExcluded(c.id)}
+                >
+                  Exclude
+                </Button>
               </li>
             ))}
           </ul>

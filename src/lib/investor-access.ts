@@ -41,7 +41,9 @@ export function fundAudienceLabel(fund: Fund) {
         : "",
     named.length ? `${named.length} named client${named.length === 1 ? "" : "s"}` : "",
   ].filter(Boolean);
-  return parts.length ? parts.join(" + ") : "No clients";
+  const excluded = fund.audience_excluded?.length ?? 0;
+  const label = parts.length ? parts.join(" + ") : "No clients";
+  return excluded ? `${label}, ${excluded} excluded` : label;
 }
 
 // Illustrative commercial policy, separate from KYC, record ownership and sourcing tags.
@@ -51,8 +53,10 @@ export function segmentCanAccess(segment: InvestorSegment, fundId: number, fund?
   if (fund?.eligible_segments) return fund.eligible_segments.includes(segment);
   return segment === "partner_referred" || INDEPENDENT_FUND_IDS.includes(fundId);
 }
-/** Whether one client is in a deal's audience: their class, their partner firm, or by name. */
+/** Whether one client is in a deal's audience: their class, their partner firm, or by name, unless excluded. */
 export function audienceIncludes(fund: Fund | undefined, who: AudienceMember, fundId: number) {
+  // An exclusion wins over every other way of being included.
+  if (fund?.audience_excluded?.includes(who.id)) return false;
   return (
     segmentCanAccess(who.segment, fundId, fund) ||
     Boolean(who.partner && fund?.audience_partners?.includes(who.partner)) ||

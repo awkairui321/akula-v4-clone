@@ -14,6 +14,8 @@ export type AudienceDraft = {
   classes: InvestorSegment[];
   partners: string[];
   investors: number[];
+  /** Clients who never see the deal, whatever else includes them. */
+  excluded: number[];
 };
 
 export const ALL_CLASSES: InvestorSegment[] = ["independent", "partner_referred"];
@@ -26,6 +28,7 @@ export function audienceDraftFrom(fund: Fund): AudienceDraft {
       (INDEPENDENT_FUND_IDS.includes(fund.id) ? ALL_CLASSES : ["partner_referred"]),
     partners: fund.audience_partners ?? [],
     investors: fund.audience_investors ?? [],
+    excluded: fund.audience_excluded ?? [],
   };
 }
 
@@ -35,6 +38,7 @@ export const withAudience = (fund: Fund, audience: AudienceDraft): Fund => ({
   eligible_segments: audience.classes,
   audience_partners: audience.partners,
   audience_investors: audience.investors,
+  audience_excluded: audience.excluded,
 });
 
 /** Onboarded clients: only they can see deals, so only they can be recipients. */
