@@ -1020,10 +1020,12 @@ export const adminHandlers = [
   http.patch("*/api/v1/funds/:id", async ({ request, params }) => {
     const user = currentUser(request);
     if (!user || !["luca", "ops", "investment_team"].includes(user.role)) return unauthorized();
+    // Read the body before looking the fund up: the demo re-syncs its saved state on a timer, and a
+    // record fetched before an await can be a stale copy by the time it is changed.
+    const body = (await request.json()) as { fund?: Record<string, unknown> };
     const fund = findFundById(Number(params.id));
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
 
-    const body = (await request.json()) as { fund?: Record<string, unknown> };
     const patch = body.fund ?? {};
     const named = [patch.audience_partners, patch.audience_investors];
     if (

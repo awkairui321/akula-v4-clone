@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { SECTOR_LABELS, DEAL_DOCUMENT_KINDS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
@@ -72,6 +73,8 @@ function DealWorkspace({ fund }: { fund: Fund }) {
   const pending = manager ? dealVersions.find((v) => v.status === "review") : undefined;
   const visibleTab = !manager && tab === "subscriptions" ? "overview" : tab;
   const [editorOpen, setEditorOpen] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const queryClient = useQueryClient();
   const [preview, setPreview] = useState<"eam" | "investor" | null>(null);
 
   const { data: docsData } = useQuery({
@@ -104,6 +107,20 @@ function DealWorkspace({ fund }: { fund: Fund }) {
         fund={fund}
         open={editorOpen}
         onOpenChange={setEditorOpen}
+        onSaved={async ({ publish }) => {
+          if (!publish) return;
+          // Save and publish: stage the edits as a version, then ask for the confirmation.
+          try {
+            await api("/api/v1/workflows", {
+              method: "POST",
+              body: { type: "stage", id: fund.id },
+            });
+            await queryClient.invalidateQueries({ queryKey: ["workflows"] });
+            setConfirmPublish(true);
+          } catch (error) {
+            toast.error((error as Error).message);
+          }
+        }}
       />
 
       <div className="space-y-6">
@@ -156,7 +173,15 @@ function DealWorkspace({ fund }: { fund: Fund }) {
       </div>
 
       {!manager && <PublicationBar fund={fund} onEdit={() => setEditorOpen(true)} />}
-      {pending && <DealReview fund={fund} version={pending} />}
+      {pending && (
+        <DealReview
+          key={`${pending.id}-${confirmPublish}`}
+          fund={fund}
+          version={pending}
+          initialConfirm={confirmPublish}
+          onConfirmClosed={() => setConfirmPublish(false)}
+        />
+      )}
 
       <Tabs
         value={visibleTab}

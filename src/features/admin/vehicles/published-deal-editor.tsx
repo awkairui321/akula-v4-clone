@@ -1,5 +1,5 @@
 import { useAuth } from "@/contexts/auth-context";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { SECTOR_LABELS, STAGE_LABELS, CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
@@ -901,10 +901,13 @@ export default function PublishedDealEditor({
   fund,
   open,
   onOpenChange,
+  onSaved,
 }: {
   fund: Fund;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called once the changes are saved; `publish` when the Fund Manager asked to publish them. */
+  onSaved?: (result: { publish: boolean }) => void;
 }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -939,23 +942,40 @@ export default function PublishedDealEditor({
   const changingStatus = draft.state !== fund.state;
   const [statusChangeAcknowledged, setStatusChangeAcknowledged] = useState(false);
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
-    setDraft((current) => ({ ...current, [key]: value }));
+  // The latest form values, readable at the moment Save is pressed whatever has rendered.
+  const latest = useRef({ draft, audience, audienceTouched });
+  latest.current.draft = draft;
+  latest.current.audience = audience;
+  latest.current.audienceTouched = audienceTouched;
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
+    latest.current.draft = { ...latest.current.draft, [key]: value };
+    setDraft(latest.current.draft);
+  };
 
   const save = useMutation({
-    mutationFn: () =>
-      api<{ fund: Fund }>(`/api/v1/funds/${fund.id}`, {
-        method: "PATCH",
-        body: changedPayload(draft, audienceTouched ? audience : null, fund),
-      }),
-    onSuccess: ({ fund: updated }) => {
+    // The body is built when the button is pressed, so it is always what is on screen.
+    mutationFn: ({ body }: { publish: boolean; body: Record<string, unknown> }) =>
+      api<{ fund: Fund }>(`/api/v1/funds/${fund.id}`, { method: "PATCH", body }),
+    onSuccess: ({ fund: updated }, { publish }) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "funds"] });
       queryClient.invalidateQueries({ queryKey: ["fund", updated.id] });
       queryClient.invalidateQueries({ queryKey: ["workflows"] });
       onOpenChange(false);
+      onSaved?.({ publish });
     },
   });
 
+  const submit = (publish: boolean) =>
+    save.mutate({
+      publish,
+      body: changedPayload(
+        latest.current.draft,
+        latest.current.audienceTouched ? latest.current.audience : null,
+        fund,
+      ),
+    });
+  // Only the Fund Manager can publish, so only they can publish straight from the editor.
+  const canPublish = user?.role === "luca";
   const checks = qualityGate(draft);
   // Incomplete narratives may be saved as working drafts. Invalid terms and malformed rows cannot.
   const failures =
@@ -968,6 +988,11 @@ export default function PublishedDealEditor({
           "Every table row uses the column format",
         ].includes(c.label),
     ).length + (audienceEmpty ? 1 : 0);
+
+  const blocked =
+    failures > 0 ||
+    save.isPending ||
+    (changingStatus && activeSubscriptionCount > 0 && !statusChangeAcknowledged);
 
   const problemsIn = (field: CollectionField) => formatProblems(draft[field], LINE_FORMATS[field]);
 
@@ -1618,22 +1643,21 @@ export default function PublishedDealEditor({
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Saved changes become a working version for the Fund Manager to approve.
+                {canPublish
+                  ? "Save and publish asks you to confirm before investors see anything."
+                  : "Saved changes become a working version for the Fund Manager to approve."}
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" onClick={close}>
               Cancel
             </Button>
             <Button
               size="lg"
-              disabled={
-                failures > 0 ||
-                save.isPending ||
-                (changingStatus && activeSubscriptionCount > 0 && !statusChangeAcknowledged)
-              }
-              onClick={() => save.mutate()}
+              variant={canPublish ? "outline" : "default"}
+              disabled={blocked}
+              onClick={() => submit(false)}
             >
               {audienceEmpty
                 ? "Choose who receives this deal"
@@ -1641,8 +1665,15 @@ export default function PublishedDealEditor({
                   ? "Resolve quality-gate issues"
                   : save.isPending
                     ? "Saving..."
-                    : "Save working changes"}
+                    : canPublish
+                      ? "Save as draft"
+                      : "Save working changes"}
             </Button>
+            {canPublish && (
+              <Button size="lg" disabled={blocked} onClick={() => submit(true)}>
+                Save and publish
+              </Button>
+            )}
           </div>
         </footer>
       </DialogContent>

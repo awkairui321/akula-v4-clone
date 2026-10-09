@@ -24,10 +24,25 @@ const SECTION_LABEL = "text-xs font-medium tracking-wide text-muted-foreground u
  * (the overview is what investors will see). Approving publishes; sending back needs a reason.
  * What changed is one line, with the field-by-field comparison a click away.
  */
-export default function DealReview({ fund, version }: { fund: Fund; version: Version }) {
+export default function DealReview({
+  fund,
+  version,
+  initialConfirm = false,
+  onConfirmClosed,
+}: {
+  fund: Fund;
+  version: Version;
+  /** Open the publish confirmation straight away, as after Save and publish. */
+  initialConfirm?: boolean;
+  onConfirmClosed?: () => void;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirmingState] = useState(initialConfirm);
+  const setConfirming = (open: boolean) => {
+    setConfirmingState(open);
+    if (!open) onConfirmClosed?.();
+  };
   const [sendingBack, setSendingBack] = useState(false);
   const [reason, setReason] = useState("");
 
