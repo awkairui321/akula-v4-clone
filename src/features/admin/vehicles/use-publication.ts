@@ -12,7 +12,11 @@ export function usePublication() {
     staleTime: 0,
     enabled: user?.role === "luca" || user?.role === "investment_team",
   });
-  const versions = query.data?.versions ?? [];
+  // A draft the Investment Team has not submitted is theirs alone. The Fund Manager only sees a
+  // draft once it comes back with a reason, because they sent it back themselves.
+  const versions = (query.data?.versions ?? []).filter(
+    (v) => user?.role !== "luca" || v.status !== "draft" || v.decision?.outcome === "returned",
+  );
   const waiting = versions
     .filter((v) => v.status === "review")
     .sort((a, b) => a.at.localeCompare(b.at));
@@ -33,7 +37,14 @@ export function publicationStatus(
     return live
       ? { key: "update_waiting", label: "Update waiting for approval" }
       : { key: "awaiting_first", label: "Awaiting first approval" };
-  if (open?.status === "draft") return { key: "with_team", label: "With Investment Team" };
+  if (open?.status === "draft")
+    return {
+      key: "with_team",
+      label:
+        open.decision?.outcome === "returned"
+          ? "Sent back to Investment Team"
+          : "With Investment Team",
+    };
   if (unpublished.some((u) => u.fundId === fundId))
     return { key: "unpublished", label: "Unpublished edits" };
   return null;

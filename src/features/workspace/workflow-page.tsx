@@ -1225,6 +1225,12 @@ function WorkflowPageContent({
     rm = d.actor.role === "rm" || manager,
     staff = manager || ops || rm,
     privileged = manager || ops || team;
+  // The Fund Manager sees a draft only once they have sent it back; before that it is the team's.
+  const queue = d.versions.filter(
+    (v) =>
+      v.status !== "published" &&
+      (!manager || v.status !== "draft" || v.decision?.outcome === "returned"),
+  );
   const sub =
     d.subscriptions.find(
       (s) => String(s.id) === sid && (!ops || archivedInvestment(s) === opsArchive),
@@ -2054,67 +2060,65 @@ function WorkflowPageContent({
               </Panel>
             )}
             <Panel title="Publication queue">
-              {d.versions.filter((v) => v.status !== "published").length === 0 && (
+              {queue.length === 0 && (
                 <p className="wf-empty">Nothing is waiting for publication.</p>
               )}
-              {d.versions
-                .filter((v) => v.status !== "published")
-                .map((v) => (
-                  <article className="wf-record" key={v.id}>
-                    <h3>
-                      {v.snapshot.codename} · version {v.number}
-                    </h3>
+              {queue.map((v) => (
+                <article className="wf-record" key={v.id}>
+                  <h3>
+                    {v.snapshot.codename} · version {v.number}
+                  </h3>
+                  <p>
+                    {v.status === "draft"
+                      ? "Draft with the Investment Team"
+                      : v.status === "review"
+                        ? `Awaiting Fund Manager approval · submitted ${date(v.at)}`
+                        : "Approved, not yet published"}
+                  </p>
+                  {v.decision?.outcome === "returned" && v.status === "draft" && (
+                    <p>Returned by the Fund Manager: {v.decision.text}</p>
+                  )}
+                  {v.status === "review" && v.note && (
+                    <p>Note from the Investment Team: {v.note}</p>
+                  )}
+                  {v.status === "review" && (
                     <p>
-                      {v.status === "draft"
-                        ? "Draft with the Investment Team"
-                        : v.status === "review"
-                          ? `Awaiting Fund Manager approval · submitted ${date(v.at)}`
-                          : "Approved, not yet published"}
+                      {v.changed?.length
+                        ? `Changed from the published version: ${v.changed.join(", ")}.`
+                        : "No earlier published version to compare with."}
                     </p>
-                    {v.decision?.outcome === "returned" && v.status === "draft" && (
-                      <p>Returned by the Fund Manager: {v.decision.text}</p>
-                    )}
-                    {v.status === "review" && v.note && (
-                      <p>Note from the Investment Team: {v.note}</p>
-                    )}
-                    {v.status === "review" && (
-                      <p>
-                        {v.changed?.length
-                          ? `Changed from the published version: ${v.changed.join(", ")}.`
-                          : "No earlier published version to compare with."}
-                      </p>
-                    )}
-                    {(team || manager) && v.status === "draft" && (
-                      <Action label="Submit to Fund Manager" command={{ type: "review", id: v.id }}>
-                        <Field
-                          name="text"
-                          label="Note for the Fund Manager (optional)"
-                          required={false}
-                        />
-                      </Action>
-                    )}
-                    {manager && v.status === "review" && (
-                      <>
-                        <Action
-                          label="Approve and publish to investors"
-                          command={{ type: "approve", id: v.id }}
-                        />
-                        <Action
-                          label="Return to Investment Team"
-                          command={{ type: "send-back", id: v.id }}
-                        >
-                          <Field name="text" label="Reason" />
-                        </Action>
-                      </>
-                    )}
-                    {manager && v.status === "approved" && (
-                      <Action
-                        label="Publish approved version"
-                        command={{ type: "publish", id: v.id }}
+                  )}
+                  {team && v.status === "draft" && (
+                    <Action label="Submit to Fund Manager" command={{ type: "review", id: v.id }}>
+                      <Field
+                        name="text"
+                        label="Note for the Fund Manager (optional)"
+                        required={false}
                       />
-                    )}
-                  </article>
-                ))}
+                    </Action>
+                  )}
+                  {manager && v.status === "review" && (
+                    <>
+                      <Action
+                        label="Approve and publish to investors"
+                        command={{ type: "approve", id: v.id }}
+                      />
+                      <Action
+                        label="Return to Investment Team"
+                        command={{ type: "send-back", id: v.id }}
+                      >
+                        <Field name="text" label="Reason" />
+                      </Action>
+                    </>
+                  )}
+                  {manager && v.status === "approved" && (
+                    <Action
+                      label="Publish approved version"
+                      command={{ type: "publish", id: v.id }}
+                    />
+                  )}
+                </article>
+              ))}
             </Panel>
           </>
         )}

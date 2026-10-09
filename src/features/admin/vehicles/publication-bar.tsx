@@ -151,11 +151,6 @@ export default function PublicationBar({
               You have edits that investors cannot see yet: {working.fields.join(", ")}.
             </p>
           )}
-          {isManager && open?.status === "draft" && (
-            <p className="text-sm text-muted-foreground">
-              The Investment Team is preparing this version. It reaches you when they submit it.
-            </p>
-          )}
           {isTeam && opsEdits.length > 0 && (
             <p className="text-sm text-amber-700">
               Akula Ops edited {[...new Set(opsEdits.flatMap((c) => c.fields))].join(", ")} on{" "}
