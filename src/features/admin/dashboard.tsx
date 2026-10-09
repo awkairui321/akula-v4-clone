@@ -298,7 +298,7 @@ export default function AdminDashboard() {
       // Outward-facing, so it ranks above the capital queue.
       priority: -1,
       ageDays: daysSince(v.at),
-      to: `/luca/deals/${v.fundId}?tab=review`,
+      to: `/luca/deals/${v.fundId}`,
     })),
     ...allSubs
       .filter((s) => s.status === "payment_unmatched")

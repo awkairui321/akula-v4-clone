@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -29,7 +28,6 @@ export default function PublicationBar({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
-  const [, setSearchParams] = useSearchParams();
 
   const { data } = useQuery({
     queryKey: ["workflows", user?.id],
@@ -97,12 +95,7 @@ export default function PublicationBar({
           <Button
             size="sm"
             disabled={run.isPending}
-            onClick={() =>
-              run.mutate(
-                { type: "stage", id: fund.id },
-                { onSuccess: () => setSearchParams({ tab: "review" }) },
-              )
-            }
+            onClick={() => run.mutate({ type: "stage", id: fund.id })}
           >
             Review and publish my edits
           </Button>

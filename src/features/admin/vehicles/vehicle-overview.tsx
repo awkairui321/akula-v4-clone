@@ -21,7 +21,7 @@ import { usePublication } from "./use-publication";
 import { useAuth } from "@/contexts/auth-context";
 import { StateBadge, daysUntil, formatClose } from "./deal-status";
 
-const TABS = ["review", "overview", "subscriptions", "documents", "versions"] as const;
+const TABS = ["overview", "subscriptions", "documents", "versions"] as const;
 type DealTab = (typeof TABS)[number];
 
 function Count({ n }: { n: number }) {
@@ -66,17 +66,9 @@ function DealWorkspace({ fund }: { fund: Fund }) {
     : "overview";
   const publication = usePublication();
   const dealVersions = publication.versions.filter((v) => v.fundId === fund.id);
-  // The Fund Manager reviews what the Investment Team submitted; the deal opens on that review.
+  // The Fund Manager decides on what the Investment Team submitted from a banner above the deal.
   const pending = manager ? dealVersions.find((v) => v.status === "review") : undefined;
-  const hasTabParam = searchParams.has("tab");
-  const visibleTab =
-    tab === "review" && !pending
-      ? "overview"
-      : !manager && tab === "subscriptions"
-        ? "overview"
-        : pending && !hasTabParam
-          ? "review"
-          : tab;
+  const visibleTab = !manager && tab === "subscriptions" ? "overview" : tab;
   const [editorOpen, setEditorOpen] = useState(false);
   const [preview, setPreview] = useState<"eam" | "investor" | null>(null);
 
@@ -151,6 +143,7 @@ function DealWorkspace({ fund }: { fund: Fund }) {
       </div>
 
       {!manager && <PublicationBar fund={fund} onEdit={() => setEditorOpen(true)} />}
+      {pending && <DealReview fund={fund} version={pending} />}
 
       <Tabs
         value={visibleTab}
@@ -159,13 +152,6 @@ function DealWorkspace({ fund }: { fund: Fund }) {
         }}
       >
         <TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
-          {pending && (
-            <TabsTrigger value="review" className="flex-none">
-              <span className="flex items-center gap-2">
-                Review <span className="size-2 rounded-full bg-amber-500" aria-hidden />
-              </span>
-            </TabsTrigger>
-          )}
           <TabsTrigger value="overview" className="flex-none">
             Overview
           </TabsTrigger>
@@ -185,11 +171,6 @@ function DealWorkspace({ fund }: { fund: Fund }) {
             Versions
           </TabsTrigger>
         </TabsList>
-        {pending && (
-          <TabsContent value="review" className="pt-6">
-            <DealReview fund={fund} version={pending} onPreview={() => setPreview("investor")} />
-          </TabsContent>
-        )}
         <TabsContent value="versions" className="pt-6">
           <DealVersions versions={dealVersions} />
         </TabsContent>

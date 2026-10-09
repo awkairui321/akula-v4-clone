@@ -282,7 +282,7 @@ function ApprovalBand({ waiting, funds }: { waiting: Version[]; funds: Fund[] })
           return (
             <li key={version.id}>
               <Link
-                to={`/luca/deals/${version.fundId}?tab=review`}
+                to={`/luca/deals/${version.fundId}`}
                 className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-3 hover:bg-muted/40"
               >
                 <span className="min-w-0">
