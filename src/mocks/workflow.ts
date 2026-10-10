@@ -558,6 +558,13 @@ export function investmentBlockers(s: db.MockSubscription, issuance = false): st
   return blockers;
 }
 
+export function reconciliationBlockers(s: db.MockSubscription): string[] {
+  return [
+    ...(s.status === "reconciliation" ? [] : ["Match receipts before completing reconciliation."]),
+    ...investmentBlockers(s),
+  ];
+}
+
 export function portfolioHistory(user: db.MockUser) {
   const positions = db.holdings.filter((h) => h.investor_id === user.id && h.state !== "realized");
   const observations = positions.map((h) => {
@@ -665,7 +672,13 @@ export function view(user: db.MockUser): WorkflowView {
       holdingId: s._convertedToHoldingId,
       currency: s.currency,
       needsReview: s.needs_review_version_id,
-      allocationBlockers: investmentBlockers(s),
+      allocationBlockers: [
+        ...(s.status === "reconciliation"
+          ? ["Akula Ops must complete reconciliation before LUCA allocates."]
+          : []),
+        ...investmentBlockers(s),
+      ],
+      reconciliationBlockers: reconciliationBlockers(s),
       allocationPrice: allocationTerms(s).price,
       issuanceBlockers: investmentBlockers(s, true),
       paymentProofs:
@@ -892,7 +905,20 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         s.funds_received_at = now();
         s.status = "reconciliation";
         s.owner = "akula_ops";
+        s.next_action = db.nextActionFor(s.status);
       }
+      break;
+    }
+    case "complete-reconciliation": {
+      role("ops");
+      const s = sub();
+      // Repeated submissions leave the existing handoff unchanged.
+      if (s.status === "allocation_pending") return;
+      const blockers = reconciliationBlockers(s);
+      requireValue(!blockers.length, blockers.join(" "));
+      s.status = "allocation_pending";
+      s.owner = db.ownerFor(s.status);
+      s.next_action = db.nextActionFor(s.status);
       break;
     }
     case "correct-receipt": {
@@ -924,6 +950,10 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
     case "allocate": {
       role("luca");
       const s = sub();
+      requireValue(
+        s.status === "allocation_pending",
+        "Akula Ops must complete reconciliation before LUCA allocates.",
+      );
       const blockers = investmentBlockers(s);
       requireValue(!blockers.length, blockers.join(" "));
       const capital = amount();

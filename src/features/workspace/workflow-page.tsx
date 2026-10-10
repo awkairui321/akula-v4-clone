@@ -1473,7 +1473,8 @@ function WorkflowPageContent({
               <Panel title="Operations at a glance">
                 <p>
                   Start with the live processing queue. LUCA decides allocations; Akula Ops matches
-                  cash, issues approved holdings and publishes approved materials.
+                  cash and issues approved holdings. The Fund Manager approves and publishes
+                  offerings.
                 </p>
                 <div className="wf-grid">
                   <button className="wf-tile" onClick={() => chooseTab("Investments")}>
@@ -1488,7 +1489,7 @@ function WorkflowPageContent({
                       {d.versions.filter((v) => v.status !== "published").length} publication
                       versions →
                     </h3>
-                    <p>Edit the overview and advance approved materials</p>
+                    <p>Edit working materials for the Investment Team's review</p>
                   </button>
                   <button className="wf-tile" onClick={() => chooseTab("Reporting")}>
                     <h3>{d.holdings.length} issued holdings →</h3>
@@ -1748,6 +1749,26 @@ function WorkflowPageContent({
                         )}
                       </div>
                     ))}
+                    {ops && sub.status === "reconciliation" && (
+                      <div className="space-y-3 border-t pt-4">
+                        <p>
+                          Complete reconciliation after checking the matched receipts. This sends
+                          the subscription to LUCA for its allocation decision.
+                        </p>
+                        {sub.reconciliationBlockers.length > 0 && (
+                          <ul>
+                            {sub.reconciliationBlockers.map((blocker) => (
+                              <li key={blocker}>{blocker}</li>
+                            ))}
+                          </ul>
+                        )}
+                        <Action
+                          label="Complete reconciliation"
+                          disabled={sub.reconciliationBlockers.length > 0}
+                          command={{ type: "complete-reconciliation", id: sub.id }}
+                        />
+                      </div>
+                    )}
                   </Panel>
                 )}
                 {(manager || sub.investor_id === d.actor.id || d.actor.role === "eam") && (
@@ -1833,22 +1854,20 @@ function WorkflowPageContent({
                   {manager &&
                     !allocation &&
                     !sub.holdingId &&
-                    ["allocation_pending", "reconciliation"].includes(sub.status) && (
+                    sub.status === "allocation_pending" && (
                       <Action
                         label="Approve allocation"
                         disabled={sub.allocationBlockers.length > 0}
-                        command={{ type: "allocate", id: sub.id }}
+                        command={{
+                          type: "allocate",
+                          id: sub.id,
+                          amount: Number(sub.amount),
+                          price: sub.allocationPrice,
+                        }}
                       >
-                        <Field
-                          name="amount"
-                          type="number"
-                          label="Allocated principal (zero permitted)"
-                          value={sub.amount}
-                        />
-                        <Field name="price" type="number" label="Illustrative class unit price" />
                         <p>
-                          Class units use this explicit class price, not an underlying company share
-                          price.
+                          Allocate {money(Number(sub.amount), sub.currency)} at the signed unit
+                          price of {money(sub.allocationPrice, sub.currency)}.
                         </p>
                       </Action>
                     )}

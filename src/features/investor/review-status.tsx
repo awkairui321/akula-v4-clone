@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/auth-context";
 import type { InvestorReviewStatus } from "@/lib/client-onboarding";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
  * speaks when LUCA needs something or has declined, and lets the investor answer or reapply.
  */
 export function ReviewStatusBanner({ showWaiting = false }: { showWaiting?: boolean }) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
   const { data } = useQuery({
@@ -57,8 +59,11 @@ export function ReviewStatusBanner({ showWaiting = false }: { showWaiting?: bool
           {declined
             ? "You can reapply once this is resolved. Your details and documents stay on file; update or add to them first."
             : "Add what LUCA asked for under Verify Identity or Documents, then send it back for review."}{" "}
-          <Link to="/documents" className="underline underline-offset-2">
-            Go to documents
+          <Link
+            to={user?.onboarding_completed ? "/documents" : "/onboarding/kyc"}
+            className="underline underline-offset-2"
+          >
+            {user?.onboarding_completed ? "Go to documents" : "Go to verification documents"}
           </Link>
         </p>
       </div>

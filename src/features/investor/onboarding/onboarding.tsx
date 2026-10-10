@@ -1614,6 +1614,7 @@ export default function OnboardingPage() {
     return (
       <div className="mx-auto max-w-2xl space-y-5 p-8">
         <h1 className="text-2xl font-semibold">Pending LUCA approval</h1>
+        <ReviewStatusBanner showWaiting />
         <p className="text-muted-foreground">
           Your NDA and consents are complete. Confirm every document below belongs to you. LUCA will
           review your identity, accreditation and client documents before approving your account.

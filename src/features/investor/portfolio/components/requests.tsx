@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
@@ -75,6 +76,13 @@ export default function Requests() {
                 Submitted {new Date(request.at).toLocaleDateString("en-GB")} · LUCA and Akula review
                 this request.
               </span>
+              {request.status === "Opportunity available" &&
+                request.fundId &&
+                data.funds.some((fund) => fund.id === request.fundId) && (
+                  <Link to={`/funds/${request.fundId}`} className="text-sm text-primary underline">
+                    View opportunity
+                  </Link>
+                )}
             </CardContent>
           </Card>
         ))}

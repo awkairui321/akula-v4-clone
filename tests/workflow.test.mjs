@@ -75,6 +75,134 @@ const manager = () => db.users.find((u) => u.role === "luca"),
   investor = () => db.users.find((u) => u.id === 2);
 const funded = () => db.subscriptions.find((s) => s.status === "allocation_pending");
 
+test("Ops completes reconciliation before the manager allocates and Ops issues", async () => {
+  const s = db.subscriptions.find(
+    (row) => row.investor_id === investor().id && row.status === "awaiting_funds",
+  );
+  const post = (user, body) => request("workflows", user, "POST", { id: s.id, ...body });
+  const required = Number(s.amount) + Number(s.subscription_fee);
+  assert.equal((await post(ops(), { type: "complete-reconciliation" })).status, 422);
+  await post(ops(), { type: "receipt", amount: required, currency: s.currency, text: "HANDOFF" });
+  const receipt = w.workflow.receipts.find((row) => row.reference === "HANDOFF");
+  assert.equal((await post(ops(), { type: "match", target: receipt.id })).status, 200);
+  assert.equal(db.findSubscriptionById(s.id).status, "reconciliation");
+  const terms = w.allocationTerms(db.findSubscriptionById(s.id));
+  assert.equal(
+    (await post(manager(), { type: "allocate", amount: terms.capital, price: terms.price })).status,
+    422,
+  );
+  for (const user of [
+    manager(),
+    investor(),
+    rm(),
+    db.users.find((u) => u.role === "investment_team"),
+  ])
+    assert.equal((await post(user, { type: "complete-reconciliation" })).status, 422);
+  assert.equal((await post(ops(), { type: "complete-reconciliation" })).status, 200);
+  const handed = db.findSubscriptionById(s.id);
+  assert.equal(handed.status, "allocation_pending");
+  assert.equal(handed.owner, "luca");
+  assert.equal(handed.next_action, "allocate_units");
+  assert.equal((await post(ops(), { type: "complete-reconciliation" })).status, 200);
+  assert.equal(w.workflow.allocations.filter((a) => a.subscriptionId === s.id).length, 0);
+  const oldHoldings = db.holdings.length;
+  assert.equal(
+    (await post(manager(), { type: "allocate", amount: terms.capital, price: terms.price })).status,
+    200,
+  );
+  assert.equal(db.holdings.length, oldHoldings);
+  assert.equal((await post(ops(), { type: "issue" })).status, 200);
+  assert.equal(db.holdings.length, oldHoldings + 1);
+  assert.equal((await post(ops(), { type: "complete-reconciliation" })).status, 422);
+});
+
+test("reconciliation rejects shortfalls, unmatched corrections, holds and stale eligibility", () => {
+  const s = db.subscriptions.find(
+    (row) => row.investor_id === investor().id && row.status === "awaiting_funds",
+  );
+  const send = (body) => w.command(ops(), { id: s.id, ...body });
+  const required = Number(s.amount) + Number(s.subscription_fee);
+  send({ type: "receipt", amount: required - 100, currency: s.currency, text: "PART" });
+  send({ type: "match", target: w.workflow.receipts.at(-1).id });
+  assert.throws(() => send({ type: "complete-reconciliation" }), /full requested funding/);
+  send({ type: "receipt", amount: 100, currency: "SGD", text: "BAD-CURRENCY" });
+  const original = w.workflow.receipts.at(-1).id;
+  assert.throws(() => send({ type: "complete-reconciliation" }), /unmatched receipts/);
+  send({
+    type: "correct-receipt",
+    target: original,
+    amount: 100,
+    currency: s.currency,
+    text: "FIXED-CURRENCY",
+  });
+  const replacement = w.workflow.receipts.at(-1).id;
+  assert.throws(() => send({ type: "complete-reconciliation" }), /unmatched receipts/);
+  send({ type: "match", target: replacement });
+  w.command(manager(), { type: "subscription-hold", id: s.id, status: "held" });
+  assert.throws(() => send({ type: "complete-reconciliation" }), /hold/);
+  w.command(manager(), { type: "subscription-hold", id: s.id, status: "released" });
+  const current = db.findSubscriptionById(s.id);
+  current.needs_review_version_id = 999;
+  assert.throws(() => send({ type: "complete-reconciliation" }), /acknowledge/);
+  delete db.findSubscriptionById(s.id).needs_review_version_id;
+  const signature = w.workflow.signatures.find((row) => row.subscriptionId === s.id);
+  w.workflow.signatures = w.workflow.signatures.filter((row) => row.subscriptionId !== s.id);
+  assert.throws(() => send({ type: "complete-reconciliation" }), /signature/);
+  w.workflow.signatures.push(signature);
+  db.findUserById(s.investor_id).kyc_status = "not_started";
+  assert.throws(() => send({ type: "complete-reconciliation" }), /eligibility/);
+  assert.equal(db.findSubscriptionById(s.id).status, "reconciliation");
+});
+
+test("new receipts after handoff cannot bypass reconciliation or allocation checks", () => {
+  const s = funded();
+  w.command(ops(), { type: "receipt", id: s.id, amount: 100, currency: s.currency, text: "LATER" });
+  const receipt = w.workflow.receipts.at(-1).id;
+  assert.throws(
+    () =>
+      w.command(manager(), { type: "allocate", id: s.id, amount: Number(s.amount), price: 100 }),
+    /unmatched/,
+  );
+  w.command(ops(), { type: "match", id: s.id, target: receipt });
+  assert.equal(db.findSubscriptionById(s.id).status, "reconciliation");
+  assert.equal(db.findSubscriptionById(s.id).owner, "akula_ops");
+  w.command(ops(), { type: "complete-reconciliation", id: s.id });
+  assert.equal(db.findSubscriptionById(s.id).status, "allocation_pending");
+});
+
+test("offering audience exposes only approved-client selection fields to authorized authors", async () => {
+  const team = db.users.find((u) => u.role === "investment_team");
+  for (const user of [team, manager()]) {
+    const response = await request("admin/offering-audience", user);
+    assert.equal(response.status, 200);
+    const { clients } = await response.json();
+    const expected = db.adminInvestors().filter((c) => c.verification_status === "approved");
+    assert.ok(clients.length > 0);
+    assert.deepEqual(
+      clients.map((c) => c.id),
+      expected.map((c) => c.id),
+    );
+    for (const client of clients)
+      assert.deepEqual(
+        Object.keys(client).sort(),
+        [
+          "id",
+          "full_name",
+          "client_code",
+          "reference",
+          "investor_type",
+          "segment",
+          "partner",
+        ].sort(),
+      );
+    assert.ok(clients.some((c) => c.partner));
+  }
+  for (const user of [investor(), rm(), ops(), db.users.find((u) => u.has_eam_profile)])
+    assert.equal((await request("admin/offering-audience", user)).status, 403);
+  assert.equal((await request("admin/investors", team)).status, 403);
+  assert.equal((await request("admin/offering-audience", team, "POST", {})).status, 403);
+});
+
 test("drafts resume in place without delivering; sent messages are immutable", async () => {
   const file = { name: "draft.pdf", file_data_url: "data:application/pdf;base64,JVBERi0xLjQ=" };
   const payload = {
@@ -1207,6 +1335,7 @@ test("custom commercial fee is displayed, saved and retained through allocation 
   w.command(ops(), { type: "receipt", id: sub.id, amount: 25875, text: "CUSTOM-FEE-RECEIPT" });
   const receipt = w.workflow.receipts.find((r) => r.reference === "CUSTOM-FEE-RECEIPT");
   w.command(ops(), { type: "match", id: sub.id, target: receipt.id });
+  w.command(ops(), { type: "complete-reconciliation", id: sub.id });
   w.command(manager(), { type: "allocate", id: sub.id, amount: 12500, price: 100 });
   const allocation = w.workflow.allocations.find((a) => a.subscriptionId === sub.id);
   assert.equal(allocation.fee, 437.5);
