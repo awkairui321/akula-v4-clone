@@ -38,6 +38,9 @@ const NAV_ITEMS = [
   { to: "/luca/communications", label: "Communications", icon: MailIcon },
 ];
 
+/** Pages that still exist (clients and deals link to them) but are not shown in the menu. */
+const HIDDEN_FROM_MENU = ["/luca/partners"];
+
 export default function LucaLayout() {
   const { logout, user } = useAuth();
   const approvals = usePublication().waiting.length;
@@ -57,7 +60,9 @@ export default function LucaLayout() {
     : isTeam
       ? NAV_ITEMS.filter((item) => ["/luca/deals", "/luca/publication"].includes(item.to))
       : // Publication is the Investment Team's. The Fund Manager approves from Deals.
-        NAV_ITEMS.filter((item) => item.to !== "/luca/publication");
+        NAV_ITEMS.filter(
+          (item) => item.to !== "/luca/publication" && !HIDDEN_FROM_MENU.includes(item.to),
+        );
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
@@ -70,8 +75,9 @@ export default function LucaLayout() {
     return () => screen.removeEventListener("change", collapse);
   }, []);
 
+  // A page left out of the menu still names itself in the header when it is open.
   const activeItem =
-    navItems.find(
+    [...navItems, ...NAV_ITEMS.filter((i) => HIDDEN_FROM_MENU.includes(i.to))].find(
       (item) =>
         location.pathname === item.to ||
         (item.to !== home && location.pathname.startsWith(`${item.to}/`)) ||
