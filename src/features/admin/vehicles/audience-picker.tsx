@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { SearchIcon, XIcon } from "lucide-react";
 import type { Fund } from "@/lib/types";
 import type { InvestorSegment } from "@/lib/investor-access";
-import type { AdminInvestor } from "../types";
+import type { AudienceClient } from "./audience";
 import { ALL_CLASSES, recipientsOf, sourceOf, withAudience, type AudienceDraft } from "./audience";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +14,7 @@ const CLASS_LABELS: Record<InvestorSegment, string> = {
   partner_referred: "Partner-referred clients",
 };
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const kindOf = (client: AdminInvestor) =>
+const kindOf = (client: AudienceClient) =>
   client.investor_type === "institutional" ? "Entity" : "Individual";
 
 /** Pick clients by name: chips for those chosen, a search, and a list to tick from. */
@@ -27,7 +27,7 @@ function ClientChooser({
 }: {
   label: string;
   hint?: string;
-  clients: AdminInvestor[];
+  clients: AudienceClient[];
   selected: number[];
   onToggle: (id: number) => void;
 }) {
@@ -37,7 +37,7 @@ function ClientChooser({
     .filter(
       (c) =>
         !q ||
-        `${c.full_name} ${c.reference ?? ""} ${c.email} ${sourceOf(c)}`.toLowerCase().includes(q),
+        `${c.full_name} ${c.reference ?? c.client_code} ${sourceOf(c)}`.toLowerCase().includes(q),
     )
     .slice(0, 50);
   const chosen = clients.filter((c) => selected.includes(c.id));
@@ -108,7 +108,7 @@ export function AudiencePicker({
   inProgress = [],
 }: {
   fund: Fund;
-  clients: AdminInvestor[];
+  clients: AudienceClient[];
   value: AudienceDraft;
   onChange: (next: AudienceDraft) => void;
   /** The deal still follows the original audience rule and has not been set explicitly. */

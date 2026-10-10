@@ -398,6 +398,23 @@ export const adminHandlers = [
     );
   }),
 
+  // Offering preparation needs names and audience attributes, not compliance or financial records.
+  http.get("*/api/v1/admin/offering-audience", ({ request }) => {
+    if (!requireAdmin(request)) return unauthorized();
+    const clients = adminInvestors()
+      .filter((client) => client.verification_status === "approved")
+      .map(({ id, full_name, client_code, reference, investor_type, segment, partner }) => ({
+        id,
+        full_name,
+        client_code,
+        reference,
+        investor_type,
+        segment,
+        partner,
+      }));
+    return HttpResponse.json({ clients });
+  }),
+
   // GET /api/v1/admin/investors?{needs_review,expiring_within,q}
   http.get("*/api/v1/admin/investors", ({ request }) => {
     const user = requireAdmin(request);

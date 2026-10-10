@@ -306,7 +306,7 @@ export default function AdminDashboard() {
         key: `payment-${s.id}`,
         title: s.investor_name,
         detail: `${s.asset_name} · ${s.payment_claimed ? "Investor says paid" : "No transfer matched"}`,
-        needs: "Match payment",
+        needs: "Awaiting Akula Ops payment matching",
         priority: 0,
         ageDays: daysSince(s.payment_declared_at ?? s.approved_at ?? s.created_at),
         amount: parseFloat(s.amount),

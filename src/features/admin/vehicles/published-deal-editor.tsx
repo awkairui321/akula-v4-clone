@@ -916,7 +916,12 @@ export default function PublishedDealEditor({
   const [draft, setDraft] = useState(() => draftFrom(fund));
   const [audience, setAudience] = useState<AudienceDraft>(() => audienceDraftFrom(fund));
   const [audienceTouched, setAudienceTouched] = useState(false);
-  const { clients: audienceClients } = useAudienceClients();
+  const {
+    clients: audienceClients,
+    isLoading: audienceLoading,
+    isError: audienceError,
+    refetch: reloadAudience,
+  } = useAudienceClients();
   // A deal never given an explicit audience keeps the original rule until someone changes it.
   const legacyAudience = fund.eligible_segments === undefined && !audienceTouched;
   const audienceEmpty =
@@ -1054,22 +1059,33 @@ export default function PublishedDealEditor({
               label="Who receives this deal"
               note="Choose which onboarded clients can discover and subscribe to this fund. When you approve and publish, the deal goes to exactly these clients."
             >
-              <AudiencePicker
-                fund={fund}
-                clients={audienceClients}
-                value={audience}
-                legacy={legacyAudience}
-                inProgress={(subsData?.subscriptions ?? []).filter(
-                  (s: AdminSubscription) =>
-                    s.fund_id === fund.id &&
-                    !s.holding_id &&
-                    !CLOSED_SUBSCRIPTION_STATUSES.includes(s.status),
-                )}
-                onChange={(next) => {
-                  setAudience(next);
-                  setAudienceTouched(true);
-                }}
-              />
+              {audienceError ? (
+                <div role="alert" className="space-y-2 text-sm">
+                  <p>Client audience could not be loaded. Retry before changing recipients.</p>
+                  <Button type="button" variant="outline" onClick={() => void reloadAudience()}>
+                    Retry audience loading
+                  </Button>
+                </div>
+              ) : audienceLoading ? (
+                <p className="text-sm text-muted-foreground">Loading client audience…</p>
+              ) : (
+                <AudiencePicker
+                  fund={fund}
+                  clients={audienceClients}
+                  value={audience}
+                  legacy={legacyAudience}
+                  inProgress={(subsData?.subscriptions ?? []).filter(
+                    (s: AdminSubscription) =>
+                      s.fund_id === fund.id &&
+                      !s.holding_id &&
+                      !CLOSED_SUBSCRIPTION_STATUSES.includes(s.status),
+                  )}
+                  onChange={(next) => {
+                    setAudience(next);
+                    setAudienceTouched(true);
+                  }}
+                />
+              )}
             </EditorSection>
 
             <EditorSection id="terms" label="Identity and transaction terms">

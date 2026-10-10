@@ -184,6 +184,7 @@ export type WorkflowView = WorkflowState & {
     status: SubscriptionStatus;
     needsReview?: number;
     allocationBlockers: string[];
+    reconciliationBlockers: string[];
     /** The unit price on the offering version the investor signed. */
     allocationPrice: number;
     issuanceBlockers: string[];

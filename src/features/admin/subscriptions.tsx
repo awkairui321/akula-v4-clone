@@ -525,7 +525,9 @@ export function SubscriptionDialog({
 
           {subscription.available_transitions.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              This subscription is in a terminal state and cannot be moved.
+              {isClosed || subscription.holding_id
+                ? "This subscription is closed. Its history remains available."
+                : `No status change is available here. ${STAGE_GUIDANCE[subscription.status]}`}
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">

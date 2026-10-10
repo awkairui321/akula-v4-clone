@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { HistoryIcon, LinkIcon, SearchIcon, ArrowRightIcon } from "lucide-react";
+import { HistoryIcon, SearchIcon, ArrowRightIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
 import { SUBSCRIPTION_STAGES, stageOfStatus } from "@/lib/types";
@@ -14,7 +14,7 @@ import {
   type SubscriptionStatus,
   type SubscriptionsResponse,
 } from "./types";
-import { PaymentMatchingDialog, SubscriptionDialog } from "./subscriptions";
+import { SubscriptionDialog } from "./subscriptions";
 import { AllocateDialog } from "./allocate-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,7 +129,6 @@ export default function AdminSubscriptionsPage() {
   const [search, setSearch] = useState(queryFromUrl);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [allocateId, setAllocateId] = useState<number | null>(allocateFromUrl);
-  const [matchingOpen, setMatchingOpen] = useState(false);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "subscriptions"] });
 
@@ -230,10 +229,6 @@ export default function AdminSubscriptionsPage() {
             <HistoryIcon className="size-4" />
             History
             <span className="text-muted-foreground tabular-nums">{historyCount}</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setMatchingOpen(true)}>
-            <LinkIcon className="size-4" />
-            Match payments
           </Button>
         </div>
       </div>
@@ -438,17 +433,8 @@ export default function AdminSubscriptionsPage() {
                                     <ArrowRightIcon className="size-3.5" />
                                   </Button>
                                 ) : (
-                                  <Button
-                                    variant="outline"
-                                    onClick={() =>
-                                      sub.status === "payment_unmatched"
-                                        ? setMatchingOpen(true)
-                                        : setDetailId(sub.id)
-                                    }
-                                  >
-                                    {sub.status === "payment_unmatched"
-                                      ? "Match payment"
-                                      : "View subscription"}
+                                  <Button variant="outline" onClick={() => setDetailId(sub.id)}>
+                                    View subscription
                                     <ArrowRightIcon className="size-3.5" />
                                   </Button>
                                 )}
@@ -475,8 +461,6 @@ export default function AdminSubscriptionsPage() {
           onMoved={() => refresh()}
         />
       )}
-
-      {matchingOpen && <PaymentMatchingDialog onClose={() => setMatchingOpen(false)} />}
     </div>
   );
 }

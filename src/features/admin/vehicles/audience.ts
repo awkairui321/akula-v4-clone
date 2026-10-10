@@ -7,7 +7,13 @@ import {
   type InvestorSegment,
 } from "@/lib/investor-access";
 import type { Fund } from "@/lib/types";
-import type { AdminInvestor, InvestorsResponse } from "../types";
+import type { AdminInvestor } from "../types";
+import { useAuth } from "@/contexts/auth-context";
+
+export type AudienceClient = Pick<
+  AdminInvestor,
+  "id" | "full_name" | "client_code" | "reference" | "investor_type" | "segment" | "partner"
+>;
 
 /** Who a deal goes to, as the editor holds it. */
 export type AudienceDraft = {
@@ -43,25 +49,23 @@ export const withAudience = (fund: Fund, audience: AudienceDraft): Fund => ({
 
 /** Onboarded clients: only they can see deals, so only they can be recipients. */
 export function useAudienceClients() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin", "investors", "all"],
-    queryFn: () => api<InvestorsResponse>("/api/v1/admin/investors"),
+  const { user } = useAuth();
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["admin", "offering-audience", user?.id],
+    queryFn: () => api<{ clients: AudienceClient[] }>("/api/v1/admin/offering-audience"),
   });
   const clients = useMemo(
-    () =>
-      (data?.investors ?? [])
-        .filter((client) => client.verification_status === "approved")
-        .sort((a, b) => a.full_name.localeCompare(b.full_name)),
+    () => [...(data?.clients ?? [])].sort((a, b) => a.full_name.localeCompare(b.full_name)),
     [data],
   );
-  return { clients, isLoading };
+  return { clients, isLoading, isError, refetch };
 }
 
-export const sourceOf = (client: AdminInvestor) =>
+export const sourceOf = (client: AudienceClient) =>
   client.partner ?? (client.segment === "partner_referred" ? "RM referral" : "Direct");
 
 /** The clients a deal reaches, and how they break down. */
-export function recipientsOf(fund: Fund, clients: AdminInvestor[]) {
+export function recipientsOf(fund: Fund, clients: AudienceClient[]) {
   const people = clients.filter((client) =>
     audienceIncludes(
       fund,
