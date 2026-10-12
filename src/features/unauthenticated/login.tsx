@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
 import { landingPathForRole } from "@/lib/roles";
+import { clearLoginNotice, peekLoginNotice } from "@/lib/accredited-investor";
 import { isMocking } from "@/mocks/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,8 @@ const DEMO_ACCOUNTS = [
 export default function LoginPage() {
   const location = useLocation();
   const successMessage = (location.state as { message?: string })?.message;
+  const [notice] = useState(peekLoginNotice);
+  useEffect(() => clearLoginNotice(), []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -94,6 +97,9 @@ export default function LoginPage() {
                 <Separator className="flex-1" />
               </div>
             </div>
+          )}
+          {notice && !twoFactorRequired && (
+            <p className="mb-4 text-center text-sm text-muted-foreground">{notice}</p>
           )}
           {successMessage && !twoFactorRequired && (
             <p className="mb-4 text-center text-sm text-green-600">{successMessage}</p>

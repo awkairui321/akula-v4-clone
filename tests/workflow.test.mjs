@@ -18,6 +18,7 @@ for (const file of [
   "src/features/admin/analytics-data.ts",
   "src/lib/document-catalogue.ts",
   "src/lib/format-date.ts",
+  "src/lib/accredited-investor.ts",
   "src/lib/demo-cohort.ts",
   "src/mocks/communications.ts",
   "src/features/eam/revenue-statement.ts",
@@ -2409,4 +2410,36 @@ test("subscribe access follows the whole audience: named clients can subscribe; 
     (await request("subscriptions", investor(), "POST", { fund_id: 1, amount: "25000" })).status,
     403,
   );
+});
+
+test("the accredited investor declaration needs a basis, a declaration and consent, and is recorded", async () => {
+  const user = investor();
+  const declare = (body) => request("investor/declaration", user, "POST", body);
+  const before = w.workflow.events.length;
+  const timeline = db.clientEvents.length;
+
+  for (const incomplete of [
+    { basis: [], declared: true, consented: true },
+    { basis: ["lottery_win"], declared: true, consented: true },
+    { basis: ["income"], declared: true, consented: false },
+    { basis: ["income"], declared: false, consented: true },
+  ])
+    assert.equal((await declare(incomplete)).status, 422);
+  assert.equal(w.workflow.events.length, before, "rejected declarations leave no record");
+
+  const ok = await declare({
+    basis: ["income", "income", "net_financial_assets"],
+    declared: true,
+    consented: true,
+  });
+  assert.equal(ok.status, 200);
+  assert.deepEqual((await ok.json()).basis, ["income", "net_financial_assets"]);
+  assert.equal(w.workflow.events.length, before + 1);
+  assert.match(w.workflow.events.at(-1).label, /declared accredited investor status/);
+  const entry = db.clientEvents.at(-1);
+  assert.equal(db.clientEvents.length, timeline + 1);
+  assert.equal(entry.investor_id, user.id);
+  assert.ok(entry.audience.includes("luca") && !entry.audience.includes("partner"));
+
+  assert.equal((await request("investor/declaration", manager(), "POST", {})).status, 401);
 });

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { demoPersonaId } from "@/lib/demo-persona";
+import { clearDeclared } from "@/lib/accredited-investor";
 
 type User = {
   id: number;
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    clearDeclared();
     if (demoPersonaId()) {
       setUser(null);
       queryClient.clear();

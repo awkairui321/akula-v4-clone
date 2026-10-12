@@ -8,6 +8,7 @@ import {
   Navigate,
   Outlet,
   Link,
+  useLocation,
 } from "react-router-dom";
 import { useEffect, type ReactNode } from "react";
 import { demoPersonaId } from "@/lib/demo-persona";
@@ -17,6 +18,7 @@ import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { ActiveProfileProvider, useActiveProfile } from "@/contexts/active-profile-context";
 import { landingPathForRole } from "@/lib/roles";
+import { entersInvestorPortal, hasDeclared } from "@/lib/accredited-investor";
 import ErrorBoundary from "@/components/error-boundary";
 import AppLayout from "@/components/app-layout";
 import LucaLayout from "@/components/luca-layout";
@@ -30,6 +32,7 @@ import RmOnboardingList from "@/features/rm/onboarding-list";
 import RmClientStatusPage from "@/features/rm/client-status";
 import ClientOnboardingPage, { NewClientPage } from "@/features/rm/client-onboarding";
 import OnboardingPage from "@/features/investor/onboarding/onboarding";
+import AccreditedDeclarationPage from "@/features/investor/accredited-declaration";
 import ConfirmPage from "@/features/unauthenticated/confirm";
 import ForgotPasswordPage from "@/features/unauthenticated/forgot-password";
 import ResetPasswordPage from "@/features/unauthenticated/reset-password";
@@ -115,6 +118,25 @@ function AuthRequired() {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  return <Outlet />;
+}
+
+// Everyone entering the investor portal first declares accredited investor status (SFA s 4A).
+// The comparison view embeds personas directly, so it is exempt.
+function DeclaredRoute() {
+  const { user } = useAuth();
+  const location = useLocation();
+
+  if (!demoPersonaId() && user && entersInvestorPortal(user) && !hasDeclared(user.id)) {
+    return (
+      <Navigate
+        to="/accredited-investor"
+        replace
+        state={{ from: location.pathname + location.search }}
+      />
+    );
   }
 
   return <Outlet />;
@@ -221,21 +243,24 @@ function App() {
                     <Route path="/ops/publication/:id" element={<AdminVehicleOverviewPage ops />} />
                   </Route>
                   <Route path="/live-demo" element={<LiveComparePage />} />
-                  <Route path="/onboarding" element={<OnboardingPage />} />
-                  <Route path="/onboarding/:section" element={<OnboardingPage />} />
-                  {/* Onboarded */}
-                  <Route element={<OnboardedRoute />}>
-                    <Route path="/checkout/:fundId" element={<CheckoutPage />} />
-                    <Route element={<AppLayout />}>
-                      <Route path="/funds" element={<FundsPage />} />
-                      <Route path="/funds/:id" element={<FundDetailPage />} />
-                      <Route path="/discover" element={<DiscoverPage />} />
-                      <Route path="/discover/:id" element={<DiscoverDetailPage />} />
-                      <Route path="/portfolio" element={<PortfolioPage />} />
-                      <Route path="/documents" element={<DocumentsPage />} />
-                      <Route path="/messages" element={<MessagesPage />} />
-                      <Route path="/account" element={<AccountPage />} />
-                      <Route path="/support" element={<Navigate to="/messages" replace />} />
+                  <Route path="/accredited-investor" element={<AccreditedDeclarationPage />} />
+                  <Route element={<DeclaredRoute />}>
+                    <Route path="/onboarding" element={<OnboardingPage />} />
+                    <Route path="/onboarding/:section" element={<OnboardingPage />} />
+                    {/* Onboarded */}
+                    <Route element={<OnboardedRoute />}>
+                      <Route path="/checkout/:fundId" element={<CheckoutPage />} />
+                      <Route element={<AppLayout />}>
+                        <Route path="/funds" element={<FundsPage />} />
+                        <Route path="/funds/:id" element={<FundDetailPage />} />
+                        <Route path="/discover" element={<DiscoverPage />} />
+                        <Route path="/discover/:id" element={<DiscoverDetailPage />} />
+                        <Route path="/portfolio" element={<PortfolioPage />} />
+                        <Route path="/documents" element={<DocumentsPage />} />
+                        <Route path="/messages" element={<MessagesPage />} />
+                        <Route path="/account" element={<AccountPage />} />
+                        <Route path="/support" element={<Navigate to="/messages" replace />} />
+                      </Route>
                     </Route>
                   </Route>
                 </Route>

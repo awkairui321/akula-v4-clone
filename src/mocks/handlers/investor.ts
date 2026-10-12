@@ -1,6 +1,7 @@
 import { commercialTerms, fundForSegment } from "../../lib/investor-access";
 import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { DOCUMENT_REQUEST_KINDS } from "@/lib/document-catalogue";
+import { ACCREDITED_BASES, labelForBasis } from "@/lib/accredited-investor";
 import {
   segmentFor,
   audienceMember,
@@ -67,6 +68,46 @@ function unauthorized() {
 }
 
 export const investorHandlers = [
+  // POST /api/v1/investor/declaration — the accredited investor declaration and consent made
+  // when the investor enters the portal. Recorded in the audit trail and the client's timeline.
+  http.post("*/api/v1/investor/declaration", async ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    const body = (await request.json()) as {
+      basis?: unknown;
+      declared?: unknown;
+      consented?: unknown;
+    };
+    const basis = Array.isArray(body.basis)
+      ? [...new Set(body.basis.filter((b): b is string => typeof b === "string"))]
+      : [];
+    if (basis.length === 0 || basis.some((b) => !ACCREDITED_BASES.some((o) => o.value === b)))
+      return HttpResponse.json(
+        { error: "Select the basis on which you qualify as an accredited investor." },
+        { status: 422 },
+      );
+    if (body.declared !== true || body.consented !== true)
+      return HttpResponse.json(
+        { error: "Make the declaration and give your consent to continue." },
+        { status: 422 },
+      );
+    const labels = basis.map(labelForBasis).join("; ");
+    const profile = findInvestorProfileByUserId(user.id);
+    const name = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
+    recordAudit(
+      user.id,
+      `Investor ${user.email} declared accredited investor status (${labels}) and consented to be treated as an accredited investor.`,
+    );
+    recordClientEvent(
+      user.id,
+      "milestone",
+      `Declared accredited investor status (${labels}) and consented to be treated as an accredited investor.`,
+      name || user.email,
+      ["luca", "rm", "investor"],
+    );
+    persist();
+    return HttpResponse.json({ declared_at: new Date().toISOString(), basis });
+  }),
   http.get("*/api/v1/demo/investor-segment", ({ request }) => {
     const user = currentUser(request);
     if (!user?.has_investor_profile) return unauthorized();
