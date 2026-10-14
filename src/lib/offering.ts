@@ -200,10 +200,10 @@ export const FEE_FOOTNOTE =
   "Fees are charged by the fund and are set out in full in the private placement memorandum. Your allocation is subject to availability and confirmation by LUCA SGP.";
 
 export const PAYMENT_NOTICE =
-  "Please make the transfer from a bank account held in your own name and quote the payment reference exactly as shown. Payments from third parties or without the correct reference cannot be accepted and may be returned. Any bank charges are your responsibility, so please make sure the full amount is received. Your funds will be held in the fund's account and will not be invested until your subscription is accepted.";
+  "Transfers must be made from a FATCA-compliant bank account held in your own name, quoting the payment reference exactly as shown. Payments from third parties, from non-FATCA-compliant banks or without the correct reference will be rejected and returned. All bank charges are borne by you, and the full amount must be received. Funds are held in the fund's account and are not invested until your subscription is accepted.";
 
 export const PAYMENT_DECLARATION =
-  "I have made the transfer from an account in my own name and included the payment reference.";
+  "I have made the transfer from a FATCA-compliant account in my own name and included the payment reference.";
 
 export const SUBMITTED_NOTE =
   "Acceptance is at the discretion of LUCA SGP. If your subscription is not accepted, the full amount you paid will be returned to the account it came from.";

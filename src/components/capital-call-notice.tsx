@@ -87,7 +87,10 @@ export function CapitalCallNotice({ call }: { call: CapitalCall }) {
         <ul className="mt-1 list-disc space-y-1 pl-5">
           <li>Ensure the wire reference exactly matches the format shown above</li>
           <li>All bank charges must be borne by the investor (send funds OUR)</li>
-          <li>Payments must be made from an account in the investor's name</li>
+          <li>
+            Payments must be made from a FATCA-compliant bank account in the investor's name, or
+            they will be rejected
+          </li>
           <li>Please send wire confirmation to the contact below immediately upon transmission</li>
         </ul>
       </section>

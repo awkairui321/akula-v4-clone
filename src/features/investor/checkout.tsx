@@ -24,6 +24,7 @@ import {
 } from "@/lib/offering";
 import { subscriptionStatusLabel } from "@/lib/investor-status";
 import { CapitalCallDialog } from "@/components/capital-call-notice";
+import type { CapitalCall } from "@/lib/capital-call";
 import DisclaimerFooter from "@/components/disclaimer-footer";
 import { isMocking } from "@/mocks/browser";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ import {
   XCircleIcon,
   CopyIcon,
   CheckIcon,
+  FileTextIcon,
 } from "lucide-react";
 import type {
   Fund,
@@ -841,7 +843,15 @@ function TransferStep({
   onBack: () => void;
 }) {
   const [transferred, setTransferred] = useState(false);
+  const [showCall, setShowCall] = useState(false);
   const account = subscription.transfer_account;
+  const { data: callData } = useQuery({
+    queryKey: ["capital-call", subscription.id],
+    queryFn: () =>
+      api<{ capital_call: CapitalCall }>(`/api/v1/subscriptions/${subscription.id}/capital_call`),
+    enabled: Boolean(account),
+  });
+  const call = callData?.capital_call;
   const total = parseFloat(subscription.amount) + parseFloat(subscription.subscription_fee);
 
   const submitMutation = useMutation({
@@ -912,9 +922,38 @@ function TransferStep({
         </CardContent>
       </Card>
 
+      {account && call && (
+        <section
+          aria-label="Capital call notice"
+          className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border p-4"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <FileTextIcon className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1 basis-40">
+            <p className="text-sm font-medium">Capital call notice</p>
+            <p className="text-xs text-muted-foreground">
+              {call.number} · {formatUsdPrecise(Number(call.amount_due))} due by{" "}
+              {new Date(call.due_date).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+                timeZone: "UTC",
+              })}
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => setShowCall(true)}>
+            View notice
+          </Button>
+        </section>
+      )}
+
       <div className="mb-6 rounded-lg border bg-muted/40 p-4 text-sm leading-6">
         <p>{PAYMENT_NOTICE}</p>
       </div>
+      {showCall && (
+        <CapitalCallDialog subscriptionId={subscription.id} onClose={() => setShowCall(false)} />
+      )}
 
       <label className="mb-6 flex cursor-pointer items-start gap-3 rounded-lg border p-4">
         <input
@@ -959,7 +998,6 @@ function SubmittedStep({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showCall, setShowCall] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["subscription", initial.id],
@@ -1074,13 +1112,6 @@ function SubmittedStep({
       </p>
 
       <FundingShortfall id={subscription.id} />
-      <Button
-        variant="outline"
-        className="mx-auto mt-4 w-full max-w-sm"
-        onClick={() => setShowCall(true)}
-      >
-        View capital call notice
-      </Button>
       {subscription.status === "awaiting_funds" && (
         <Button
           variant="outline"
@@ -1090,9 +1121,6 @@ function SubmittedStep({
         >
           {refundMutation.isPending ? "Requesting refund..." : "Cancel unissued application"}
         </Button>
-      )}
-      {showCall && (
-        <CapitalCallDialog subscriptionId={subscription.id} onClose={() => setShowCall(false)} />
       )}
 
       <div className="mt-8 flex gap-3">
