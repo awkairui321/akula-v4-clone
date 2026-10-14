@@ -20,6 +20,7 @@ for (const file of [
   "src/lib/format-date.ts",
   "src/lib/accredited-investor.ts",
   "src/lib/offering.ts",
+  "src/lib/receipts.ts",
   "src/lib/capital-call.ts",
   "src/lib/investor-status.ts",
   "src/lib/currency.ts",
@@ -79,6 +80,11 @@ const manager = () => db.users.find((u) => u.role === "luca"),
   rm = () => db.users.find((u) => u.id === 6),
   investor = () => db.users.find((u) => u.id === 2);
 const funded = () => db.subscriptions.find((s) => s.status === "allocation_pending");
+/** LUCA verifies the funds, then confirms the allocation: the two decisions are separate commands. */
+function allocateVerified(user, command) {
+  w.command(user, { type: "verify-funds", id: command.id });
+  return w.command(user, command);
+}
 
 test("Ops completes reconciliation before the manager allocates and Ops issues", async () => {
   const s = db.subscriptions.find(
@@ -96,6 +102,8 @@ test("Ops completes reconciliation before the manager allocates and Ops issues",
     (await post(manager(), { type: "allocate", amount: terms.capital, price: terms.price })).status,
     422,
   );
+  // Funds cannot be verified until Ops has completed the reconciliation.
+  assert.equal((await post(manager(), { type: "verify-funds" })).status, 422);
   for (const user of [
     manager(),
     investor(),
@@ -111,10 +119,26 @@ test("Ops completes reconciliation before the manager allocates and Ops issues",
   assert.equal((await post(ops(), { type: "complete-reconciliation" })).status, 200);
   assert.equal(w.workflow.allocations.filter((a) => a.subscriptionId === s.id).length, 0);
   const oldHoldings = db.holdings.length;
+  // Gate 1: only the Fund Manager verifies the funds, and nothing is allocated before they do.
+  assert.equal(
+    (await post(manager(), { type: "allocate", amount: terms.capital, price: terms.price })).status,
+    422,
+  );
+  for (const user of [ops(), investor(), rm(), db.users.find((u) => u.role === "investment_team")])
+    assert.equal((await post(user, { type: "verify-funds" })).status, 422, user.role);
+  assert.equal(db.findSubscriptionById(s.id).funds_verified ?? null, null);
+  assert.equal((await post(manager(), { type: "verify-funds" })).status, 200);
+  const verified = db.findSubscriptionById(s.id);
+  assert.equal(verified.status, "allocation_pending", "verifying funds does not allocate");
+  assert.equal(verified.funds_verified.by_id, manager().id);
+  assert.equal(verified.allocation_confirmed ?? null, null);
+  assert.equal((await post(manager(), { type: "verify-funds" })).status, 200, "idempotent");
+  // Gate 2: the allocation is a separate decision, recorded as its own event.
   assert.equal(
     (await post(manager(), { type: "allocate", amount: terms.capital, price: terms.price })).status,
     200,
   );
+  assert.equal(db.findSubscriptionById(s.id).allocation_confirmed.by_id, manager().id);
   assert.equal(db.holdings.length, oldHoldings);
   assert.equal((await post(ops(), { type: "issue" })).status, 200);
   assert.equal(db.holdings.length, oldHoldings + 1);
@@ -165,7 +189,12 @@ test("new receipts after handoff cannot bypass reconciliation or allocation chec
   const receipt = w.workflow.receipts.at(-1).id;
   assert.throws(
     () =>
-      w.command(manager(), { type: "allocate", id: s.id, amount: Number(s.amount), price: 100 }),
+      allocateVerified(manager(), {
+        type: "allocate",
+        id: s.id,
+        amount: Number(s.amount),
+        price: 100,
+      }),
     /unmatched/,
   );
   w.command(ops(), { type: "match", id: s.id, target: receipt });
@@ -688,7 +717,7 @@ test("partial allocation is independent of idempotent issuance and reconciles re
     cash = w.matched(s.id),
     capital = Number(s.amount) / 2;
   const old = db.holdings.length;
-  w.command(manager(), { type: "allocate", id: s.id, amount: capital, price: 1000 });
+  allocateVerified(manager(), { type: "allocate", id: s.id, amount: capital, price: 1000 });
   assert.equal(db.holdings.length, old);
   const a = w.workflow.allocations.find((a) => a.subscriptionId === s.id);
   assert.equal(
@@ -704,7 +733,7 @@ test("partial allocation is independent of idempotent issuance and reconciles re
 });
 test("zero allocation never issues and returns require explicit processing/confirmation", () => {
   const s = funded();
-  w.command(manager(), { type: "allocate", id: s.id, amount: 0, price: 1000 });
+  allocateVerified(manager(), { type: "allocate", id: s.id, amount: 0, price: 1000 });
   assert.throws(() => w.command(ops(), { type: "issue", id: s.id }));
   let r = w.workflow.returns.find((r) => r.subscriptionId === s.id);
   assert.throws(() =>
@@ -743,7 +772,7 @@ test("unmatched and wrong-currency receipts block allocation; corrections preser
     /currency/,
   );
   assert.throws(
-    () => w.command(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 }),
+    () => allocateVerified(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 }),
     /unmatched/,
   );
   w.command(ops(), {
@@ -758,6 +787,7 @@ test("unmatched and wrong-currency receipts block allocation; corrections preser
 });
 test("failed commands are atomic", () => {
   const s = funded();
+  w.command(manager(), { type: "verify-funds", id: s.id });
   const before = structuredClone(w.workflow);
   assert.throws(() =>
     w.command(manager(), { type: "allocate", id: s.id, amount: 1e9, price: 1000 }),
@@ -768,7 +798,7 @@ test("cancelled offerings cannot allocate or issue", () => {
   const s = funded();
   db.findFundById(s.fund_id).state = "cancelled";
   assert.throws(
-    () => w.command(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 }),
+    () => allocateVerified(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 }),
     /terminal/,
   );
 });
@@ -881,7 +911,7 @@ test("revised published version gates allocation until exact investor acknowledg
   w.command(team, { type: "review", id: v.id });
   w.command(manager(), { type: "approve", id: v.id });
   assert.throws(
-    () => w.command(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 }),
+    () => allocateVerified(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 }),
     /review/,
   );
   assert.throws(
@@ -889,7 +919,7 @@ test("revised published version gates allocation until exact investor acknowledg
     /investor/,
   );
   w.command(investor(), { type: "acknowledge", id: s.id, target: v.id });
-  w.command(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 });
+  allocateVerified(manager(), { type: "allocate", id: s.id, amount: 1000, price: 1000 });
   assert.ok(w.signedVersion(s.id).id !== v.id);
 });
 
@@ -1290,7 +1320,12 @@ test("readiness blockers are exposed and hold prevents approval or allocation", 
   );
   assert.throws(
     () =>
-      w.command(manager(), { type: "allocate", id: s.id, amount: Number(s.amount), price: 100 }),
+      allocateVerified(manager(), {
+        type: "allocate",
+        id: s.id,
+        amount: Number(s.amount),
+        price: 100,
+      }),
     /hold/,
   );
   w.command(manager(), { type: "subscription-hold", id: s.id, status: "released" });
@@ -1380,7 +1415,7 @@ test("custom commercial fee is displayed, saved and retained through allocation 
   const receipt = w.workflow.receipts.find((r) => r.reference === "CUSTOM-FEE-RECEIPT");
   w.command(ops(), { type: "match", id: sub.id, target: receipt.id });
   w.command(ops(), { type: "complete-reconciliation", id: sub.id });
-  w.command(manager(), { type: "allocate", id: sub.id, amount: 12500, price: 100 });
+  allocateVerified(manager(), { type: "allocate", id: sub.id, amount: 12500, price: 100 });
   const allocation = w.workflow.allocations.find((a) => a.subscriptionId === sub.id);
   assert.equal(allocation.fee, 437.5);
   assert.equal(w.workflow.returns.find((r) => r.subscriptionId === sub.id).amount, 12937.5);
@@ -1396,7 +1431,7 @@ test("allocation and issuance recheck eligibility, signatures and insufficient c
   let user = db.findUserById(sub.investor_id);
   user.kyc_status = "pending";
   assert.throws(
-    () => w.command(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 }),
+    () => allocateVerified(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 }),
     /eligibility/,
   );
   user = db.findUserById(sub.investor_id);
@@ -1404,11 +1439,11 @@ test("allocation and issuance recheck eligibility, signatures and insufficient c
   const signature = w.workflow.signatures.find((row) => row.subscriptionId === sub.id);
   w.workflow.signatures = w.workflow.signatures.filter((row) => row.subscriptionId !== sub.id);
   assert.throws(
-    () => w.command(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 }),
+    () => allocateVerified(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 }),
     /signature/,
   );
   w.workflow.signatures.push(signature);
-  w.command(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 });
+  allocateVerified(manager(), { type: "allocate", id: sub.id, amount: 10000, price: 100 });
   assert.equal(db.toAdminSubscription(db.findSubscriptionById(sub.id)).holding_id, null);
   user = db.findUserById(sub.investor_id);
   user.kyc_status = "pending";
@@ -1461,7 +1496,12 @@ test("communications stay unread until an actual direct recipient reads; schedul
 
 test("LUCA can hold an allocated unissued subscription and release it without changing allocation", async () => {
   const sub = funded();
-  w.command(manager(), { type: "allocate", id: sub.id, amount: Number(sub.amount), price: 100 });
+  allocateVerified(manager(), {
+    type: "allocate",
+    id: sub.id,
+    amount: Number(sub.amount),
+    price: 100,
+  });
   assert.equal(
     (await request(`admin/subscriptions/${sub.id}/hold`, manager(), "PATCH", { on_hold: true }))
       .status,
@@ -2185,6 +2225,7 @@ test("Quanta variants have separate audiences, fees, documents and funded client
   const pending = examples.find(
     (sub) => sub.fund_id === 1201 && sub.status === "allocation_pending",
   );
+  w.command(manager(), { type: "verify-funds", id: pending.id });
   w.command(manager(), {
     type: "allocate",
     id: pending.id,
@@ -2361,6 +2402,7 @@ test("an allocation is fixed by the subscription: the subscribed capital at the 
   ])
     assert.equal((await attempt(body)).status, 422);
   assert.equal(db.findSubscriptionById(s.id).status, "allocation_pending");
+  w.command(manager(), { type: "verify-funds", id: s.id });
   assert.equal((await attempt({ amount: terms.capital, price: terms.price })).status, 200);
   assert.equal(db.findSubscriptionById(s.id).status, "allocated");
 });
@@ -2642,11 +2684,13 @@ test("investor-facing status wording, offering defaults and US$ amounts", async 
     awaiting_funds: "Awaiting funds",
     payment_unmatched: "Awaiting funds",
     reconciliation: "Funds received",
-    allocation_pending: "Under review",
+    allocation_pending: "Funds received",
     not_allocated: "Not accepted",
     rejected: "Not accepted",
     funds_returned: "Refund processed",
   });
+  assert.equal(investorStatusLabel("allocation_pending", false, false), "Funds received");
+  assert.equal(investorStatusLabel("allocation_pending", false, true), "Under review");
   assert.equal(investorStatusLabel("allocated", false), "Allocation confirmed");
   assert.equal(investorStatusLabel("allocated", true), "Accepted");
 
@@ -2667,4 +2711,115 @@ test("investor-facing status wording, offering defaults and US$ amounts", async 
   assert.equal(currency.formatAmountInput("25000"), "25,000.00");
   assert.equal(currency.formatAmountInput("25000.5"), "25,000.50");
   assert.equal(currency.formatAmountInput(""), "");
+});
+
+test("funds verified and allocation confirmed are two recorded decisions that only LUCA's console makes", async () => {
+  const s = funded();
+  const label = () => labelOf(db.toSubscription(db.findSubscriptionById(s.id)));
+  const { subscriptionStatusLabel: labelOf } =
+    await import("../.test-runtime/src/lib/investor-status.mjs");
+  assert.equal(label(), "Funds received");
+  // Nothing in the platform verifies funds or confirms an allocation by itself.
+  w.command(ops(), { type: "complete-reconciliation", id: s.id });
+  assert.equal(db.gatesOf(db.findSubscriptionById(s.id)).funds_verified, null);
+  assert.equal(label(), "Funds received");
+
+  const note = "Acclime confirmation received 14 Oct";
+  w.command(manager(), { type: "verify-funds", id: s.id, text: note });
+  const gates = db.gatesOf(db.findSubscriptionById(s.id));
+  assert.equal(gates.funds_verified.note, note);
+  assert.equal(gates.allocation_confirmed, null);
+  assert.equal(label(), "Under review");
+  assert.ok(db.toSubscription(db.findSubscriptionById(s.id)).funds_verified_at);
+  assert.equal(db.toSubscription(db.findSubscriptionById(s.id)).allocation_confirmed_at, null);
+  assert.ok(w.workflow.events.some((e) => /verified the funds for subscription/.test(e.label)));
+  const inbox = (
+    await (
+      await request(
+        "messages",
+        db.users.find((u) => u.id === s.investor_id),
+      )
+    ).json()
+  ).messages;
+  assert.ok(inbox.some((m) => /funds are verified/.test(m.subject)));
+
+  w.command(manager(), {
+    type: "allocate",
+    id: s.id,
+    ...{ amount: Number(s.amount), price: w.allocationTerms(s).price },
+  });
+  const after = db.gatesOf(db.findSubscriptionById(s.id));
+  assert.ok(after.allocation_confirmed.at && after.funds_verified.at);
+  assert.equal(label(), "Allocation confirmed");
+  assert.ok(
+    w.workflow.events.some((e) => /confirmed the allocation for subscription/.test(e.label)),
+  );
+});
+
+test("a late receipt reopens verification; declining needs no verification; history carries both gates", async () => {
+  // A receipt matched after the funds were verified means they have to be verified again.
+  const s = funded();
+  w.command(manager(), { type: "verify-funds", id: s.id });
+  const amount = 1000;
+  w.command(ops(), {
+    type: "receipt",
+    id: s.id,
+    amount,
+    currency: s.currency,
+    text: "LATE-TOP-UP",
+  });
+  const receipt = w.workflow.receipts.find((r) => r.reference === "LATE-TOP-UP");
+  w.command(ops(), { type: "match", id: s.id, target: receipt.id });
+  const reopened = db.findSubscriptionById(s.id);
+  assert.equal(reopened.status, "reconciliation");
+  assert.equal(db.gatesOf(reopened).funds_verified, null);
+  assert.throws(
+    () => w.command(manager(), { type: "verify-funds", id: s.id }),
+    /complete reconciliation/,
+  );
+
+  // LUCA can decline a subscription it has not verified: nothing is accepted.
+  const other = db.subscriptions.find((x) => x.status === "allocation_pending" && x.id !== s.id);
+  w.command(manager(), { type: "decline-allocation", id: other.id, text: "Over-subscribed" });
+  assert.equal(db.findSubscriptionById(other.id).status, "not_allocated");
+  assert.equal(db.gatesOf(db.findSubscriptionById(other.id)).allocation_confirmed, null);
+
+  // Subscriptions allocated before the gates existed carry them as recorded at allocation.
+  const old = db.subscriptions.find((x) => x.status === "allocated" && !x.funds_verified);
+  assert.ok(old);
+  const gates = db.gatesOf(old);
+  assert.ok(gates.funds_verified && gates.allocation_confirmed);
+  assert.match(gates.funds_verified.by_name, /before the gates/);
+  const admin = db.toAdminSubscription(old);
+  assert.ok(admin.funds_verified && admin.allocation_confirmed);
+});
+
+test("receipts say who reported the funds, so Acclime's confirmation can be told from Ops' entry", async () => {
+  const { receiptSource, receiptLabel, ACCLIME_CONFIRMATION_LABEL } =
+    await import("../.test-runtime/src/lib/receipts.mjs");
+  // Funds the demo already holds are the administrator's confirmation, not an Ops entry.
+  const seeded = w.workflow.receipts.filter((r) => r.reference.startsWith("MIGRATED-"));
+  assert.ok(seeded.length > 0);
+  for (const r of seeded) {
+    assert.equal(receiptSource(r), "acclime");
+    assert.equal(receiptLabel(r), ACCLIME_CONFIRMATION_LABEL);
+    assert.equal(r.acclimeMessageId, null, "ready to point at the Acclime message when it exists");
+  }
+  assert.equal(ACCLIME_CONFIRMATION_LABEL, "Acclime fund admin confirmation");
+  // Saved states from before receipts carried a source resolve the same way.
+  assert.equal(receiptSource({ reference: "MIGRATED-9" }), "acclime");
+  assert.equal(receiptSource({ reference: "WIRE-12345" }), "ops");
+
+  // A receipt Ops keys in keeps the reference Ops typed.
+  const s = db.subscriptions.find((x) => x.status === "awaiting_funds");
+  w.command(ops(), {
+    type: "receipt",
+    id: s.id,
+    amount: 100,
+    currency: s.currency,
+    text: "WIRE-12345",
+  });
+  const keyed = w.workflow.receipts.find((r) => r.reference === "WIRE-12345");
+  assert.equal(keyed.source, "ops");
+  assert.equal(receiptLabel(keyed), "WIRE-12345");
 });

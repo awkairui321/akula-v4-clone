@@ -1,5 +1,5 @@
 import type { CommercialTerms } from "@/lib/investor-access";
-import type { Holding } from "@/lib/types";
+import type { GateEvent, Holding } from "@/lib/types";
 
 // Canonical source of truth: src/lib/types.ts (shared with the investor-facing
 // Subscription type so both sides of the pipeline can never drift apart).
@@ -17,6 +17,9 @@ export type AdminSubscription = {
   allocated_principal?: number;
   commercial_terms?: CommercialTerms;
   holding_id?: number | null;
+  /** LUCA's two decisions, recorded only through the Fund Manager's console. */
+  funds_verified?: GateEvent | null;
+  allocation_confirmed?: GateEvent | null;
   id: number;
   fund_id: number;
   fund_name: string;

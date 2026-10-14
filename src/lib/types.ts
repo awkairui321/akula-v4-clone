@@ -166,6 +166,14 @@ export type SubscriptionStatus =
   | "rejected"
   | "cancelled";
 
+/** One of the two decisions only the Fund Manager records: funds verified, allocation confirmed. */
+export type GateEvent = {
+  at: string;
+  by_id: number | null;
+  by_name: string;
+  note: string | null;
+};
+
 export type SubscriptionOwner =
   | "luca"
   | "investor"
@@ -234,7 +242,7 @@ export const SUBSCRIPTION_STAGES: {
     key: "verification",
     label: "Verification of funds",
     milestone: "Fund verification",
-    detail: "Akula Ops reconciles the funds; LUCA confirms the allocation.",
+    detail: "Akula Ops reconciles the funds; LUCA verifies them, then confirms the allocation.",
     statuses: ["reconciliation", "allocation_pending"],
   },
   {
@@ -330,6 +338,9 @@ export type Subscription = {
   reconciled_at: string | null;
   allocated_at: string | null;
   payment_declared_at: string | null;
+  /** When LUCA recorded that the funds were verified, and that the allocation was confirmed. */
+  funds_verified_at?: string | null;
+  allocation_confirmed_at?: string | null;
 };
 
 export type AcknowledgementTerm = {

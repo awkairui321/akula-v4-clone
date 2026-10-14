@@ -318,7 +318,7 @@ export default function AdminDashboard() {
         key: `allocate-${s.id}`,
         title: s.investor_name,
         detail: `${s.asset_name} · ${s.eam_firm ?? "Direct"}`,
-        needs: "Confirm allocation",
+        needs: s.funds_verified ? "Confirm allocation" : "Verify funds",
         priority: 0,
         ageDays: daysSince(s.reconciled_at ?? s.funds_received_at ?? s.created_at),
         amount: parseFloat(s.amount),

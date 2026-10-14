@@ -1,4 +1,5 @@
 import type { InvestorSegment, CommercialTerms } from "../lib/investor-access";
+import type { GateEvent } from "../lib/types";
 import {
   ACKNOWLEDGEMENT_STATEMENTS,
   OFFERING_DOCUMENTS,
@@ -2481,6 +2482,9 @@ export type MockSubscription = {
   payment_declared_at: string | null;
   created_at: string;
   acknowledgements: AcknowledgementTerm[];
+  /** The Fund Manager's two decisions, recorded only through LUCA's console. */
+  funds_verified?: GateEvent | null;
+  allocation_confirmed?: GateEvent | null;
   /** When this investor opened each offering document, and which version they saw. */
   documents_opened?: Partial<
     Record<OfferingDocumentKind, { at: string; version: string; user_id: number }>
@@ -2832,6 +2836,38 @@ export function findSubscriptionById(id: number): MockSubscription | undefined {
   return subscriptions.find((s) => s.id === id);
 }
 
+/**
+ * The Fund Manager's two decisions on a subscription. Subscriptions allocated before the gates
+ * existed carry them as recorded at the time of allocation, so saved demo data stays consistent.
+ */
+export function gatesOf(
+  sub: Pick<
+    MockSubscription,
+    | "status"
+    | "funds_verified"
+    | "allocation_confirmed"
+    | "allocated_at"
+    | "reconciled_at"
+    | "funds_received_at"
+    | "created_at"
+    | "_convertedToHoldingId"
+  >,
+): { funds_verified: GateEvent | null; allocation_confirmed: GateEvent | null } {
+  const allocated = sub.status === "allocated" || Boolean(sub._convertedToHoldingId);
+  const historic = (at: string | null): GateEvent => ({
+    at: at ?? sub.created_at,
+    by_id: null,
+    by_name: "Recorded before the gates were introduced",
+    note: null,
+  });
+  return {
+    funds_verified:
+      sub.funds_verified ?? (allocated ? historic(sub.reconciled_at ?? sub.allocated_at) : null),
+    allocation_confirmed:
+      sub.allocation_confirmed ?? (allocated ? historic(sub.allocated_at) : null),
+  };
+}
+
 export function toSubscription(sub: MockSubscription): Subscription {
   return {
     id: sub.id,
@@ -2865,6 +2901,8 @@ export function toSubscription(sub: MockSubscription): Subscription {
     reconciled_at: sub.reconciled_at,
     allocated_at: sub.allocated_at,
     payment_declared_at: sub.payment_declared_at,
+    funds_verified_at: gatesOf(sub).funds_verified?.at ?? null,
+    allocation_confirmed_at: gatesOf(sub).allocation_confirmed?.at ?? null,
   };
 }
 
@@ -2923,6 +2961,8 @@ export function toAdminSubscription(sub: MockSubscription) {
     reconciled_at: sub.reconciled_at,
     allocated_at: sub.allocated_at,
     payment_declared_at: sub.payment_declared_at,
+    funds_verified: gatesOf(sub).funds_verified,
+    allocation_confirmed: gatesOf(sub).allocation_confirmed,
     created_at: sub.created_at,
   };
 }

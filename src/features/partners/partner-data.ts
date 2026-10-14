@@ -1,4 +1,5 @@
 import type { WorkflowView } from "@/lib/workflow-types";
+import { subscriptionStatusLabel } from "@/lib/investor-status";
 
 /** Capital in the three states that matter, always shown together. */
 export type Capital = {
@@ -18,7 +19,8 @@ export type HoldingLine = {
   valueAt: string | null;
 };
 
-export type ApplicationLine = { id: number; status: string; amount: number };
+/** `label` is the status as the Fund Manager and the investor read it. */
+export type ApplicationLine = { id: number; status: string; label: string; amount: number };
 
 export type ClientLine = Capital & {
   id: number;
@@ -104,7 +106,12 @@ export function buildPartnerBook(data: WorkflowView): {
       });
     const applications = subs
       .filter((s) => !s.holdingId && !INACTIVE.includes(s.status))
-      .map((s) => ({ id: s.id, status: s.status, amount: Number(s.amount) }));
+      .map((s) => ({
+        id: s.id,
+        status: s.status,
+        label: subscriptionStatusLabel({ status: s.status, funds_verified: s.fundsVerified }),
+        amount: Number(s.amount),
+      }));
     return {
       ...subs.reduce(
         (total, s) => add(total, capitalOfSub(s.id, s.amount, s.subscription_fee, s.status)),

@@ -1,5 +1,5 @@
 import type { CommercialTerms } from "./investor-access";
-import type { Fund, SubscriptionStatus } from "./types";
+import type { Fund, GateEvent, SubscriptionStatus } from "./types";
 
 export type StaffRole = "luca" | "investment_team" | "ops" | "rm";
 export type Receipt = {
@@ -11,6 +11,10 @@ export type Receipt = {
   matched: boolean;
   supersededBy?: number;
   at: string;
+  /** Who reported the funds: Ops keyed it in, or Acclime (the fund administrator) confirmed it. */
+  source?: "ops" | "acclime";
+  /** The Acclime message this receipt came from, once the Acclime inbox exists. */
+  acclimeMessageId?: number | null;
 };
 export type Allocation = {
   id: number;
@@ -183,6 +187,9 @@ export type WorkflowView = WorkflowState & {
     currency: string;
     status: SubscriptionStatus;
     needsReview?: number;
+    /** LUCA's two decisions, recorded only in LUCA's console. */
+    fundsVerified?: GateEvent | null;
+    allocationConfirmed?: GateEvent | null;
     allocationBlockers: string[];
     reconciliationBlockers: string[];
     /** The unit price on the offering version the investor signed. */

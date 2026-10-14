@@ -5,7 +5,6 @@ import { ChevronRightIcon, FolderIcon, FileTextIcon } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
-import { STATUS_LABELS, type SubscriptionStatus } from "@/lib/types";
 import type { WorkflowView } from "@/lib/workflow-types";
 import type { Capital } from "@/features/partners/partner-data";
 import { Button } from "@/components/ui/button";
@@ -286,7 +285,7 @@ export function FundSection({
               className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"
             >
               <span>
-                Application #{a.id} · {STATUS_LABELS[a.status as SubscriptionStatus] ?? a.status}
+                Application #{a.id} · {a.label}
               </span>
               <span>Subscription {formatPrice(a.amount)}</span>
             </p>

@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { subscriptionStatusLabel } from "@/lib/investor-status";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
 import { SUBSCRIPTION_STAGES, stageOfStatus } from "@/lib/types";
 import type { Fund } from "@/lib/types";
-import { STATUS_LABELS, type InvestorPricingRow, type SubscriptionsResponse } from "../types";
+import type { InvestorPricingRow, SubscriptionsResponse } from "../types";
 
 /** Where this deal's subscriptions are in the journey, linked through to the work queue. */
 export default function DealSubscriptions({ fund }: { fund: Fund }) {
@@ -101,7 +102,7 @@ export default function DealSubscriptions({ fund }: { fund: Fund }) {
                 {formatPrice(s.amount)}
               </span>
               <span className="w-44 text-sm text-muted-foreground">
-                {stageOfStatus(s.status)?.label ?? STATUS_LABELS[s.status]}
+                {subscriptionStatusLabel(s)}
               </span>
             </li>
           ))}

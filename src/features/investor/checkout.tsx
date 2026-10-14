@@ -23,7 +23,7 @@ import {
   offeringOf,
   type OfferingDocumentKind,
 } from "@/lib/offering";
-import { investorStatusLabel } from "@/lib/investor-status";
+import { subscriptionStatusLabel } from "@/lib/investor-status";
 import { CapitalCallDialog } from "@/components/capital-call-notice";
 import DisclaimerFooter from "@/components/disclaimer-footer";
 import { isMocking } from "@/mocks/browser";
@@ -1049,9 +1049,7 @@ function SubmittedStep({
         <CardContent className="space-y-3 pt-6 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Status</span>
-            <span className="font-medium">
-              {investorStatusLabel(subscription.status, isIssued)}
-            </span>
+            <span className="font-medium">{subscriptionStatusLabel(subscription)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Amount payable</span>

@@ -7,6 +7,7 @@ import { formatPrice, formatPricePrecise } from "@/lib/currency";
 import type { WorkflowCommand, WorkflowView } from "@/lib/workflow-types";
 import type { AdminSubscription } from "./types";
 import { Button } from "@/components/ui/button";
+import { DialogFacts } from "./dialog-facts";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,101 +68,102 @@ export function AllocateDialog({
           <span className="font-medium text-foreground">{subscription.investor_name}</span> ·{" "}
           {subscription.fund_name} · #{subscription.id}
         </DialogDescription>
+        <div className="mt-4 space-y-4">
+          <DialogFacts
+            rows={[
+              { label: "Subscribed", value: formatPrice(subscription.amount) },
+              { label: "Funds received", value: formatPrice(received) },
+              { label: "Subscription fee", value: formatPrice(subscription.subscription_fee) },
+              ...(subscription.funds_verified
+                ? [
+                    {
+                      label: "Funds verified",
+                      value: `${new Date(subscription.funds_verified.at).toLocaleDateString(
+                        "en-GB",
+                        { day: "numeric", month: "short", year: "numeric" },
+                      )} · ${subscription.funds_verified.by_name}`,
+                    },
+                  ]
+                : []),
+              ...(declining
+                ? []
+                : [
+                    {
+                      label: "Class unit price",
+                      value: unitPrice > 0 ? formatPricePrecise(unitPrice) : "—",
+                    },
+                    {
+                      label: "Units to allocate",
+                      value: units.toLocaleString("en-GB", { maximumFractionDigits: 2 }),
+                    },
+                  ]),
+            ]}
+          />
 
-        <dl className="grid grid-cols-3 gap-4 border-y py-3 text-sm">
-          {[
-            ["Subscribed", subscription.amount],
-            ["Funds received", received],
-            ["Subscription fee", subscription.subscription_fee],
-          ].map(([label, value]) => (
-            <div key={label as string}>
-              <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="mt-1 font-medium tabular-nums">{formatPrice(value as number)}</dd>
-            </div>
-          ))}
-        </dl>
+          {blockers.length > 0 && (
+            <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800">
+              {blockers.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
+          )}
 
-        {blockers.length > 0 && (
-          <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800">
-            {blockers.map((b) => (
-              <li key={b}>{b}</li>
-            ))}
-          </ul>
-        )}
-
-        {declining ? (
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="decline-reason">Reason for the investor</Label>
-              <Textarea
-                id="decline-reason"
-                rows={3}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="For example: the fund was over-subscribed"
-              />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              The funds received, including the subscription fee, go back to the investor. Akula Ops
-              is asked to return them and the investor receives your reason in their messages.
-            </p>
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => setDeclining(false)}>
-                Back
-              </Button>
-              <Button
-                variant="destructive"
-                className="flex-1"
-                disabled={!reason.trim() || run.isPending}
-                onClick={() =>
-                  run.mutate({ type: "decline-allocation", id: subscription.id, text: reason })
-                }
-              >
-                Decline and return funds
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <dl className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <dt className="text-xs text-muted-foreground">Class unit price</dt>
-                <dd className="mt-1 font-semibold tabular-nums">
-                  {unitPrice > 0 ? formatPricePrecise(unitPrice) : "—"}
-                </dd>
+          {declining ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="decline-reason">Reason for the investor</Label>
+                <Textarea
+                  id="decline-reason"
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="For example: the fund was over-subscribed"
+                />
               </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Units to allocate</dt>
-                <dd className="mt-1 font-semibold tabular-nums">
-                  {units.toLocaleString("en-GB", { maximumFractionDigits: 2 })}
-                </dd>
+              <p className="text-sm text-muted-foreground">
+                The funds received, including the subscription fee, go back to the investor. Akula
+                Ops is asked to return them and the investor receives your reason in their messages.
+              </p>
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => setDeclining(false)}>
+                  Back
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  disabled={!reason.trim() || run.isPending}
+                  onClick={() =>
+                    run.mutate({ type: "decline-allocation", id: subscription.id, text: reason })
+                  }
+                >
+                  Decline and return funds
+                </Button>
               </div>
-            </dl>
-            <p className="text-sm text-muted-foreground">
-              The full subscribed capital, at the unit price in the offering version the investor
-              signed. You confirm it, or decline and return the funds.
-            </p>
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => setDeclining(true)}>
-                Decline
-              </Button>
-              <Button
-                className="flex-1"
-                disabled={!ready || blockers.length > 0 || run.isPending}
-                onClick={() =>
-                  run.mutate({
-                    type: "allocate",
-                    id: subscription.id,
-                    amount: capital,
-                    price: unitPrice,
-                  })
-                }
-              >
-                Confirm allocation
-              </Button>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => setDeclining(true)}>
+                  Decline
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!ready || blockers.length > 0 || run.isPending}
+                  onClick={() =>
+                    run.mutate({
+                      type: "allocate",
+                      id: subscription.id,
+                      amount: capital,
+                      price: unitPrice,
+                    })
+                  }
+                >
+                  Confirm allocation
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

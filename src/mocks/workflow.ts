@@ -1,7 +1,7 @@
 import { mayDiscover, hasInvestmentHistory, setPublishedAudienceReader } from "./investor-access";
 import { audienceIncludes } from "../lib/investor-access";
 import { missingTransferFields } from "../lib/offering";
-import type { Fund as AudienceFund } from "../lib/types";
+import type { Fund as AudienceFund, GateEvent } from "../lib/types";
 import * as db from "./db";
 import { inDemoClientCohort } from "../lib/demo-cohort";
 import type {
@@ -65,6 +65,15 @@ export function clientsFor(user: db.MockUser): number[] {
     ];
   return [user.id];
 }
+function gateEvent(user: db.MockUser, note?: string): GateEvent {
+  return {
+    at: new Date().toISOString(),
+    by_id: user.id,
+    by_name: user.role === "luca" ? "LUCA Fund Manager" : user.email,
+    note: note?.trim() || null,
+  };
+}
+
 export function ownedSubscription(request: Request, sid: number) {
   const user = db.currentUser(request);
   return user && db.subscriptions.find((s) => s.id === sid && s.investor_id === user.id);
@@ -324,6 +333,8 @@ export function seedWorkflow() {
         amount: round(Number(sub.amount) + Number(sub.subscription_fee)),
         currency: sub.currency,
         reference: `MIGRATED-${sub.id}`,
+        source: "acclime",
+        acclimeMessageId: null,
         matched: true,
         at: sub.funds_received_at || now(),
       });
@@ -442,6 +453,8 @@ function ensureFundVariantExample() {
       amount: round(Number(sub.amount) + Number(sub.subscription_fee)),
       currency: sub.currency,
       reference: sub.payment_reference!,
+      source: "acclime",
+      acclimeMessageId: null,
       matched: true,
       at: sub.funds_received_at || now(),
     });
@@ -674,9 +687,14 @@ export function view(user: db.MockUser): WorkflowView {
       holdingId: s._convertedToHoldingId,
       currency: s.currency,
       needsReview: s.needs_review_version_id,
+      fundsVerified: db.gatesOf(s).funds_verified,
+      allocationConfirmed: db.gatesOf(s).allocation_confirmed,
       allocationBlockers: [
         ...(s.status === "reconciliation"
           ? ["Akula Ops must complete reconciliation before LUCA allocates."]
+          : []),
+        ...(s.status === "allocation_pending" && !db.gatesOf(s).funds_verified
+          ? ["Verify the funds before confirming the allocation."]
           : []),
         ...investmentBlockers(s),
       ],
@@ -879,6 +897,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         amount: value,
         currency: c.currency || s.currency,
         reference,
+        source: "ops",
         matched: false,
         at: now(),
       });
@@ -906,6 +925,8 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         );
         s.funds_received_at = now();
         s.status = "reconciliation";
+        // Funds that changed after verification have to be verified again.
+        s.funds_verified = null;
         s.owner = "akula_ops";
         s.next_action = db.nextActionFor(s.status);
       }
@@ -937,6 +958,7 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         amount: amount(),
         currency: c.currency || s.currency,
         reference: text(),
+        source: "ops" as const,
         matched: false,
         at: now(),
       };
@@ -949,12 +971,53 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       workflow.receipts.push(replacement);
       break;
     }
+    case "verify-funds": {
+      // Gate 1: LUCA, and only LUCA, records that the funds have been verified.
+      role("luca");
+      const s = sub();
+      if (db.gatesOf(s).funds_verified) return;
+      requireValue(
+        s.status === "allocation_pending",
+        "Akula Ops must complete reconciliation before LUCA verifies the funds.",
+      );
+      const blockers = investmentBlockers(s);
+      requireValue(!blockers.length, blockers.join(" "));
+      requireValue(
+        matched(s.id) >= round(Number(s.amount) + Number(s.subscription_fee)),
+        "Match full requested funding first.",
+      );
+      s.funds_verified = gateEvent(user, c.text);
+      workflow.events.push({
+        id: id(),
+        actorId: user.id,
+        label: `${user.email} verified the funds for subscription #${s.id}.`,
+        at: now(),
+      });
+      db.recordClientEvent(
+        s.investor_id,
+        "milestone",
+        `LUCA verified the funds for the ${s.asset_name} subscription.`,
+        user.email,
+        ["luca", "investor"],
+      );
+      db.sendInvestorMessage(
+        s.investor_id,
+        `Your ${s.asset_name} funds are verified`,
+        `LUCA has verified the funds for your subscription in ${s.fund_name}. It is now under review for allocation.`,
+        "allocation",
+      );
+      break;
+    }
     case "allocate": {
       role("luca");
       const s = sub();
       requireValue(
         s.status === "allocation_pending",
         "Akula Ops must complete reconciliation before LUCA allocates.",
+      );
+      requireValue(
+        db.gatesOf(s).funds_verified,
+        "Verify the funds before confirming the allocation.",
       );
       const blockers = investmentBlockers(s);
       requireValue(!blockers.length, blockers.join(" "));
@@ -981,6 +1044,16 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       s.allocated_principal = capital;
       s.status = capital ? "allocated" : "not_allocated";
       s.allocated_at = now();
+      // Gate 2: the allocation is confirmed by LUCA, as a separate decision from verifying funds.
+      if (capital) {
+        s.allocation_confirmed = gateEvent(user, c.text);
+        workflow.events.push({
+          id: id(),
+          actorId: user.id,
+          label: `${user.email} confirmed the allocation for subscription #${s.id}.`,
+          at: now(),
+        });
+      }
       s.owner = "akula_ops";
       s.next_action = capital ? "confirm_registry_issuance" : "return_funds";
       ensureReturns(s);

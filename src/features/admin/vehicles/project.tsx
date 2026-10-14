@@ -321,7 +321,7 @@ export default function ProjectPage() {
                                     client.recorded > 0 &&
                                       `Allocation recorded · ${formatPrice(client.recorded)}`,
                                     client.pending.length > 0 &&
-                                      `Ready for allocation · ${formatPrice(client.pending.reduce((sum, sub) => sum + Number(sub.amount), 0))}`,
+                                      `${client.pending.some((sub) => !sub.funds_verified) ? "Funds to verify" : "Ready for allocation"} · ${formatPrice(client.pending.reduce((sum, sub) => sum + Number(sub.amount), 0))}`,
                                   ]
                                     .filter(Boolean)
                                     .join("; ")}
@@ -343,7 +343,9 @@ export default function ProjectPage() {
                                     />
                                   }
                                 >
-                                  Allocate →
+                                  {client.pending.some((sub) => !sub.funds_verified)
+                                    ? "Verify funds →"
+                                    : "Allocate →"}
                                 </Button>
                               )}
                             </li>

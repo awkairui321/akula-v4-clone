@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
+import { subscriptionStatusLabel } from "@/lib/investor-status";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftIcon, SearchIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
 import { stageOfStatus } from "@/lib/types";
-import { STATUS_LABELS, type AdminSubscription, type SubscriptionsResponse } from "./types";
+import type { AdminSubscription, SubscriptionsResponse } from "./types";
 import { SubscriptionDialog } from "./subscriptions";
 import { Input } from "@/components/ui/input";
 
@@ -165,7 +166,7 @@ export default function AdminSubscriptionHistoryPage() {
                   {formatPrice(s.amount)}
                 </span>
                 <span className="order-4 col-span-2 text-sm lg:order-none lg:col-span-1">
-                  {STATUS_LABELS[s.status]}
+                  {subscriptionStatusLabel(s)}
                 </span>
                 <span className="hidden text-right text-sm text-muted-foreground tabular-nums lg:block">
                   {formatDate(dateOf(s))}

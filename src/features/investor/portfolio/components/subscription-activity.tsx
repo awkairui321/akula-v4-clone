@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { subscriptionStatusLabel } from "@/lib/investor-status";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -8,7 +9,6 @@ import { readUpload } from "@/lib/file-upload";
 import FileDropzone from "@/components/file-dropzone";
 import type { Subscription, SubscriptionStatus } from "@/lib/types";
 import {
-  STATUS_LABELS,
   CLOSED_SUBSCRIPTION_STATUSES,
   SUBSCRIPTION_STAGES,
   HOLDING_ISSUED_LABEL,
@@ -134,7 +134,7 @@ function SubscriptionRow({
             {formatPricePrecise(subscription.amount)}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {STATUS_LABELS[subscription.status] ?? subscription.status}
+            {subscriptionStatusLabel(subscription)}
           </p>
         </div>
       </div>

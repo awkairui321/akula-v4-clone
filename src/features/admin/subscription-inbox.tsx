@@ -4,10 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { HistoryIcon, SearchIcon, ArrowRightIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/currency";
+import { subscriptionStatusLabel } from "@/lib/investor-status";
 import { SUBSCRIPTION_STAGES, stageOfStatus } from "@/lib/types";
 import {
   OWNER_LABELS,
-  STATUS_LABELS,
   type AdminSubscription,
   type InvestorPricingRow,
   type PartnersResponse,
@@ -16,6 +16,8 @@ import {
 } from "./types";
 import { SubscriptionDialog } from "./subscriptions";
 import { AllocateDialog } from "./allocate-dialog";
+import { VerifyFundsDialog } from "./verify-funds-dialog";
+import { formatDate } from "./compliance-helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -66,7 +68,7 @@ type StageFilter = "ready_allocation" | "all" | (typeof SUBSCRIPTION_STAGES)[num
 
 const stageLabel = (key: StageFilter) =>
   key === "ready_allocation"
-    ? "Ready to allocate"
+    ? "Ready for your decision"
     : key === "all"
       ? "All stages"
       : (SUBSCRIPTION_STAGES.find((st) => st.key === key)?.label ?? key);
@@ -368,7 +370,8 @@ export default function AdminSubscriptionsPage() {
                       <ul className="divide-y border-y">
                         {inStage.map((sub) => {
                           const age = ageInDays(sub);
-                          const readyToAllocate = sub.status === "allocation_pending";
+                          const atDecision = sub.status === "allocation_pending";
+                          const verified = Boolean(sub.funds_verified);
                           const firmId = sub.eam_firm
                             ? partnerIdByFirm.get(sub.eam_firm)
                             : undefined;
@@ -402,15 +405,17 @@ export default function AdminSubscriptionsPage() {
                               </div>
                               <div>
                                 <p className="text-sm">
-                                  {readyToAllocate
-                                    ? "Ready for allocation"
-                                    : STATUS_LABELS[sub.status]}
+                                  {subscriptionStatusLabel(sub)}
                                   {sub.on_hold ? " · On hold" : ""}
                                 </p>
                                 <p className="mt-0.5 text-xs text-muted-foreground">
-                                  {sub.owner === "luca"
-                                    ? "Waiting for your decision"
-                                    : "With " + (OWNER_LABELS[sub.owner] ?? sub.owner)}{" "}
+                                  {sub.owner !== "luca"
+                                    ? "With " + (OWNER_LABELS[sub.owner] ?? sub.owner)
+                                    : atDecision
+                                      ? verified
+                                        ? "Waiting for you to confirm the allocation"
+                                        : "Waiting for you to verify the funds"
+                                      : "Waiting for your decision"}{" "}
                                   <span className="mx-1">·</span>
                                   <span
                                     className={
@@ -422,14 +427,20 @@ export default function AdminSubscriptionsPage() {
                                     {plural(age, "day")}
                                   </span>
                                 </p>
+                                {atDecision && sub.funds_verified && (
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    Funds verified {formatDate(sub.funds_verified.at)} ·{" "}
+                                    {sub.funds_verified.by_name}
+                                  </p>
+                                )}
                               </div>
                               <p className="text-sm font-semibold tabular-nums lg:text-right">
                                 {formatPrice(sub.amount)}
                               </p>
                               <div className="lg:flex lg:justify-end">
-                                {readyToAllocate ? (
+                                {atDecision ? (
                                   <Button variant="outline" onClick={() => setAllocateId(sub.id)}>
-                                    Allocate
+                                    {verified ? "Allocate" : "Verify funds"}
                                     <ArrowRightIcon className="size-3.5" />
                                   </Button>
                                 ) : (
@@ -452,7 +463,12 @@ export default function AdminSubscriptionsPage() {
         </div>
       )}
 
-      {allocating && <AllocateDialog subscription={allocating} onClose={closeAllocate} />}
+      {allocating &&
+        (allocating.funds_verified ? (
+          <AllocateDialog subscription={allocating} onClose={closeAllocate} />
+        ) : (
+          <VerifyFundsDialog subscription={allocating} onClose={closeAllocate} />
+        ))}
 
       {detail && (
         <SubscriptionDialog
