@@ -19,6 +19,10 @@ for (const file of [
   "src/lib/document-catalogue.ts",
   "src/lib/format-date.ts",
   "src/lib/accredited-investor.ts",
+  "src/lib/offering.ts",
+  "src/lib/capital-call.ts",
+  "src/lib/investor-status.ts",
+  "src/lib/currency.ts",
   "src/lib/demo-cohort.ts",
   "src/mocks/communications.ts",
   "src/features/eam/revenue-statement.ts",
@@ -928,8 +932,47 @@ test("drafts stay hidden, require manager approval, and appear only after Ops pu
   const v = w.workflow.versions.at(-1);
   w.command(team, { type: "review", id: v.id });
   assert.throws(() => w.command(ops(), { type: "approve", id: v.id }), /role/);
+  // Publishing fixes where investors pay, so it waits for the Fund Manager's transfer account.
+  assert.throws(
+    () => w.command(manager(), { type: "approve", id: v.id }),
+    /Enter the transfer account/,
+  );
+  assert.equal(
+    (
+      await request(`admin/funds/${created.id}/transfer_account`, team, "PUT", {
+        transfer_account: { bank_name: "Not allowed" },
+      })
+    ).status,
+    403,
+    "only the Fund Manager sets the transfer account",
+  );
+  const account = {
+    account_name: "DAS VCC II Serapong Subscription Account",
+    bank_name: "Test Bank",
+    bank_address: "1 Test Street",
+    account_number: "123-456",
+    swift_bic: "TESTSGSG",
+  };
+  assert.equal(
+    (
+      await request(`admin/funds/${created.id}/transfer_account`, manager(), "PUT", {
+        transfer_account: account,
+      })
+    ).status,
+    200,
+  );
   w.command(manager(), { type: "approve", id: v.id });
   assert.equal((await request(`funds/${created.id}`, investor())).status, 200);
+  // Once published the details are fixed.
+  const locked = await request(`admin/funds/${created.id}/transfer_account`, manager(), "PUT", {
+    transfer_account: { ...account, account_number: "999-999" },
+  });
+  assert.equal(locked.status, 422);
+  assert.match((await locked.json()).error, /cannot be changed once the deal is published/);
+  assert.equal(
+    (await (await request(`admin/funds/${created.id}/transfer_account`, manager())).json()).locked,
+    true,
+  );
 });
 
 test("EAM aggregate documents and reports stay within the adviser client book", async () => {
@@ -2442,4 +2485,186 @@ test("the accredited investor declaration needs a basis, a declaration and conse
   assert.ok(entry.audience.includes("luca") && !entry.audience.includes("partner"));
 
   assert.equal((await request("investor/declaration", manager(), "POST", {})).status, 401);
+});
+
+test("a new subscription is paid with a sub-fund reference, and a second one stays distinguishable", async () => {
+  const user = investor();
+  const first = (
+    await (await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" })).json()
+  ).subscription;
+  assert.equal(first.payment_reference, "DASVCCII-SERAPONG-002");
+  const second = (
+    await (await request("subscriptions", user, "POST", { fund_id: 1, amount: "30000" })).json()
+  ).subscription;
+  assert.equal(second.payment_reference, "DASVCCII-SERAPONG-002-2");
+  // Seeded subscriptions keep the references Ops already matches payments against.
+  assert.match(db.subscriptions[0].payment_reference, /^AK-/);
+});
+
+test("confirmations: four statements, the first waits for the Risk Disclosure Statement, each is logged", async () => {
+  const user = investor();
+  const sub = (
+    await (await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" })).json()
+  ).subscription;
+  const ack = () => request(`subscriptions/${sub.id}/acknowledgements`, user);
+  const start = (await (await ack()).json()).acknowledgements;
+  assert.equal(start.terms.length, 4);
+  assert.equal(start.required_count, 4);
+  assert.equal(start.risk_disclosure_opened, false);
+  assert.doesNotMatch(JSON.stringify(start.terms), /reduced/);
+  assert.doesNotMatch(JSON.stringify(start.terms), /right of first refusal/i);
+
+  const accept = (term) =>
+    request(`subscriptions/${sub.id}/acknowledgements`, user, "POST", {
+      acknowledgement: { acknowledgement_term_id: term.id },
+    });
+  const reading = start.terms.find((t) => t.key === "read_documents");
+  const blocked = await accept(reading);
+  assert.equal(blocked.status, 422);
+  assert.match((await blocked.json()).error, /Risk Disclosure Statement/);
+  // The other three do not wait on a document.
+  for (const term of start.terms.filter((t) => t.key !== "read_documents"))
+    assert.equal((await accept(term)).status, 200);
+
+  // Opening any other document does not unlock it; the Risk Disclosure Statement does.
+  await request(`subscriptions/${sub.id}/document_opened`, user, "POST", { kind: "ppm" });
+  assert.equal((await accept(reading)).status, 422);
+  const events = w.workflow.events.length;
+  const opened = await request(`subscriptions/${sub.id}/document_opened`, user, "POST", {
+    kind: "risk_disclosure",
+  });
+  assert.equal((await opened.json()).acknowledgements.risk_disclosure_opened, true);
+  assert.equal(
+    (await request(`subscriptions/${sub.id}/document_opened`, user, "POST", { kind: "nonsense" }))
+      .status,
+    404,
+  );
+  assert.equal((await accept(reading)).status, 200);
+  assert.equal(
+    (await (await ack()).json()).acknowledgements.complete,
+    true,
+    "all four ticked completes the step",
+  );
+
+  // Who, when and against which document versions is kept on every confirmation.
+  const kept = db
+    .findSubscriptionById(sub.id)
+    .acknowledgements.find((t) => t.key === "read_documents");
+  assert.equal(kept.accepted_by.email, user.email);
+  assert.ok(kept.accepted_at);
+  assert.deepEqual(Object.keys(kept.document_versions).sort(), [
+    "agreement",
+    "ppm",
+    "risk_disclosure",
+    "supplement",
+  ]);
+  assert.ok(w.workflow.events.length > events);
+  assert.match(w.workflow.events.at(-1).label, /Confirmation 1 given by .* on subscription/);
+  // Another investor cannot open documents on this subscription.
+  assert.equal(
+    (
+      await request(
+        `subscriptions/${sub.id}/document_opened`,
+        db.users.find((u) => u.id === 3),
+        "POST",
+        {
+          kind: "ppm",
+        },
+      )
+    ).status,
+    404,
+  );
+});
+
+test("the transfer account and capital call reach the investor only once the agreement is signed", async () => {
+  const user = investor();
+  const sub = (
+    await (await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" })).json()
+  ).subscription;
+  assert.equal(sub.transfer_account ?? null, null);
+  assert.equal((await request(`subscriptions/${sub.id}/capital_call`, user)).status, 404);
+
+  const record = db.findSubscriptionById(sub.id);
+  w.recordSignature(record, "Fictional investor signature");
+  record.status = "awaiting_funds";
+  const shown = (await (await request(`subscriptions/${sub.id}`, user)).json()).subscription;
+  assert.equal(
+    shown.transfer_account.placeholder,
+    true,
+    "seeded accounts are labelled placeholders",
+  );
+  assert.match(shown.transfer_account.bank_name, /not a real bank/i);
+
+  const call = (await (await request(`subscriptions/${sub.id}/capital_call`, user)).json())
+    .capital_call;
+  assert.equal(call.wire_reference, "DASVCCII-SERAPONG-002");
+  assert.equal(call.commitment, "25000.00");
+  assert.equal(Number(call.amount_due), Number(sub.amount) + Number(sub.subscription_fee));
+  assert.match(call.fee_label, /^Placement Fee \(\d+(\.\d+)?%\)$/);
+  assert.match(call.purpose, /acquisition of an interest in/);
+  assert.doesNotMatch(call.purpose, /\.\./, "no doubled full stops in the purpose");
+  assert.ok(new Date(call.due_date) > new Date(call.call_date));
+  // The capital call is for the investor who owns it and the Fund Manager.
+  assert.equal((await request(`subscriptions/${sub.id}/capital_call`, manager())).status, 200);
+  assert.equal(
+    (
+      await request(
+        `subscriptions/${sub.id}/capital_call`,
+        db.users.find((u) => u.id === 3),
+      )
+    ).status,
+    404,
+  );
+});
+
+test("investor-facing status wording, offering defaults and US$ amounts", async () => {
+  const { investorStatusLabel } = await import("../.test-runtime/src/lib/investor-status.mjs");
+  const offering = await import("../.test-runtime/src/lib/offering.mjs");
+  const currency = await import("../.test-runtime/src/lib/currency.mjs");
+  const labels = Object.fromEntries(
+    [
+      "reserved",
+      "documents_pending",
+      "approved",
+      "awaiting_funds",
+      "payment_unmatched",
+      "reconciliation",
+      "allocation_pending",
+      "not_allocated",
+      "rejected",
+      "funds_returned",
+    ].map((status) => [status, investorStatusLabel(status)]),
+  );
+  assert.deepEqual(labels, {
+    reserved: "Draft",
+    documents_pending: "Draft",
+    approved: "Agreement signed",
+    awaiting_funds: "Awaiting funds",
+    payment_unmatched: "Awaiting funds",
+    reconciliation: "Funds received",
+    allocation_pending: "Under review",
+    not_allocated: "Not accepted",
+    rejected: "Not accepted",
+    funds_returned: "Refund processed",
+  });
+  assert.equal(investorStatusLabel("allocated", false), "Allocation confirmed");
+  assert.equal(investorStatusLabel("allocated", true), "Accepted");
+
+  const fund = db.findFundById(1);
+  assert.equal(offering.fundLabel(fund), "DAS VCC II | Serapong Subfund");
+  assert.equal(offering.offeringOf(fund).fund_code, "DASVCCII-SERAPONG");
+  assert.equal(offering.paymentReferenceFor("DASVCCII-SERAPONG", 7), "DASVCCII-SERAPONG-007");
+  assert.equal(offering.paymentReferenceFor("DASVCCII-SERAPONG", 1234), "DASVCCII-SERAPONG-1234");
+  assert.match(
+    offering.disclaimerText("DAS VCC II | Serapong Subfund"),
+    /fund manager of DAS VCC II \| Serapong Subfund\./,
+  );
+  assert.match(offering.disclaimerText(), /funds offered on this platform/);
+
+  assert.equal(currency.formatUsdPrecise(25000), "$25,000.00");
+  assert.equal(currency.formatUsdCode(25000), "USD 25,000.00");
+  assert.equal(currency.formatUsdPrecise("1234567.5"), "$1,234,567.50");
+  assert.equal(currency.formatAmountInput("25000"), "25,000.00");
+  assert.equal(currency.formatAmountInput("25000.5"), "25,000.50");
+  assert.equal(currency.formatAmountInput(""), "");
 });

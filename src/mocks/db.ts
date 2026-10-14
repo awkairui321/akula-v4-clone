@@ -1,4 +1,14 @@
 import type { InvestorSegment, CommercialTerms } from "../lib/investor-access";
+import {
+  ACKNOWLEDGEMENT_STATEMENTS,
+  OFFERING_DOCUMENTS,
+  fundLabel,
+  offeringOf,
+  paymentReferenceFor,
+  placeholderTransferAccount,
+  type OfferingDocumentKind,
+  type TransferAccount,
+} from "../lib/offering";
 import type { PreparedByRm, UploadedBy } from "../lib/rm-onboarding";
 import type {
   ClientEvent,
@@ -2081,6 +2091,27 @@ for (const spec of dealSpecs) {
 export function findFundById(id: number): Fund | undefined {
   return funds.find((f) => f.id === id);
 }
+
+// ---------------------------------------------------------------------------
+// Transfer accounts: where investors send their money, set per deal by the Fund Manager.
+// Seeded deals carry obviously fake placeholder details; a draft deal starts with none.
+// ---------------------------------------------------------------------------
+
+export type MockTransferAccount = TransferAccount & { id: number };
+
+export const transferAccounts: MockTransferAccount[] = funds
+  .filter((fund) => fund.state !== "draft")
+  .map((fund) => ({ id: fund.id, ...placeholderTransferAccount(fund.id, fundLabel(fund)) }));
+
+export const findTransferAccount = (fundId: number) =>
+  transferAccounts.find((account) => account.fund_id === fundId);
+
+/** A deal is live once it has left draft or has a published version: its account is then locked. */
+export function transferAccountView(sub: Pick<MockSubscription, "fund_id" | "status">) {
+  if (["reserved", "documents_pending", "institution_review"].includes(sub.status)) return null;
+  return findTransferAccount(sub.fund_id) ?? null;
+}
+
 // Made-up document requests, in different states, so the Compliance flow is visible.
 {
   const ask = (
@@ -2377,36 +2408,13 @@ export function wizardStepFor(sub: MockSubscription): string {
 
 const ACK_TEMPLATE: Array<
   Pick<AcknowledgementTerm, "key" | "version" | "position" | "required" | "body">
-> = [
-  {
-    key: "illiquidity",
-    version: 1,
-    position: 1,
-    required: true,
-    body: "I understand this investment is illiquid and there is no guaranteed secondary market or exit.",
-  },
-  {
-    key: "risk_of_loss",
-    version: 1,
-    position: 2,
-    required: true,
-    body: "I understand I may lose some or all of my invested capital.",
-  },
-  {
-    key: "no_advice",
-    version: 1,
-    position: 3,
-    required: true,
-    body: "I confirm Akula has not provided investment, tax or legal advice in connection with this subscription.",
-  },
-  {
-    key: "fees_disclosure",
-    version: 1,
-    position: 4,
-    required: true,
-    body: "I have reviewed and accept the subscription fee, management fee and carried interest disclosed for this vehicle.",
-  },
-];
+> = ACKNOWLEDGEMENT_STATEMENTS.map((statement, index) => ({
+  key: statement.key,
+  version: 2,
+  position: index + 1,
+  required: true,
+  body: statement.body,
+}));
 
 function freshAcknowledgements(): AcknowledgementTerm[] {
   return ACK_TEMPLATE.map((t, i) => ({
@@ -2473,6 +2481,10 @@ export type MockSubscription = {
   payment_declared_at: string | null;
   created_at: string;
   acknowledgements: AcknowledgementTerm[];
+  /** When this investor opened each offering document, and which version they saw. */
+  documents_opened?: Partial<
+    Record<OfferingDocumentKind, { at: string; version: string; user_id: number }>
+  >;
   /** internal signing-flow poll counters, not exposed to the client */
   _signPollCount: number;
   /** Set once this subscription has been converted into a Holding record on
@@ -2834,6 +2846,7 @@ export function toSubscription(sub: MockSubscription): Subscription {
     commercial_terms: sub.commercial_terms,
     effective_terms: sub.effective_terms,
     payment_reference: sub.payment_reference,
+    transfer_account: transferAccountView(sub),
     on_hold: sub.on_hold,
     information_request_note: sub.information_request_note,
     information_requested_at: sub.information_requested_at,
@@ -2921,7 +2934,16 @@ export function acknowledgementsResponse(sub: MockSubscription) {
     .map((t) => t.accepted_at)
     .filter((d): d is string => Boolean(d))
     .sort();
+  const fund = findFundById(sub.fund_id);
+  const offering = fund ? offeringOf(fund) : null;
   return {
+    documents: OFFERING_DOCUMENTS.map(({ kind, label }) => ({
+      kind,
+      label,
+      version: offering?.documents[kind].version ?? "1.0",
+      opened_at: sub.documents_opened?.[kind]?.at ?? null,
+    })),
+    risk_disclosure_opened: Boolean(sub.documents_opened?.risk_disclosure),
     required_count: required.length,
     accepted_count: accepted.length,
     complete: required.length > 0 && accepted.length === required.length,
@@ -3047,6 +3069,16 @@ export function createSubscription(
   sub.allocated_at = null;
   sub.payment_declared_at = null;
   sub.payment_claimed = false;
+  // The wire reference carries the sub-fund and the investor. A second subscription by the same
+  // investor to the same sub-fund adds a suffix so each payment still matches one subscription.
+  const fundRecord = findFundById(fundId);
+  if (fundRecord) {
+    const base = paymentReferenceFor(offeringOf(fundRecord).fund_code, investorId);
+    const taken = subscriptions.filter(
+      (other) => other.payment_reference === base || other.payment_reference.startsWith(`${base}-`),
+    ).length;
+    sub.payment_reference = taken === 0 ? base : `${base}-${taken + 1}`;
+  }
   subscriptions.push(sub);
   logEvent(
     "subscription_submitted",
@@ -5287,6 +5319,7 @@ const demoArrays = {
   investorPricing,
   documentRequests,
   clientEvents,
+  transferAccounts,
 };
 export function exportDemoState() {
   return structuredClone({
@@ -5297,7 +5330,12 @@ export function exportDemoState() {
 }
 export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
   // Tables added after a demo was saved are optional; keep their seed data.
-  const OPTIONAL_TABLES = ["investorPricing", "documentRequests", "clientEvents"];
+  const OPTIONAL_TABLES = [
+    "investorPricing",
+    "documentRequests",
+    "clientEvents",
+    "transferAccounts",
+  ];
   if (
     !saved ||
     !saved.arrays ||

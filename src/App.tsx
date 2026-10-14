@@ -32,6 +32,7 @@ import RmOnboardingList from "@/features/rm/onboarding-list";
 import RmClientStatusPage from "@/features/rm/client-status";
 import ClientOnboardingPage, { NewClientPage } from "@/features/rm/client-onboarding";
 import OnboardingPage from "@/features/investor/onboarding/onboarding";
+import OfferingDocumentPage from "@/features/investor/offering-document";
 import AccreditedDeclarationPage from "@/features/investor/accredited-declaration";
 import ConfirmPage from "@/features/unauthenticated/confirm";
 import ForgotPasswordPage from "@/features/unauthenticated/forgot-password";
@@ -250,6 +251,10 @@ function App() {
                     {/* Onboarded */}
                     <Route element={<OnboardedRoute />}>
                       <Route path="/checkout/:fundId" element={<CheckoutPage />} />
+                      <Route
+                        path="/offering-documents/:fundId/:kind"
+                        element={<OfferingDocumentPage />}
+                      />
                       <Route element={<AppLayout />}>
                         <Route path="/funds" element={<FundsPage />} />
                         <Route path="/funds/:id" element={<FundDetailPage />} />

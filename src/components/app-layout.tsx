@@ -24,6 +24,7 @@ import {
 import ProfileSwitcher from "./profile-switcher";
 import { demoPersonaId } from "@/lib/demo-persona";
 import DemoResetButton from "./demo-reset-button";
+import DisclaimerFooter from "./disclaimer-footer";
 
 const NAV_ITEMS = [
   { to: "/portfolio", label: "Portfolio", icon: Clock3 },
@@ -182,6 +183,7 @@ export default function AppLayout() {
           <ReviewStatusBanner />
           <Outlet />
         </main>
+        <DisclaimerFooter />
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import DisclaimerFooter from "@/components/disclaimer-footer";
 
 export default function LandingPage() {
   return (
@@ -58,8 +59,9 @@ export default function LandingPage() {
         </div>
       </main>
 
+      <DisclaimerFooter className="border-[#dce4e8]" />
       <footer className="border-t border-[#dce4e8] px-6 py-5 text-sm text-[#718896] sm:px-10">
-        Akula Markets Pte. Ltd. · Singapore{" "}
+        Akula Labs Pte. Ltd. · Singapore{" "}
         <span className="float-right">LUCA Beta · Simulated experience</span>
       </footer>
     </div>

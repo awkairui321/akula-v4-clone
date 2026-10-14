@@ -1,4 +1,5 @@
 import { ReviewStatusBanner } from "../review-status";
+import DisclaimerFooter from "@/components/disclaimer-footer";
 import { useState, useEffect, useRef } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1692,60 +1693,63 @@ export default function OnboardingPage() {
       </div>
 
       {/* Content */}
-      <div className="flex flex-1 items-start justify-center overflow-y-auto px-8 py-12">
-        <div
-          className={`w-full ${
-            activeSection === "nda" && ndaStatus === "not_started" ? "max-w-4xl" : "max-w-xl"
-          }`}
-        >
-          <ReviewStatusBanner showWaiting />
-          {profile?.prepared_by_rm && <PreparedNotice prepared={profile.prepared_by_rm} />}
-          {activeSection === "channel" && (
-            <ChannelSection
-              profile={profile}
-              onComplete={() => {
-                refreshUser();
-                goToSection("eligibility");
-              }}
-            />
-          )}
-          {activeSection === "eligibility" && (
-            <EligibilitySection
-              profile={profile}
-              onComplete={() => {
-                refreshUser();
-                goToSection("personal_info");
-              }}
-            />
-          )}
-          {activeSection === "personal_info" && (
-            <PersonalInfoSection
-              profile={profile}
-              onComplete={() => {
-                refreshUser();
-                goToSection("kyc");
-              }}
-            />
-          )}
-          {activeSection === "kyc" && (
-            <KycSection
-              prepared={Boolean(profile?.prepared_by_rm)}
-              kycStatus={user?.kyc_status ?? "not_started"}
-              onComplete={() => refreshUser()}
-              onContinue={() => goToSection("nda")}
-            />
-          )}
-          {activeSection === "nda" && (
-            <NdaSection
-              ndaStatus={ndaStatus}
-              onSigned={() => {
-                refreshUser();
-                goToSection("consent");
-              }}
-            />
-          )}
-          {activeSection === "consent" && <ConsentSection onComplete={completeOnboarding} />}
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="flex flex-1 items-start justify-center px-8 py-12">
+          <div
+            className={`w-full ${
+              activeSection === "nda" && ndaStatus === "not_started" ? "max-w-4xl" : "max-w-xl"
+            }`}
+          >
+            <ReviewStatusBanner showWaiting />
+            {profile?.prepared_by_rm && <PreparedNotice prepared={profile.prepared_by_rm} />}
+            {activeSection === "channel" && (
+              <ChannelSection
+                profile={profile}
+                onComplete={() => {
+                  refreshUser();
+                  goToSection("eligibility");
+                }}
+              />
+            )}
+            {activeSection === "eligibility" && (
+              <EligibilitySection
+                profile={profile}
+                onComplete={() => {
+                  refreshUser();
+                  goToSection("personal_info");
+                }}
+              />
+            )}
+            {activeSection === "personal_info" && (
+              <PersonalInfoSection
+                profile={profile}
+                onComplete={() => {
+                  refreshUser();
+                  goToSection("kyc");
+                }}
+              />
+            )}
+            {activeSection === "kyc" && (
+              <KycSection
+                prepared={Boolean(profile?.prepared_by_rm)}
+                kycStatus={user?.kyc_status ?? "not_started"}
+                onComplete={() => refreshUser()}
+                onContinue={() => goToSection("nda")}
+              />
+            )}
+            {activeSection === "nda" && (
+              <NdaSection
+                ndaStatus={ndaStatus}
+                onSigned={() => {
+                  refreshUser();
+                  goToSection("consent");
+                }}
+              />
+            )}
+            {activeSection === "consent" && <ConsentSection onComplete={completeOnboarding} />}
+          </div>
         </div>
+        <DisclaimerFooter />
       </div>
     </div>
   );

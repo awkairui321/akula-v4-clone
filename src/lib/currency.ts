@@ -53,3 +53,30 @@ export function formatPricePrecise(price: string | number): string {
     return `$${amount.toFixed(2)}`;
   }
 }
+
+const twoDecimals = (amount: number) =>
+  new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+    amount,
+  );
+
+/** $25,000.00: the form amounts take on subscription pages. The currency is named once, in the label. */
+export function formatUsdPrecise(price: string | number | null | undefined): string {
+  const amount = parseAmount(price ?? "");
+  return amount === null ? "—" : `$${twoDecimals(amount)}`;
+}
+
+/** USD 25,000.00: the form used in LUCA SGP's capital call notice. */
+export function formatUsdCode(price: string | number | null | undefined): string {
+  const amount = parseAmount(price ?? "");
+  return amount === null ? "—" : `USD ${twoDecimals(amount)}`;
+}
+
+/** "25000.5" -> "25,000.50" for an amount field at rest; anything unreadable is left as typed. */
+export function formatAmountInput(text: string): string {
+  const amount = parseAmount(text);
+  if (amount === null || text.trim() === "") return text;
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}

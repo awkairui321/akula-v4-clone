@@ -53,15 +53,15 @@ export function entersInvestorPortal(
   return Boolean(user?.has_investor_profile && !STAFF_ROLES.includes(user.role));
 }
 
-// The declaration is made each time someone enters the investor portal from sign-in, so it is
-// remembered for this browser session only and forgotten on sign-out.
+// The declaration is made each time someone enters the investor portal from sign-in. It is kept
+// with the login, so every tab shares it, and forgotten on sign-out.
 const KEY = "akula.accredited-declaration";
 let remembered: number | null = null;
 
 export function hasDeclared(userId: number): boolean {
   if (remembered === userId) return true;
   try {
-    return sessionStorage.getItem(KEY) === String(userId);
+    return localStorage.getItem(KEY) === String(userId);
   } catch {
     return false;
   }
@@ -70,7 +70,7 @@ export function hasDeclared(userId: number): boolean {
 export function markDeclared(userId: number) {
   remembered = userId;
   try {
-    sessionStorage.setItem(KEY, String(userId));
+    localStorage.setItem(KEY, String(userId));
   } catch {
     // Storage can be blocked; the in-memory copy still covers this page load.
   }
@@ -79,7 +79,7 @@ export function markDeclared(userId: number) {
 export function clearDeclared() {
   remembered = null;
   try {
-    sessionStorage.removeItem(KEY);
+    localStorage.removeItem(KEY);
   } catch {
     // Nothing stored to clear.
   }

@@ -9,7 +9,23 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StepTracker, type StepState } from "@/components/ui/step-tracker";
-import { formatPricePrecise } from "@/lib/currency";
+import { formatAmountInput, formatUsdPrecise, numericValue } from "@/lib/currency";
+import {
+  DOCUMENT_GATED_STATEMENT,
+  FEE_FOOTNOTE,
+  INVESTMENT_DESCRIPTION,
+  MANAGER_LEGAL_NAME,
+  OFFERING_DOCUMENTS,
+  PAYMENT_DECLARATION,
+  PAYMENT_NOTICE,
+  SUBMITTED_NOTE,
+  fundLabel,
+  offeringOf,
+  type OfferingDocumentKind,
+} from "@/lib/offering";
+import { investorStatusLabel } from "@/lib/investor-status";
+import { CapitalCallDialog } from "@/components/capital-call-notice";
+import DisclaimerFooter from "@/components/disclaimer-footer";
 import { isMocking } from "@/mocks/browser";
 import { toast } from "sonner";
 import {
@@ -17,7 +33,6 @@ import {
   CheckCircle2Icon,
   ClockIcon,
   LoaderIcon,
-  HourglassIcon,
   XCircleIcon,
   CopyIcon,
   CheckIcon,
@@ -29,7 +44,6 @@ import type {
   AcknowledgementsResponse,
   SubscriptionShowResponse,
 } from "@/lib/types";
-import { STATUS_LABELS } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,17 +60,16 @@ type SignResponse = {
   };
 };
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+/** Review (4) is the adviser's sign-off and belongs to signing; funding and submitting are one step. */
+type Step = 1 | 2 | 3 | 4 | 5 | 7;
 
-const STEP_LABELS: Record<Step, string> = {
-  1: "Amount",
-  2: "Terms",
-  3: "Sign",
-  4: "Review",
-  5: "Funding",
-  6: "Escrow",
-  7: "Allocation",
-};
+const PROGRESS_STEPS: { label: string; steps: Step[] }[] = [
+  { label: "Amount", steps: [1] },
+  { label: "Terms", steps: [2] },
+  { label: "Sign", steps: [3, 4] },
+  { label: "Transfer", steps: [5] },
+  { label: "Submitted", steps: [7] },
+];
 
 /** Statuses where the subscription is still moving through ops review. */
 const IN_FLIGHT_STATUSES: SubscriptionStatus[] = [
@@ -103,18 +116,18 @@ function useSignWellScript() {
 // ---------------------------------------------------------------------------
 
 function StepProgress({ currentStep }: { currentStep: Step }) {
-  const steps: Step[] = [1, 2, 3, 4, 5, 6, 7];
+  const current = PROGRESS_STEPS.findIndex((entry) => entry.steps.includes(currentStep));
 
   const getState = (key: string): StepState => {
-    const step = Number(key) as Step;
-    if (step === currentStep) return "active";
-    return step < currentStep ? "done" : "upcoming";
+    const index = Number(key);
+    if (index === current) return "active";
+    return index < current ? "done" : "upcoming";
   };
 
   return (
     <StepTracker
       className="mb-8"
-      steps={steps.map((step) => ({ key: String(step), label: STEP_LABELS[step] }))}
+      steps={PROGRESS_STEPS.map((entry, index) => ({ key: String(index), label: entry.label }))}
       getState={getState}
     />
   );
@@ -161,6 +174,28 @@ function CopyableRow({ label, value, mono }: { label: string; value: string; mon
 // Step 1: Amount
 // ---------------------------------------------------------------------------
 
+const pct = (value: string | number) => `${Number(value).toFixed(2)}%`;
+
+/** What is wrong with an amount, in words, or null when it can be subscribed. */
+function amountProblem(fund: Fund, amount: number): string | null {
+  const min = parseFloat(fund.min_subscription);
+  const max = fund.max_subscription ? parseFloat(fund.max_subscription) : null;
+  const step = parseFloat(fund.subscription_increment);
+  if (!(amount > 0)) return "Enter the amount you wish to subscribe.";
+  if (amount < min) return `The minimum subscription is ${formatUsdPrecise(min)}.`;
+  if (max !== null && amount > max) return `The maximum subscription is ${formatUsdPrecise(max)}.`;
+  if (step > 0 && Math.abs((amount - min) / step - Math.round((amount - min) / step)) > 1e-6)
+    return `Subscriptions above the minimum are in multiples of ${formatUsdPrecise(step)}.`;
+  return null;
+}
+
+/** Digits and one decimal point, at most two decimals: what an amount field will accept. */
+function cleanAmountText(value: string): string {
+  const stripped = value.replace(/[^0-9.]/g, "");
+  const [whole, ...rest] = stripped.split(".");
+  return rest.length ? `${whole}.${rest.join("").slice(0, 2)}` : whole;
+}
+
 function AmountStep({
   fund,
   amount,
@@ -176,21 +211,28 @@ function AmountStep({
   isPending: boolean;
   error: string | null;
 }) {
-  const numAmount = parseFloat(amount) || 0;
+  const numAmount = numericValue(amount);
   const minSub = parseFloat(fund.min_subscription);
   const maxSub = fund.max_subscription ? parseFloat(fund.max_subscription) : null;
   const feePct = parseFloat(fund.subscription_fee_pct);
   const fee = numAmount * (feePct / 100);
   const total = numAmount + fee;
-  const valid = numAmount >= minSub && (!maxSub || numAmount <= maxSub);
+
+  // The field shows 25,000.00 at rest and the plain number while it is being typed.
+  const [text, setText] = useState(() => formatAmountInput(amount));
+  const [touched, setTouched] = useState(false);
+  useEffect(() => {
+    if (text === "" && numAmount > 0) setText(formatAmountInput(amount));
+  }, [amount, numAmount, text]);
+
+  const problem = amountProblem(fund, numAmount);
 
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-6">
         <h2 className="text-2xl font-bold">Choose your investment amount</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {fund.codename} &middot; {fund.asset.name} &middot;{" "}
-          {fund.deal_type === "primary" ? "Primary" : "Secondary"} deal
+          {fundLabel(fund)} &middot; {fund.asset.name}
         </p>
       </div>
 
@@ -198,19 +240,36 @@ function AmountStep({
         <CardContent className="space-y-5 pt-6">
           <div className="space-y-2">
             <Label htmlFor="checkout-amount">Investment amount (USD)</Label>
-            <Input
-              id="checkout-amount"
-              type="number"
-              value={amount}
-              onChange={(e) => onAmountChange(e.target.value)}
-              min={fund.min_subscription}
-              max={fund.max_subscription ?? undefined}
-              step={fund.subscription_increment}
-            />
-            <p className="text-xs text-muted-foreground">
-              Min {formatPricePrecise(fund.min_subscription)}
-              {fund.max_subscription && ` · Max ${formatPricePrecise(fund.max_subscription)}`}
-            </p>
+            <div className="relative">
+              <Input
+                id="checkout-amount"
+                inputMode="decimal"
+                autoComplete="off"
+                className="tabular-nums"
+                value={text}
+                aria-invalid={touched && problem !== null}
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => {
+                  const cleaned = cleanAmountText(e.target.value);
+                  setText(cleaned);
+                  onAmountChange(cleaned === "" ? "0" : String(numericValue(cleaned)));
+                }}
+                onBlur={() => {
+                  setTouched(true);
+                  const value = numericValue(text);
+                  setText(value > 0 ? formatAmountInput(String(value)) : "");
+                }}
+              />
+            </div>
+            {touched && problem ? (
+              <p className="text-xs text-destructive">{problem}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Minimum {formatUsdPrecise(minSub)}
+                {maxSub !== null && ` · Maximum ${formatUsdPrecise(maxSub)}`} · Subject to
+                availability
+              </p>
+            )}
           </div>
 
           <Separator />
@@ -218,43 +277,44 @@ function AmountStep({
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subscription amount</span>
-              <span>{formatPricePrecise(numAmount)}</span>
+              <span className="tabular-nums">{formatUsdPrecise(numAmount)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">
-                Subscription fee ({fund.subscription_fee_pct}%)
+                Subscription fee ({pct(fund.subscription_fee_pct)} of subscription amount)
               </span>
-              <span>{formatPricePrecise(fee)}</span>
+              <span className="tabular-nums">{formatUsdPrecise(fee)}</span>
             </div>
             <div className="flex justify-between border-t pt-2 font-medium">
-              <span>Total due</span>
-              <span>{formatPricePrecise(total)}</span>
+              <span>Total payable</span>
+              <span className="tabular-nums">{formatUsdPrecise(total)}</span>
             </div>
           </div>
 
           <Separator />
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">Fee schedule</p>
+            <p className="text-sm font-medium">Fees</p>
             <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Subscription fee</span>
-                <span>{fund.subscription_fee_pct}%</span>
+                <span>{pct(fund.subscription_fee_pct)} of subscription amount</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Management fee</span>
-                <span>{fund.management_fee_pct}% p.a.</span>
+                <span>{pct(fund.management_fee_pct)} per annum</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Carried interest</span>
-                <span>{fund.carried_interest_pct}%</span>
+                <span>{pct(fund.carried_interest_pct)} of profits</span>
               </div>
             </div>
+            <p className="pt-1 text-xs leading-5 text-muted-foreground">{FEE_FOOTNOTE}</p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button className="w-full" onClick={onContinue} disabled={!valid || isPending}>
+          <Button className="w-full" onClick={onContinue} disabled={problem !== null || isPending}>
             {isPending ? "Creating subscription..." : "Continue to terms"}
           </Button>
         </CardContent>
@@ -282,6 +342,8 @@ function TermsStep({
   const numAmount = parseFloat(subscription.amount);
   const fee = parseFloat(subscription.subscription_fee);
   const total = numAmount + fee;
+  const offering = offeringOf(fund);
+  const feePct = numAmount > 0 ? (fee / numAmount) * 100 : 0;
 
   const { data, isLoading } = useQuery({
     queryKey: ["acknowledgements", subscription.id],
@@ -291,15 +353,16 @@ function TermsStep({
       ),
   });
 
+  const setAcknowledgements = (res: { acknowledgements: AcknowledgementsResponse }) =>
+    queryClient.setQueryData(["acknowledgements", subscription.id], res);
+
   const acceptMutation = useMutation({
     mutationFn: (termId: number) =>
       api<{ acknowledgements: AcknowledgementsResponse }>(
         `/api/v1/subscriptions/${subscription.id}/acknowledgements`,
         { method: "POST", body: { acknowledgement: { acknowledgement_term_id: termId } } },
       ),
-    onSuccess: (res) => {
-      queryClient.setQueryData(["acknowledgements", subscription.id], res);
-    },
+    onSuccess: setAcknowledgements,
   });
 
   const withdrawMutation = useMutation({
@@ -308,14 +371,23 @@ function TermsStep({
         `/api/v1/subscriptions/${subscription.id}/acknowledgements/${termId}`,
         { method: "DELETE" },
       ),
-    onSuccess: (res) => {
-      queryClient.setQueryData(["acknowledgements", subscription.id], res);
-    },
+    onSuccess: setAcknowledgements,
+  });
+
+  // Opening a document is recorded against the version the investor saw.
+  const openedMutation = useMutation({
+    mutationFn: (kind: OfferingDocumentKind) =>
+      api<{ acknowledgements: AcknowledgementsResponse }>(
+        `/api/v1/subscriptions/${subscription.id}/document_opened`,
+        { method: "POST", body: { kind } },
+      ),
+    onSuccess: setAcknowledgements,
   });
 
   const ack = data?.acknowledgements;
   const terms = ack?.terms ?? [];
   const allComplete = ack?.complete ?? false;
+  const riskOpened = ack?.risk_disclosure_opened ?? false;
 
   function handleToggle(termId: number, accepted: boolean) {
     if (accepted) {
@@ -330,7 +402,8 @@ function TermsStep({
       <div className="mb-6">
         <h2 className="text-2xl font-bold">Terms & Risk Acknowledgement</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Review the deal summary and acknowledge each item before proceeding.
+          Review the deal summary and the offering documents, then confirm each statement before
+          proceeding.
         </p>
       </div>
 
@@ -340,45 +413,75 @@ function TermsStep({
           <CardTitle className="text-base">Deal summary</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Vehicle</span>
-            <span>Akula VCC &middot; dedicated sub-fund</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Underlying company</span>
-            <span>{fund.asset.name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Security type</span>
-            <span className="capitalize">{fund.share_class.class_type.replace(/_/g, " ")}</span>
-          </div>
-          <div className="flex justify-between">
+          {[
+            ["Fund manager", MANAGER_LEGAL_NAME],
+            ["Fund", offering.fund_name],
+            ["Sub-fund", offering.sub_fund_name],
+            ["Investment", INVESTMENT_DESCRIPTION],
+            ["Underlying exposure", offering.exposure],
+          ].map(([label, value]) => (
+            <div key={label} className="flex justify-between gap-6">
+              <span className="shrink-0 text-muted-foreground">{label}</span>
+              <span className="text-right">{value}</span>
+            </div>
+          ))}
+          <div className="flex justify-between border-t pt-2">
             <span className="text-muted-foreground">Subscription amount</span>
-            <span>{formatPricePrecise(numAmount)}</span>
+            <span className="tabular-nums">{formatUsdPrecise(numAmount)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">
-              Fee (
-              {subscription.commercial_terms?.subscriptionFeePct ??
-                (
-                  (Number(subscription.subscription_fee) / Number(subscription.amount)) *
-                  100
-                ).toFixed(2)}
-              %)
+              Subscription fee ({pct(feePct)} of subscription amount)
             </span>
-            <span>{formatPricePrecise(fee)}</span>
+            <span className="tabular-nums">{formatUsdPrecise(fee)}</span>
           </div>
           <div className="flex justify-between border-t pt-2 font-medium">
-            <span>Total</span>
-            <span>{formatPricePrecise(total)}</span>
+            <span>Total payable</span>
+            <span className="tabular-nums">{formatUsdPrecise(total)}</span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Acknowledgement terms */}
+      {/* Offering documents */}
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle className="text-base">Offering documents</CardTitle>
+        </CardHeader>
+        <CardContent className="divide-y text-sm">
+          {OFFERING_DOCUMENTS.map(({ kind, label }) => {
+            const status = ack?.documents?.find((d) => d.kind === kind);
+            return (
+              <div key={kind} className="flex items-center justify-between gap-4 py-2.5 first:pt-0">
+                <div>
+                  <a
+                    href={`/offering-documents/${fund.id}/${kind}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => openedMutation.mutate(kind)}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {label}
+                  </a>
+                  <p className="text-xs text-muted-foreground">
+                    Version {status?.version ?? offering.documents[kind].version}
+                  </p>
+                </div>
+                {status?.opened_at && (
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-green-700">
+                    <CheckIcon className="size-3.5" />
+                    Opened
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      {/* Confirmations */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle className="text-base">Risk acknowledgements</CardTitle>
+          <CardTitle className="text-base">Confirmations</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
           {isLoading && (
@@ -387,24 +490,41 @@ function TermsStep({
               Loading...
             </div>
           )}
-          {terms.map((term) => (
-            <label
-              key={term.id}
-              className="flex cursor-pointer items-start gap-3 rounded-lg p-3 hover:bg-muted/50"
-            >
-              <input
-                type="checkbox"
-                checked={term.accepted}
-                onChange={() => handleToggle(term.id, term.accepted)}
-                disabled={acceptMutation.isPending || withdrawMutation.isPending}
-                className="mt-0.5 size-4 rounded border-border"
-              />
-              <span className="text-sm">{term.body}</span>
-            </label>
-          ))}
+          {terms.map((term) => {
+            const waiting = term.key === DOCUMENT_GATED_STATEMENT && !riskOpened && !term.accepted;
+            return (
+              <label
+                key={term.id}
+                className={`flex items-start gap-3 rounded-lg p-3 ${
+                  waiting ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-muted/50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={term.accepted}
+                  onChange={() => handleToggle(term.id, term.accepted)}
+                  disabled={waiting || acceptMutation.isPending || withdrawMutation.isPending}
+                  className="mt-0.5 size-4 shrink-0 rounded border-border"
+                />
+                <span className="text-sm">
+                  {term.body}
+                  {waiting && (
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Available once you have opened the Risk Disclosure Statement.
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
           {ack && (
             <p className="pt-2 text-xs text-muted-foreground">
-              {ack.accepted_count} of {ack.required_count} required acknowledgements accepted
+              {ack.accepted_count} of {ack.required_count} confirmed
+            </p>
+          )}
+          {(acceptMutation.error || withdrawMutation.error) && (
+            <p className="text-xs text-destructive">
+              {((acceptMutation.error ?? withdrawMutation.error) as Error).message}
             </p>
           )}
         </CardContent>
@@ -718,10 +838,10 @@ function ReviewStep({
 }
 
 // ---------------------------------------------------------------------------
-// Step 5: Funding Instructions
+// Step 5: Transfer your funds (and submit the subscription)
 // ---------------------------------------------------------------------------
 
-function FundingStep({
+function TransferStep({
   subscription,
   investorName,
   onContinue,
@@ -732,130 +852,106 @@ function FundingStep({
   onContinue: () => void;
   onBack: () => void;
 }) {
-  const numAmount = parseFloat(subscription.amount);
-  const fee = parseFloat(subscription.subscription_fee);
-  const total = numAmount + fee;
-
-  return (
-    <div className="mx-auto max-w-lg">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Funding instructions</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Transfer the total amount to the escrow account below. Copy each field exactly.
-        </p>
-      </div>
-
-      <Card className="mb-6">
-        <CardContent className="space-y-3 pt-6 text-sm">
-          <CopyableRow label="Beneficiary" value="Akula VCC · Client Money / Escrow Account" />
-          <Separator />
-          <CopyableRow label="Amount" value={formatPricePrecise(total)} />
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Currency</span>
-            <span>USD</span>
-          </div>
-          <CopyableRow label="Unique reference" value={subscription.payment_reference} mono />
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Expected sender</span>
-            <span>{investorName}</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-        <p>
-          All amounts are denominated in USD. Your transfer will be held in a segregated escrow
-          account until allocation is confirmed. Please include the unique reference exactly as
-          shown to ensure timely reconciliation.
-        </p>
-      </div>
-
-      <div className="flex gap-3">
-        <Button variant="outline" className="flex-1" onClick={onBack}>
-          Back
-        </Button>
-        <Button className="flex-1" onClick={onContinue}>
-          Continue to escrow confirmation
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Step 6: Escrow Confirmation
-// ---------------------------------------------------------------------------
-
-function EscrowStep({
-  subscription,
-  onContinue,
-  onBack,
-}: {
-  subscription: Subscription;
-  onContinue: () => void;
-  onBack: () => void;
-}) {
   const [transferred, setTransferred] = useState(false);
+  const account = subscription.transfer_account;
+  const total = parseFloat(subscription.amount) + parseFloat(subscription.subscription_fee);
 
-  const declareMutation = useMutation({
+  const submitMutation = useMutation({
     mutationFn: () =>
       api<SubscriptionShowResponse>(`/api/v1/subscriptions/${subscription.id}`, {
         method: "PATCH",
         body: { payment_declared: true },
       }),
-    onSuccess: () => {
-      onContinue();
-    },
+    onSuccess: onContinue,
   });
-
-  const total = parseFloat(subscription.amount) + parseFloat(subscription.subscription_fee);
 
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold">Confirm your transfer</h2>
+        <h2 className="text-2xl font-bold">Transfer your funds</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Let us know once you've sent the funds so we can watch for them in escrow.
+          Please transfer the total payable to the fund&apos;s subscription account below.
         </p>
       </div>
 
       <Card className="mb-6">
-        <CardContent className="space-y-2 pt-6 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Reference to match</span>
-            <span className="font-mono text-xs">{subscription.payment_reference}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Amount</span>
-            <span className="font-medium">{formatPricePrecise(total)}</span>
-          </div>
+        <CardContent className="space-y-3 pt-6 text-sm">
+          {account ? (
+            <>
+              {account.placeholder && (
+                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                  Placeholder bank details for demonstration. This is not a real account.
+                </p>
+              )}
+              <CopyableRow label="Beneficiary account name" value={account.account_name} />
+              <CopyableRow label="Bank name" value={account.bank_name} />
+              <div className="flex justify-between gap-6">
+                <span className="shrink-0 text-muted-foreground">Bank address</span>
+                <span className="text-right">{account.bank_address}</span>
+              </div>
+              <CopyableRow label="Account number" value={account.account_number} mono />
+              <CopyableRow label="SWIFT / BIC" value={account.swift_bic} mono />
+              {account.routing_aba && (
+                <CopyableRow label="Routing / ABA" value={account.routing_aba} mono />
+              )}
+              {account.intermediary_bank_name && (
+                <div className="flex justify-between gap-6">
+                  <span className="shrink-0 text-muted-foreground">Intermediary bank</span>
+                  <span className="text-right">
+                    {account.intermediary_bank_name}
+                    {account.intermediary_swift && ` · ${account.intermediary_swift}`}
+                  </span>
+                </div>
+              )}
+              <Separator />
+              <CopyableRow label="Total payable" value={formatUsdPrecise(total)} />
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Currency</span>
+                <span>USD</span>
+              </div>
+              <CopyableRow label="Payment reference" value={subscription.payment_reference} mono />
+              <div className="flex justify-between gap-6">
+                <span className="shrink-0 text-muted-foreground">Paying account holder</span>
+                <span className="text-right">{investorName}</span>
+              </div>
+            </>
+          ) : (
+            <p className="text-muted-foreground">
+              The transfer details are not available yet. They are released once your subscription
+              agreement is signed.
+            </p>
+          )}
         </CardContent>
       </Card>
+
+      <div className="mb-6 rounded-lg border bg-muted/40 p-4 text-sm leading-6">
+        <p>{PAYMENT_NOTICE}</p>
+      </div>
 
       <label className="mb-6 flex cursor-pointer items-start gap-3 rounded-lg border p-4">
         <input
           type="checkbox"
           checked={transferred}
           onChange={(e) => setTransferred(e.target.checked)}
-          className="mt-0.5 size-4 rounded border-border"
+          className="mt-0.5 size-4 shrink-0 rounded border-border"
         />
-        <span className="text-sm">I have initiated the bank transfer.</span>
+        <span className="text-sm">{PAYMENT_DECLARATION}</span>
       </label>
 
-      {declareMutation.isError && (
-        <p className="mb-4 text-sm text-destructive">{(declareMutation.error as Error).message}</p>
+      {submitMutation.isError && (
+        <p className="mb-4 text-sm text-destructive">{(submitMutation.error as Error).message}</p>
       )}
 
       <div className="flex gap-3">
-        <Button variant="outline" onClick={onBack} disabled={declareMutation.isPending}>
+        <Button variant="outline" onClick={onBack} disabled={submitMutation.isPending}>
           Back
         </Button>
         <Button
           className="flex-1"
-          onClick={() => declareMutation.mutate()}
-          disabled={!transferred || declareMutation.isPending}
+          disabled={!transferred || !account || submitMutation.isPending}
+          onClick={() => submitMutation.mutate()}
         >
-          {declareMutation.isPending ? "Confirming..." : "Confirm transfer sent"}
+          {submitMutation.isPending ? "Submitting..." : "Submit subscription"}
         </Button>
       </div>
     </div>
@@ -863,12 +959,19 @@ function EscrowStep({
 }
 
 // ---------------------------------------------------------------------------
-// Step 7: Allocation
+// Step 7: Submitted
 // ---------------------------------------------------------------------------
 
-function AllocationStep({ subscription: initial }: { subscription: Subscription }) {
+function SubmittedStep({
+  subscription: initial,
+  investorName,
+}: {
+  subscription: Subscription;
+  investorName: string;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [showCall, setShowCall] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["subscription", initial.id],
@@ -892,7 +995,10 @@ function AllocationStep({ subscription: initial }: { subscription: Subscription 
   const isAllocated = subscription.status === "allocated";
   const isIssued = !!subscription.holding_id;
   const isRejected =
-    subscription.status === "not_allocated" || subscription.status === "funds_returned";
+    subscription.status === "not_allocated" ||
+    subscription.status === "rejected" ||
+    subscription.status === "funds_returned";
+  const total = parseFloat(subscription.amount) + parseFloat(subscription.subscription_fee);
 
   const refundMutation = useMutation({
     mutationFn: () =>
@@ -910,66 +1016,97 @@ function AllocationStep({ subscription: initial }: { subscription: Subscription 
     <div className="mx-auto max-w-lg py-8 text-center">
       <div
         className={`mx-auto mb-4 flex size-14 items-center justify-center rounded-full ${
-          isAllocated ? "bg-green-500/10" : isRejected ? "bg-destructive/10" : "bg-amber-500/10"
+          isRejected ? "bg-destructive/10" : "bg-green-500/10"
         }`}
       >
-        {isAllocated ? (
-          <CheckCircle2Icon className="size-7 text-green-600" />
-        ) : isRejected ? (
+        {isRejected ? (
           <XCircleIcon className="size-7 text-destructive" />
         ) : (
-          <HourglassIcon className="size-7 text-amber-600" />
+          <CheckCircle2Icon className="size-7 text-green-600" />
         )}
       </div>
 
       <h2 className="text-2xl font-bold">
-        {isAllocated
-          ? "Allocation confirmed"
-          : isRejected
-            ? "Subscription not completed"
-            : "Awaiting allocation"}
+        {isIssued
+          ? "Subscription accepted"
+          : isAllocated
+            ? "Allocation confirmed"
+            : isRejected
+              ? "Subscription not accepted"
+              : "Subscription submitted"}
       </h2>
       <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-        {isAllocated
-          ? isIssued
-            ? "Your holding has been issued and now appears in your portfolio."
-            : "LUCA has recorded your allocation. Akula Ops must issue the holding before it appears in your portfolio."
-          : isRejected
-            ? "This subscription did not complete. Any funds received will be returned to your account of origin."
-            : "Akula Ops records and matches your transfer. This page updates as cash is matched, LUCA records allocation and Ops issues the holding."}
+        {isIssued
+          ? "Your shares have been issued and now appear in your portfolio."
+          : isAllocated
+            ? "LUCA SGP has confirmed your allocation. Your shares will appear in your portfolio once they are issued."
+            : isRejected
+              ? "Your subscription was not accepted. Any amount you paid will be returned to the account it came from."
+              : "Your subscription has been sent to LUCA SGP. It is not yet accepted."}
       </p>
 
       <Card className="mx-auto mt-8 max-w-sm text-left">
         <CardContent className="space-y-3 pt-6 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Status</span>
-            <span className="font-medium">{STATUS_LABELS[subscription.status]}</span>
+            <span className="font-medium">
+              {investorStatusLabel(subscription.status, isIssued)}
+            </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Reference</span>
+            <span className="text-muted-foreground">Amount payable</span>
+            <span className="tabular-nums">{formatUsdPrecise(total)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Payment reference</span>
             <span className="font-mono text-xs">{subscription.payment_reference}</span>
           </div>
           {isAllocated && subscription.allocated_at && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Allocated</span>
+              <span className="text-muted-foreground">Allocation confirmed</span>
               <span className="text-xs">
-                {new Date(subscription.allocated_at).toLocaleDateString()}
+                {new Date(subscription.allocated_at).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
               </span>
             </div>
+          )}
+          {!isAllocated && !isRejected && (
+            <p className="border-t pt-3 text-xs leading-5 text-muted-foreground">
+              We match your payment using the payment reference above and the name of the paying
+              account holder ({investorName}). Transfers from any other account, or without the
+              reference, cannot be matched.
+            </p>
           )}
         </CardContent>
       </Card>
 
+      <p className="mx-auto mt-4 max-w-sm text-xs leading-5 text-muted-foreground">
+        {SUBMITTED_NOTE}
+      </p>
+
       <FundingShortfall id={subscription.id} />
+      <Button
+        variant="outline"
+        className="mx-auto mt-4 w-full max-w-sm"
+        onClick={() => setShowCall(true)}
+      >
+        View capital call notice
+      </Button>
       {subscription.status === "awaiting_funds" && (
         <Button
           variant="outline"
-          className="mx-auto mt-4 w-full max-w-sm"
+          className="mx-auto mt-3 w-full max-w-sm"
           onClick={() => refundMutation.mutate()}
           disabled={refundMutation.isPending}
         >
           {refundMutation.isPending ? "Requesting refund..." : "Cancel unissued application"}
         </Button>
+      )}
+      {showCall && (
+        <CapitalCallDialog subscriptionId={subscription.id} onClose={() => setShowCall(false)} />
       )}
 
       <div className="mt-8 flex gap-3">
@@ -1140,7 +1277,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       {/* Top bar */}
       <div className="border-b">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
@@ -1166,7 +1303,7 @@ export default function CheckoutPage() {
       </div>
 
       {/* Content */}
-      <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
         <StepProgress currentStep={step} />
 
         {step === 1 && (
@@ -1204,24 +1341,19 @@ export default function CheckoutPage() {
         )}
 
         {step === 5 && subscription && (
-          <FundingStep
+          <TransferStep
             subscription={subscription}
             investorName={investorName}
-            onContinue={() => setStep(6)}
+            onContinue={() => setStep(7)}
             onBack={() => setStep(4)}
           />
         )}
 
-        {step === 6 && subscription && (
-          <EscrowStep
-            subscription={subscription}
-            onContinue={() => setStep(7)}
-            onBack={() => setStep(5)}
-          />
+        {step === 7 && subscription && (
+          <SubmittedStep subscription={subscription} investorName={investorName} />
         )}
-
-        {step === 7 && subscription && <AllocationStep subscription={subscription} />}
       </div>
+      <DisclaimerFooter label={fundLabel(fund)} />
     </div>
   );
 }

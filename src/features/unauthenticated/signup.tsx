@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DisclaimerFooter from "@/components/disclaimer-footer";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -59,72 +60,79 @@ export default function SignupPage() {
   const error = clientError || (mutation.error instanceof Error ? mutation.error.message : "");
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Create your account</CardTitle>
-          <CardDescription>Enter your email and create a password</CardDescription>
-          {referral.data && (
-            <p className="mt-2 border-l-2 border-primary pl-3 text-sm text-muted-foreground">
-              You were referred by{" "}
-              <span className="font-medium text-foreground">{referral.data.label}</span>
-              {referral.data.rm ? `, covered by ${referral.data.rm}` : ""}. Your account will be
-              linked to them.
+    <div className="flex min-h-screen flex-col">
+      <div className="flex flex-1 items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Create your account</CardTitle>
+            <CardDescription>Enter your email and create a password</CardDescription>
+            {referral.data && (
+              <p className="mt-2 border-l-2 border-primary pl-3 text-sm text-muted-foreground">
+                You were referred by{" "}
+                <span className="font-medium text-foreground">{referral.data.label}</span>
+                {referral.data.rm ? `, covered by ${referral.data.rm}` : ""}. Your account will be
+                linked to them.
+              </p>
+            )}
+            {ref && referral.isError && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                This referral link is not valid, so you will register directly with LUCA.
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Personal email address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Create password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="passwordConfirmation">Confirm password</Label>
+              <Input
+                id="passwordConfirmation"
+                type="password"
+                value={passwordConfirmation}
+                onChange={(e) => setPasswordConfirmation(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button
+              className="w-full"
+              onClick={handleSubmit}
+              disabled={!valid || mutation.isPending}
+            >
+              {mutation.isPending ? "Creating account..." : "Continue"}
+            </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              Already have an account?{" "}
+              <Link to="/login" className="text-foreground underline hover:no-underline">
+                Sign in
+              </Link>
             </p>
-          )}
-          {ref && referral.isError && (
-            <p className="mt-2 text-sm text-muted-foreground">
-              This referral link is not valid, so you will register directly with LUCA.
-            </p>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Personal email address</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Create password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="passwordConfirmation">Confirm password</Label>
-            <Input
-              id="passwordConfirmation"
-              type="password"
-              value={passwordConfirmation}
-              onChange={(e) => setPasswordConfirmation(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button className="w-full" onClick={handleSubmit} disabled={!valid || mutation.isPending}>
-            {mutation.isPending ? "Creating account..." : "Continue"}
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link to="/login" className="text-foreground underline hover:no-underline">
-              Sign in
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
+      <DisclaimerFooter />
     </div>
   );
 }

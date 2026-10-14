@@ -13,6 +13,7 @@ import {
   setLoginNotice,
 } from "@/lib/accredited-investor";
 import { Button } from "@/components/ui/button";
+import DisclaimerFooter from "@/components/disclaimer-footer";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const TESTS = [
@@ -234,11 +235,11 @@ export default function AccreditedDeclarationPage() {
         </div>
       </main>
 
+      <DisclaimerFooter className="border-[#dce4e8]" />
       <footer className="border-t border-[#dce4e8] px-6 py-5 text-xs leading-5 text-[#718896] sm:px-10">
-        Akula Markets Pte. Ltd. · Singapore. Draft wording for LUCA Compliance to review before
-        launch. Statutory basis: Securities and Futures Act 2001, s 4A(1)(a); Securities and Futures
-        (Offers of Investments) (Securities and Securities-based Derivatives Contracts) Regulations
-        2018.
+        Akula Labs Pte. Ltd. · Singapore. Draft wording for LUCA Compliance to review before launch.
+        Statutory basis: Securities and Futures Act 2001, s 4A(1)(a); Securities and Futures (Offers
+        of Investments) (Securities and Securities-based Derivatives Contracts) Regulations 2018.
       </footer>
     </div>
   );

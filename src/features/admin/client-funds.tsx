@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRightIcon, FolderIcon, FileTextIcon } from "lucide-react";
@@ -9,6 +9,7 @@ import { STATUS_LABELS, type SubscriptionStatus } from "@/lib/types";
 import type { WorkflowView } from "@/lib/workflow-types";
 import type { Capital } from "@/features/partners/partner-data";
 import { Button } from "@/components/ui/button";
+import { CapitalCallDialog } from "@/components/capital-call-notice";
 import type { ClientActions } from "./compliance-clients";
 import { formatDate } from "./compliance-helpers";
 import { buildClientFunds } from "./client-funds-data";
@@ -132,6 +133,7 @@ function Papers({
   heading: boolean;
 }) {
   const { subscription: sub, signature, agreement, call } = paper;
+  const [showNotice, setShowNotice] = useState(false);
   const version = workflow.versions.find((v) => v.id === signature?.versionId);
   const paid = call.issued && call.received >= call.total - 0.005;
   return (
@@ -221,9 +223,19 @@ function Papers({
                 </div>
               ))}
             </dl>
+            {call.issued && (
+              <div className="pb-3 pl-7">
+                <Button size="sm" variant="outline" onClick={() => setShowNotice(true)}>
+                  View capital call notice
+                </Button>
+              </div>
+            )}
           </details>
         </li>
       </ul>
+      {showNotice && (
+        <CapitalCallDialog subscriptionId={sub.id} onClose={() => setShowNotice(false)} />
+      )}
     </div>
   );
 }

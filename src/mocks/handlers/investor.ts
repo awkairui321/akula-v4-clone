@@ -3,6 +3,14 @@ import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { DOCUMENT_REQUEST_KINDS } from "@/lib/document-catalogue";
 import { ACCREDITED_BASES, labelForBasis } from "@/lib/accredited-investor";
 import {
+  DOCUMENT_GATED_STATEMENT,
+  OFFERING_DOCUMENTS,
+  documentLabel,
+  offeringOf,
+  type OfferingDocumentKind,
+} from "@/lib/offering";
+import { buildCapitalCall } from "@/lib/capital-call";
+import {
   segmentFor,
   audienceMember,
   openSubscriptionId,
@@ -61,6 +69,7 @@ import {
   recordClientEvent,
   findReferralCode,
   clientEvents,
+  transferAccountView,
 } from "../db";
 
 function unauthorized() {
@@ -417,9 +426,6 @@ export const investorHandlers = [
       segmentFor(user),
       fundAsSeenBy(published!.snapshot, user.id),
     );
-    const feeAcknowledgement = sub.acknowledgements.find((term) => term.key === "fees_disclosure");
-    if (feeAcknowledgement)
-      feeAcknowledgement.body += ` My ${sub.commercial_terms.segment === "independent" ? "independent" : "partner-referred"} profile subscription fee is ${sub.commercial_terms.subscriptionFeePct}%. Allocation consideration is ${sub.commercial_terms.allocationPriority === "partner_priority" ? "partner priority" : "standard"}, subject to LUCA's decision; no allocation is guaranteed.`;
     sub.subscription_fee = ((amount * Number(fund.subscription_fee_pct)) / 100).toFixed(2);
     sub.fund_name = fund.name;
     sub.asset_name = fund.asset.name;
@@ -495,9 +501,86 @@ export const investorHandlers = [
       return HttpResponse.json({ error: "Acknowledgement term not found" }, { status: 404 });
     if (!["reserved", "documents_pending"].includes(sub.status))
       return HttpResponse.json({ error: "Signed acknowledgments are immutable" }, { status: 422 });
+    if (term.key === DOCUMENT_GATED_STATEMENT && !sub.documents_opened?.risk_disclosure)
+      return HttpResponse.json(
+        { error: "Open the Risk Disclosure Statement before confirming that you have read it." },
+        { status: 422 },
+      );
+    const user = currentUser(request)!;
+    const fund = findFundById(sub.fund_id);
+    // Each confirmation keeps who gave it and the versions of the documents in force at the time.
     term.accepted = true;
     term.accepted_at = new Date().toISOString();
+    term.accepted_by = { id: user.id, email: user.email };
+    term.document_versions = fund
+      ? Object.fromEntries(
+          OFFERING_DOCUMENTS.map(({ kind }) => [kind, offeringOf(fund).documents[kind].version]),
+        )
+      : null;
+    recordAudit(
+      user.id,
+      `Confirmation ${term.position} given by ${user.email} on subscription #${sub.id} (${Object.entries(
+        term.document_versions ?? {},
+      )
+        .map(([kind, version]) => `${documentLabel(kind as OfferingDocumentKind)} v${version}`)
+        .join(", ")}).`,
+    );
+    persist();
     return HttpResponse.json({ acknowledgements: acknowledgementsResponse(sub) });
+  }),
+
+  // POST /api/v1/subscriptions/:id/document_opened — the investor opened an offering document.
+  http.post("*/api/v1/subscriptions/:id/document_opened", async ({ params, request }) => {
+    const sub = ownedSubscription(request, Number(params.id));
+    if (!sub) return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
+    const body = (await request.json().catch(() => ({}))) as { kind?: string };
+    const document = OFFERING_DOCUMENTS.find((d) => d.kind === body.kind);
+    const fund = findFundById(sub.fund_id);
+    if (!document || !fund)
+      return HttpResponse.json({ error: "Document not found" }, { status: 404 });
+    const version = offeringOf(fund).documents[document.kind].version;
+    const earlier = sub.documents_opened?.[document.kind];
+    if (!earlier || earlier.version !== version) {
+      const user = currentUser(request)!;
+      sub.documents_opened = {
+        ...sub.documents_opened,
+        [document.kind]: { at: new Date().toISOString(), version, user_id: user.id },
+      };
+      recordAudit(
+        user.id,
+        `${user.email} opened the ${document.label} (v${version}) for subscription #${sub.id}.`,
+      );
+      persist();
+    }
+    return HttpResponse.json({ acknowledgements: acknowledgementsResponse(sub) });
+  }),
+
+  // GET /api/v1/subscriptions/:id/capital_call — the notice issued once the agreement is signed.
+  http.get("*/api/v1/subscriptions/:id/capital_call", ({ params, request }) => {
+    const user = currentUser(request);
+    if (!user) return unauthorized();
+    const sub = subscriptions.find((s) => s.id === Number(params.id));
+    if (!sub || (sub.investor_id !== user.id && user.role !== "luca"))
+      return HttpResponse.json({ error: "Subscription not found" }, { status: 404 });
+    const fund = findFundById(sub.fund_id);
+    const account = transferAccountView(sub);
+    if (!fund || !account)
+      return HttpResponse.json(
+        { error: "The capital call is issued once the subscription agreement is signed." },
+        { status: 404 },
+      );
+    return HttpResponse.json({
+      capital_call: buildCapitalCall({
+        subscriptionId: sub.id,
+        fund,
+        investorName: sub.investor_name,
+        amount: sub.amount,
+        fee: sub.subscription_fee,
+        paymentReference: sub.payment_reference,
+        calledAt: sub.confirmed_at ?? sub.approved_at ?? sub.reserved_at,
+        account,
+      }),
+    });
   }),
 
   // DELETE /api/v1/subscriptions/:id/acknowledgements/:termId
@@ -511,6 +594,14 @@ export const investorHandlers = [
       return HttpResponse.json({ error: "Signed acknowledgments are immutable" }, { status: 422 });
     term.accepted = false;
     term.accepted_at = null;
+    term.accepted_by = null;
+    term.document_versions = null;
+    const user = currentUser(request)!;
+    recordAudit(
+      user.id,
+      `Confirmation ${term.position} withdrawn by ${user.email} on subscription #${sub.id}.`,
+    );
+    persist();
     return HttpResponse.json({ acknowledgements: acknowledgementsResponse(sub) });
   }),
 

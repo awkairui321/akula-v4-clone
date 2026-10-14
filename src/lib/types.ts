@@ -84,6 +84,8 @@ export type Fund = {
   investor_access?: InvestorAccess;
   /** Published audience for this fund variant; historical investments retain access. */
   eligible_segments?: import("./investor-access").InvestorSegment[];
+  /** Fund, sub-fund, exposure and offering documents shown to investors. */
+  offering?: import("./offering").Offering;
   /** Partner firms whose clients can also see this fund, whatever their client class. */
   audience_partners?: string[];
   /** Individual clients (by id) who can also see this fund. */
@@ -305,6 +307,8 @@ export type Subscription = {
   next_action: string;
   subscription_fee: string;
   payment_reference: string;
+  /** Where to send the money. Only present once the subscription has been signed. */
+  transfer_account?: import("./offering").TransferAccount | null;
   /** Paused in place by LUCA — does not change status, just excludes it from */
   /** "needs action" urgency while true. */
   on_hold: boolean;
@@ -337,9 +341,23 @@ export type AcknowledgementTerm = {
   body: string;
   accepted: boolean;
   accepted_at: string | null;
+  /** The user account that gave it, and the versions of the documents in force at the time. */
+  accepted_by?: { id: number; email: string } | null;
+  document_versions?: Record<string, string> | null;
+};
+
+export type OfferingDocumentStatus = {
+  kind: import("./offering").OfferingDocumentKind;
+  label: string;
+  version: string;
+  opened_at: string | null;
 };
 
 export type AcknowledgementsResponse = {
+  /** The offering documents, and when this investor opened each one. */
+  documents?: OfferingDocumentStatus[];
+  /** The first confirmation stays unavailable until the Risk Disclosure Statement is opened. */
+  risk_disclosure_opened?: boolean;
   required_count: number;
   accepted_count: number;
   complete: boolean;

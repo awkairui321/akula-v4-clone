@@ -22,6 +22,15 @@ import { CheckIcon, TriangleAlertIcon, MinusIcon } from "lucide-react";
 import { friendlyDate, storedDate } from "@/lib/format-date";
 import { AudiencePicker } from "./audience-picker";
 import { audienceDraftFrom, useAudienceClients, type AudienceDraft } from "./audience";
+import {
+  OFFERING_DOCUMENTS,
+  TRANSFER_ACCOUNT_FIELDS,
+  blankTransferAccount,
+  missingTransferFields,
+  offeringOf,
+  type OfferingDocumentKind,
+  type TransferAccount,
+} from "@/lib/offering";
 
 /* ─── Line-based collection editing ───
  * The narrative collections are edited as text, one record per line, with
@@ -120,6 +129,13 @@ type Draft = {
   figures_checked_links: string;
   recording_available: boolean;
   recording_embed_url: string;
+  offering_fund_name: string;
+  offering_sub_fund_name: string;
+  offering_fund_code: string;
+  offering_exposure: string;
+  offering_agreement_name: string;
+  offering_agreement_date: string;
+  document_versions: Record<OfferingDocumentKind, string>;
 };
 
 function dateInputValue(iso: string | null): string {
@@ -214,6 +230,23 @@ function draftFrom(fund: Fund): Draft {
     ),
     recording_available: Boolean(fund.recording_available),
     recording_embed_url: str(fund.recording_embed_url),
+    ...offeringDraft(fund),
+  };
+}
+
+/** The offering details as the form holds them, with the platform defaults filled in. */
+function offeringDraft(fund: Fund) {
+  const offering = offeringOf(fund);
+  return {
+    offering_fund_name: offering.fund_name,
+    offering_sub_fund_name: offering.sub_fund_name,
+    offering_fund_code: offering.fund_code,
+    offering_exposure: offering.exposure,
+    offering_agreement_name: offering.agreement_name,
+    offering_agreement_date: dateInputValue(offering.agreement_date),
+    document_versions: Object.fromEntries(
+      OFFERING_DOCUMENTS.map(({ kind }) => [kind, offering.documents[kind].version]),
+    ) as Record<OfferingDocumentKind, string>,
   };
 }
 
@@ -596,6 +629,23 @@ function payloadFrom(
       figures_checked_links: parseFiguresCheckedLinks(draft.figures_checked_links),
       recording_available: draft.recording_available,
       recording_embed_url: orNull(draft.recording_embed_url),
+      offering: {
+        fund_name: draft.offering_fund_name.trim(),
+        sub_fund_name: draft.offering_sub_fund_name.trim(),
+        fund_code: draft.offering_fund_code.trim().toUpperCase(),
+        exposure: draft.offering_exposure.trim(),
+        agreement_name: draft.offering_agreement_name.trim(),
+        agreement_date: orNull(draft.offering_agreement_date),
+        documents: Object.fromEntries(
+          OFFERING_DOCUMENTS.map(({ kind }) => [
+            kind,
+            {
+              version: draft.document_versions[kind].trim() || "1.0",
+              url: original.offering?.documents?.[kind]?.url ?? null,
+            },
+          ]),
+        ),
+      },
     },
   };
 }
@@ -856,10 +906,111 @@ function EditorSection({
   );
 }
 
+/**
+ * Where investors send their money. Only the Fund Manager enters it, and only until the deal is
+ * published: it is saved on its own, never with a draft that goes through approval.
+ */
+function TransferAccountSection({ fund }: { fund: Fund }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const isManager = user?.role === "luca";
+  const { data, isLoading } = useQuery({
+    queryKey: ["transferAccount", fund.id],
+    queryFn: () =>
+      api<{ transfer_account: TransferAccount; locked: boolean }>(
+        `/api/v1/admin/funds/${fund.id}/transfer_account`,
+      ),
+    enabled: isManager,
+  });
+  const [form, setForm] = useState<TransferAccount | null>(null);
+  const account = form ?? data?.transfer_account ?? blankTransferAccount(fund.id);
+  const locked = data?.locked ?? true;
+  const missing = missingTransferFields(account);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api<{ transfer_account: TransferAccount }>(
+        `/api/v1/admin/funds/${fund.id}/transfer_account`,
+        { method: "PUT", body: { transfer_account: account } },
+      ),
+    onSuccess: () => {
+      setForm(null);
+      queryClient.invalidateQueries({ queryKey: ["transferAccount", fund.id] });
+    },
+  });
+
+  if (!isManager)
+    return (
+      <p className="text-sm text-muted-foreground">
+        The Fund Manager enters the transfer account before the deal is published.
+      </p>
+    );
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-base font-semibold">Transfer account</h3>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          {locked
+            ? "This deal is published, so the transfer account is fixed and cannot be changed."
+            : "Investors are shown these details once they have signed. They cannot be changed after the deal is published, and the deal cannot be published without them."}
+        </p>
+        {account.placeholder && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            These are placeholder details for demonstration, not a real account.
+          </p>
+        )}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {TRANSFER_ACCOUNT_FIELDS.map((field) =>
+          locked ? (
+            <LockedField
+              key={field.key}
+              label={field.label}
+              value={account[field.key] || "—"}
+              hint={field.required ? "Required" : "Optional"}
+            />
+          ) : (
+            <TextField
+              key={field.key}
+              label={`${field.label}${field.required ? "" : " (optional)"}`}
+              hint={field.hint}
+              value={account[field.key]}
+              onChange={(value) => setForm({ ...account, [field.key]: value })}
+            />
+          ),
+        )}
+      </div>
+      {!locked && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={() => save.mutate()} disabled={form === null || save.isPending}>
+            {save.isPending ? "Saving…" : "Save transfer account"}
+          </Button>
+          {missing.length > 0 ? (
+            <span className="text-xs text-muted-foreground">
+              Still needed: {missing.join(", ")}
+            </span>
+          ) : (
+            form === null &&
+            account.updated_at && (
+              <span className="text-xs text-muted-foreground">Saved by {account.updated_by}</span>
+            )
+          )}
+          {save.error && (
+            <span className="text-xs text-destructive">{(save.error as Error).message}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The editor's sections, in the order they are worked through. */
 const SECTIONS = [
   { id: "audience", label: "Who receives this deal" },
   { id: "terms", label: "Identity and terms" },
+  { id: "offering", label: "Offering and transfer account" },
   { id: "fees", label: "Fees" },
   { id: "company", label: "Company" },
   { id: "metrics", label: "Charts and metrics" },
@@ -1296,6 +1447,69 @@ export default function PublishedDealEditor({
                   </Select>
                 </Field>
               </div>
+            </EditorSection>
+
+            <EditorSection
+              id="offering"
+              label="Offering and transfer account"
+              note="What investors are told about the fund and sub-fund, the documents that govern it and where they send their money."
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextField
+                  label="Fund"
+                  value={draft.offering_fund_name}
+                  onChange={(v) => set("offering_fund_name", v)}
+                />
+                <TextField
+                  label="Sub-fund"
+                  value={draft.offering_sub_fund_name}
+                  onChange={(v) => set("offering_sub_fund_name", v)}
+                />
+                <TextField
+                  label="Fund code"
+                  hint="Starts every payment reference, for example DASVCCII-SERAPONG"
+                  value={draft.offering_fund_code}
+                  onChange={(v) => set("offering_fund_code", v)}
+                />
+                <TextField
+                  label="Governing agreement"
+                  hint="Named in the capital call notice"
+                  value={draft.offering_agreement_name}
+                  onChange={(v) => set("offering_agreement_name", v)}
+                />
+                <TextField
+                  label="Agreement date"
+                  type="date"
+                  value={draft.offering_agreement_date}
+                  onChange={(v) => set("offering_agreement_date", v)}
+                />
+              </div>
+              <AreaField
+                label="Underlying exposure"
+                rows={3}
+                value={draft.offering_exposure}
+                onChange={(v) => set("offering_exposure", v)}
+              />
+              <div className="space-y-2">
+                <h3 className="text-base font-semibold">Offering documents</h3>
+                <p className="max-w-3xl text-sm text-muted-foreground">
+                  The version recorded against each investor's confirmation. Investors see a
+                  labelled placeholder until the signed-off document is attached.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {OFFERING_DOCUMENTS.map(({ kind, label }) => (
+                    <TextField
+                      key={kind}
+                      label={`${label} version`}
+                      value={draft.document_versions[kind]}
+                      onChange={(v) =>
+                        set("document_versions", { ...draft.document_versions, [kind]: v })
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+              <TransferAccountSection fund={fund} />
             </EditorSection>
 
             <EditorSection id="fees" label="Fees">

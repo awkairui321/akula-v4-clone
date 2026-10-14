@@ -1,5 +1,6 @@
 import { mayDiscover, hasInvestmentHistory, setPublishedAudienceReader } from "./investor-access";
 import { audienceIncludes } from "../lib/investor-access";
+import { missingTransferFields } from "../lib/offering";
 import type { Fund as AudienceFund } from "../lib/types";
 import * as db from "./db";
 import { inDemoClientCohort } from "../lib/demo-cohort";
@@ -72,6 +73,7 @@ const CHANGE_LABELS: Record<string, string> = {
   hook: "Headline",
   descriptor: "Descriptor",
   eligible_segments: "Client audience",
+  offering: "Offering details",
   audience_partners: "Client audience",
   audience_investors: "Client audience",
   audience_excluded: "Client audience",
@@ -1275,6 +1277,14 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
       );
       const f = db.findFundById(v.fundId)!;
       requireValue(f.state !== "cancelled", "Cancelled offering cannot publish.");
+      // The first publication fixes where investors pay, so the account must be in place.
+      if (f.state === "draft") {
+        const missing = missingTransferFields(db.findTransferAccount(f.id));
+        requireValue(
+          missing.length === 0,
+          `Enter the transfer account before publishing this deal. Missing: ${missing.join(", ")}.`,
+        );
+      }
       // Who could see the deal before this version, to tell only those newly included.
       const before = audienceOf(currentVersion(v.fundId)?.snapshot).map((c) => c.id);
       // The Fund Manager approves what they are looking at, including their own edits.

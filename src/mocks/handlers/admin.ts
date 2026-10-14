@@ -6,7 +6,13 @@ import {
 } from "../communications";
 import { canManageOfferingRequest } from "@/lib/permissions";
 import { validUploadedFile } from "@/lib/file-upload";
-import { workflow, command, persist, recordDealChange } from "../workflow";
+import { workflow, command, persist, recordAudit, recordDealChange } from "../workflow";
+import {
+  TRANSFER_DETAIL_KEYS,
+  blankTransferAccount,
+  fundLabel,
+  missingTransferFields,
+} from "@/lib/offering";
 import { http, HttpResponse } from "msw";
 import {
   referenceFor,
@@ -29,6 +35,8 @@ import {
   findPartnerById,
   funds,
   findFundById,
+  transferAccounts,
+  findTransferAccount,
   fundManagers,
   tagsFor,
   findOrCreateTag,
@@ -52,6 +60,14 @@ import type { SubscriptionStatus, Fund } from "@/lib/types";
 
 function unauthorized() {
   return HttpResponse.json({ error: "Not authenticated" }, { status: 401 });
+}
+
+/** A deal that has gone live, or ever had a version published, keeps its transfer account fixed. */
+function dealIsPublished(fund: Fund): boolean {
+  return (
+    fund.state !== "draft" ||
+    workflow.versions.some((v) => v.fundId === fund.id && v.status === "published")
+  );
 }
 
 function requireAdmin(request: Request): MockUser | null {
@@ -886,6 +902,59 @@ export const adminHandlers = [
     });
   }),
 
+  // GET/PUT /api/v1/admin/funds/:id/transfer_account — where investors send their money.
+  // Only the Fund Manager sees or sets it, and only until the deal is published.
+  http.get("*/api/v1/admin/funds/:id/transfer_account", ({ request, params }) => {
+    const user = currentUser(request);
+    if (user?.role !== "luca") return unauthorized();
+    const fund = findFundById(Number(params.id));
+    if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
+    return HttpResponse.json({
+      transfer_account: findTransferAccount(fund.id) ?? blankTransferAccount(fund.id),
+      locked: dealIsPublished(fund),
+    });
+  }),
+  http.put("*/api/v1/admin/funds/:id/transfer_account", async ({ request, params }) => {
+    const user = currentUser(request);
+    if (user?.role !== "luca") return unauthorized();
+    // Read the body first: the demo re-syncs its saved state on a timer.
+    const body = (await request.json()) as { transfer_account?: Record<string, unknown> };
+    const fund = findFundById(Number(params.id));
+    if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
+    if (dealIsPublished(fund))
+      return HttpResponse.json(
+        { error: "The transfer account cannot be changed once the deal is published." },
+        { status: 422 },
+      );
+    const incoming = body.transfer_account ?? {};
+    if (
+      TRANSFER_DETAIL_KEYS.some(
+        (key) => incoming[key] !== undefined && typeof incoming[key] !== "string",
+      )
+    )
+      return HttpResponse.json({ error: "Enter the account details as text." }, { status: 422 });
+    let account = findTransferAccount(fund.id);
+    if (!account) {
+      account = { id: fund.id, ...blankTransferAccount(fund.id) };
+      transferAccounts.push(account);
+    }
+    for (const key of TRANSFER_DETAIL_KEYS)
+      if (typeof incoming[key] === "string") account[key] = (incoming[key] as string).trim();
+    account.placeholder = false;
+    account.updated_at = new Date().toISOString();
+    account.updated_by = user.email;
+    recordAudit(
+      user.id,
+      `Transfer account for ${fundLabel(fund)} (${fund.name}) saved by ${user.email}.`,
+    );
+    persist();
+    return HttpResponse.json({
+      transfer_account: account,
+      locked: false,
+      missing: missingTransferFields(account),
+    });
+  }),
+
   // POST /api/v1/funds
   http.post("*/api/v1/funds", async ({ request }) => {
     const user = requireAdmin(request);
@@ -1126,11 +1195,17 @@ export const adminHandlers = [
       Object.assign(fund.share_class, patch.share_class);
     }
 
+    if (patch.offering && typeof patch.offering === "object") {
+      // Merge, so a save that only changes one detail keeps the rest.
+      fund.offering = { ...fund.offering, ...(patch.offering as object) };
+    }
+
     const {
       tag_ids: _tagIds,
       fund_manager_id: _fundManagerId,
       asset: _asset,
       share_class: _shareClass,
+      offering: _offering,
       ...scalarPatch
     } = patch;
     const previousState = fund.state;
@@ -1150,6 +1225,7 @@ export const adminHandlers = [
     recordDealChange(user, fund.id, [
       ...Object.keys(scalarPatch),
       ...(Array.isArray(patch.tag_ids) ? ["tags"] : []),
+      ...(patch.offering ? ["offering"] : []),
       ...(typeof patch.fund_manager_id === "number" ? ["fund_manager"] : []),
       ...Object.keys((patch.asset as object | undefined) ?? {}).map((key) => `asset.${key}`),
       ...Object.keys((patch.share_class as object | undefined) ?? {}).map(
