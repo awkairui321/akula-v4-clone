@@ -85,6 +85,15 @@ export function buildClientFunds(
             ),
           };
         })
+        // A fund the client has put nothing into is not listed: only what they hold or have
+        // committed to, plus anything still waiting on LUCA (a document to review, an open request).
+        .filter(
+          (fund) =>
+            (fund.capital?.committed ?? 0) > 0 ||
+            (fund.capital?.holdings.length ?? 0) > 0 ||
+            fund.docs.some((d) => ["received", "reviewing"].includes(d.review_state)) ||
+            fund.requests.length > 0,
+        )
         .sort((a, b) => a.name.localeCompare(b.name));
       return {
         investor,

@@ -23,15 +23,21 @@ export const SUMMARY =
   "flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden";
 export const CHEVRON = "size-4 shrink-0 text-muted-foreground transition-transform";
 
-/** The change in value against the capital committed: "+$3,000 · +2.5%", green or red. */
+/** The change in value against the capital committed: "+$15,000 · +4.3%", green or red. */
 function NavChange({ value, cost }: { value: number; cost: number }) {
-  if (cost <= 0) return <span className="text-xs text-muted-foreground">No issued holding</span>;
   const change = value - cost;
   const pct = (change / cost) * 100;
   const sign = change > 0.005 ? "+" : change < -0.005 ? "−" : "";
   return (
     <span
-      className={`text-xs tabular-nums ${change > 0.005 ? "text-green-700" : change < -0.005 ? "text-red-700" : "text-muted-foreground"}`}
+      title={`Change against the ${formatPrice(cost)} committed to these issued holdings`}
+      className={
+        change > 0.005
+          ? "text-green-700"
+          : change < -0.005
+            ? "text-red-700"
+            : "text-muted-foreground"
+      }
     >
       {sign}
       {formatPrice(Math.abs(change))} · {sign}
@@ -40,24 +46,28 @@ function NavChange({ value, cost }: { value: number; cost: number }) {
   );
 }
 
+/** What the client has committed, and what it is worth now with the change beside it. */
 export function Figures({ capital }: { capital?: Capital }) {
+  const hasNav = (capital?.navCost ?? 0) > 0;
   return (
-    <dl className="grid min-w-0 grid-cols-2 gap-2 sm:min-w-[34rem] sm:grid-cols-4 sm:gap-4">
-      {(["committed", "funded", "allocated"] as const).map((key) => (
-        <div key={key} className="min-w-0 border-l pl-2 sm:pl-3">
-          <dt className="text-xs text-muted-foreground capitalize">{key}</dt>
-          <dd className="mt-1 text-xs font-medium tabular-nums sm:text-sm">
-            {formatPrice(capital?.[key] ?? 0)}
-          </dd>
-        </div>
-      ))}
+    <dl className="grid min-w-0 grid-cols-[auto_1fr] gap-4 sm:min-w-[26rem] sm:gap-8">
+      <div className="min-w-0 border-l pl-2 sm:pl-3">
+        <dt className="text-xs text-muted-foreground">Committed</dt>
+        <dd className="mt-1 text-xs font-medium tabular-nums sm:text-sm">
+          {formatPrice(capital?.committed ?? 0)}
+        </dd>
+      </div>
       <div className="min-w-0 border-l pl-2 sm:pl-3">
         <dt className="text-xs text-muted-foreground">Latest NAV</dt>
-        <dd className="mt-1 text-xs font-medium tabular-nums sm:text-sm">
-          {capital && capital.navCost > 0 ? formatPrice(capital.navValue) : "—"}
-          <span className="block">
-            <NavChange value={capital?.navValue ?? 0} cost={capital?.navCost ?? 0} />
-          </span>
+        <dd className="mt-1 flex flex-wrap items-baseline gap-x-3 text-xs font-medium tabular-nums sm:text-sm">
+          {hasNav ? (
+            <>
+              <span>{formatPrice(capital?.navValue ?? 0)}</span>
+              <NavChange value={capital?.navValue ?? 0} cost={capital?.navCost ?? 0} />
+            </>
+          ) : (
+            "—"
+          )}
         </dd>
       </div>
     </dl>

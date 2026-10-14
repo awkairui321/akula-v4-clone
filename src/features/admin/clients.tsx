@@ -179,9 +179,8 @@ export default function ClientsPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Committed: live subscriptions · Funded: cash received after fees · Allocated: capital
-        allocated by LUCA · Latest NAV: reported value of issued holdings, with the change against
-        the capital committed to them
+        Committed: capital in live subscriptions · Latest NAV: reported value of issued holdings,
+        with the change against the capital committed to them
       </p>
 
       {book.isError ? (
