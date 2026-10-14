@@ -9,6 +9,9 @@ export type Capital = {
   funded: number;
   /** Allocated by LUCA. */
   allocated: number;
+  /** The latest reported value of issued holdings, and what was committed to those holdings. */
+  navValue: number;
+  navCost: number;
 };
 
 export type HoldingLine = {
@@ -58,11 +61,13 @@ export type PartnerLine = Capital & {
 const INACTIVE = ["cancelled", "rejected", "not_allocated", "funds_returned"];
 const WAITING_ON_CLIENT = ["institution_review", "documents_pending", "awaiting_funds"];
 
-const empty = (): Capital => ({ committed: 0, funded: 0, allocated: 0 });
+const empty = (): Capital => ({ committed: 0, funded: 0, allocated: 0, navValue: 0, navCost: 0 });
 const add = (a: Capital, b: Capital): Capital => ({
   committed: a.committed + b.committed,
   funded: a.funded + b.funded,
   allocated: a.allocated + b.allocated,
+  navValue: a.navValue + b.navValue,
+  navCost: a.navCost + b.navCost,
 });
 
 /** Partner firms, their funds and their clients, from the data the viewer is allowed to see. */
@@ -84,6 +89,8 @@ export function buildPartnerBook(data: WorkflowView): {
       allocated: data.allocations
         .filter((a) => a.subscriptionId === id && !a.voided)
         .reduce((n, a) => n + a.principal, 0),
+      navValue: 0,
+      navCost: 0,
     };
   };
 
@@ -117,6 +124,9 @@ export function buildPartnerBook(data: WorkflowView): {
         (total, s) => add(total, capitalOfSub(s.id, s.amount, s.subscription_fee, s.status)),
         empty() as Capital,
       ),
+      // What the issued holdings are worth now, against the capital committed to them.
+      navValue: holdings.reduce((n, h) => n + h.value, 0),
+      navCost: holdings.reduce((n, h) => n + h.cost, 0),
       id: client.id,
       name: client.name,
       code: client.code,

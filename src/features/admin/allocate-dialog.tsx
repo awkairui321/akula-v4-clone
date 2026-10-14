@@ -19,13 +19,16 @@ import { Textarea } from "@/components/ui/textarea";
 export function AllocateDialog({
   subscription,
   onClose,
+  startDeclining = false,
 }: {
   subscription: AdminSubscription;
   onClose: () => void;
+  /** Open on the decline step: used when the funds cannot be verified. */
+  startDeclining?: boolean;
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [declining, setDeclining] = useState(false);
+  const [declining, setDeclining] = useState(startDeclining);
   const [reason, setReason] = useState("");
 
   const { data: workflow } = useQuery({

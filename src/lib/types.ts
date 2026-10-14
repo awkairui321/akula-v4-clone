@@ -341,6 +341,8 @@ export type Subscription = {
   /** When LUCA recorded that the funds were verified, and that the allocation was confirmed. */
   funds_verified_at?: string | null;
   allocation_confirmed_at?: string | null;
+  /** Where the refund stands once the subscription is not accepted or cancelled. */
+  refund?: import("./acclime").RefundSummary | null;
 };
 
 export type AcknowledgementTerm = {

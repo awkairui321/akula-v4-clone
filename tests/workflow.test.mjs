@@ -21,6 +21,9 @@ for (const file of [
   "src/lib/accredited-investor.ts",
   "src/lib/offering.ts",
   "src/lib/receipts.ts",
+  "src/lib/acclime.ts",
+  "src/mocks/acclime.ts",
+  "src/mocks/handlers/acclime.ts",
   "src/lib/capital-call.ts",
   "src/lib/investor-status.ts",
   "src/lib/currency.ts",
@@ -2822,4 +2825,406 @@ test("receipts say who reported the funds, so Acclime's confirmation can be told
   const keyed = w.workflow.receipts.find((r) => r.reference === "WIRE-12345");
   assert.equal(keyed.source, "ops");
   assert.equal(receiptLabel(keyed), "WIRE-12345");
+});
+
+/* ─── Acclime: the pack, the messages, refunds and NAV ─── */
+
+async function submittedSubscription(amount = "25000") {
+  const user = investor();
+  const created = (
+    await (await request("subscriptions", user, "POST", { fund_id: 1, amount })).json()
+  ).subscription;
+  const record = db.findSubscriptionById(created.id);
+  w.recordSignature(record, "Fictional investor signature");
+  record.status = "awaiting_funds";
+  return record;
+}
+const acclime = (message, user = manager()) =>
+  request("admin/acclime/messages", user, "POST", message);
+const payable = (s) => Number(s.amount) + Number(s.subscription_fee);
+
+test("submitting a subscription records the pack sent to Acclime and LUCA, once", async () => {
+  const s = await submittedSubscription();
+  assert.equal(w.workflow.packs.length, 0);
+  const submit = () =>
+    request(`subscriptions/${s.id}`, investor(), "PATCH", { payment_declared: true });
+  assert.equal((await submit()).status, 200);
+  const pack = w.workflow.packs.find((p) => p.subscriptionId === s.id);
+  assert.ok(pack);
+  assert.deepEqual(
+    pack.items.map((i) => i.kind),
+    ["signed_agreement", "kyc", "cdd", "payment_reference"],
+  );
+  assert.equal(pack.items.find((i) => i.kind === "payment_reference").detail, s.payment_reference);
+  assert.match(pack.items[0].detail, /Signed by Fictional investor signature/);
+  assert.deepEqual(
+    pack.recipients.map((r) => r.name),
+    ["Acclime", "LUCA SGP"],
+  );
+  await submit();
+  assert.equal(w.workflow.packs.filter((p) => p.subscriptionId === s.id).length, 1);
+  // Only the Fund Manager reads what Acclime sent and received.
+  assert.equal((await (await request("workflows", investor())).json()).packs.length, 0);
+  assert.equal((await (await request("workflows", ops())).json()).acclimeMessages.length, 0);
+  assert.ok((await (await request("workflows", manager())).json()).packs.length > 0);
+});
+
+test("Acclime funds, acceptance and duplicates: LUCA's two decisions stay LUCA's", async () => {
+  const s = await submittedSubscription();
+  const total = payable(s);
+  const funds = (over = {}) => ({
+    type: "funds_confirmed",
+    external_id: "ACC-F-1",
+    channel: "feed",
+    payload: {
+      payment_reference: s.payment_reference,
+      amount: total,
+      bank_reference: "ACC-RCPT-1",
+      ...over,
+    },
+  });
+
+  // Only the Fund Manager's console receives messages; nothing malformed is kept.
+  assert.equal((await acclime(funds(), ops())).status, 403);
+  assert.equal((await acclime(funds(), investor())).status, 403);
+  const before = w.workflow.acclimeMessages.length;
+  assert.equal(
+    (await acclime({ type: "funds_confirmed", payload: { payment_reference: "X" } })).status,
+    422,
+  );
+  assert.equal((await acclime({ type: "nonsense", payload: {} })).status, 422);
+  assert.equal(w.workflow.acclimeMessages.length, before);
+
+  // A reference nobody has, and a wrong currency, are kept but applied to nothing.
+  const unknown = (await (await acclime(funds({ payment_reference: "NOPE-1" }))).json()).message;
+  assert.equal(unknown.status, "needs_attention");
+  assert.equal(db.findSubscriptionById(s.id).status, "awaiting_funds");
+  const wrongCurrency = (
+    await (await acclime({ ...funds({ currency: "SGD" }), external_id: "ACC-F-2" })).json()
+  ).message;
+  assert.equal(wrongCurrency.status, "needs_attention");
+
+  // Full funds: a receipt from Acclime, reconciliation complete, ready for LUCA, nothing decided.
+  const ok = (await (await acclime(funds())).json()).message;
+  assert.equal(ok.status, "applied");
+  const record = db.findSubscriptionById(s.id);
+  assert.equal(record.status, "allocation_pending");
+  const receipt = w.workflow.receipts.find((r) => r.reference === "ACC-RCPT-1");
+  assert.equal(receipt.source, "acclime");
+  assert.equal(receipt.acclimeMessageId, ok.id, "the receipt points at the message it came from");
+  assert.equal(db.gatesOf(record).funds_verified, null);
+  assert.equal(db.gatesOf(record).allocation_confirmed, null);
+
+  // A message that could not be applied can be sent again under the same id once it can.
+  assert.equal(unknown.external_id, "ACC-F-1");
+  assert.equal(ok.external_id, "ACC-F-1", "the retry used the id of the failed attempt");
+
+  // The same Acclime id, or the same bank reference, is never applied twice.
+  const again = (await (await acclime(funds())).json()).message;
+  assert.equal(again.status, "duplicate");
+  const sameBank = (await (await acclime({ ...funds(), external_id: "ACC-F-3" })).json()).message;
+  assert.equal(sameBank.status, "duplicate");
+  assert.equal(w.workflow.receipts.filter((r) => r.subscriptionId === s.id).length, 1);
+
+  // Acceptance means nothing until LUCA has confirmed the allocation.
+  const accept = (over = {}, id = "ACC-A-1") => ({
+    type: "acceptance",
+    external_id: id,
+    channel: "feed",
+    payload: {
+      payment_reference: s.payment_reference,
+      units: Number(s.amount) / w.allocationTerms(record).price,
+      price: w.allocationTerms(record).price,
+      ...over,
+    },
+  });
+  assert.equal(
+    (await (await acclime(accept({}, "ACC-A-0"))).json()).message.status,
+    "needs_attention",
+  );
+  assert.ok(!db.findSubscriptionById(s.id)._convertedToHoldingId);
+  w.command(manager(), { type: "verify-funds", id: s.id });
+  const terms = w.allocationTerms(record);
+  w.command(manager(), { type: "allocate", id: s.id, amount: terms.capital, price: terms.price });
+
+  // Units that do not match what LUCA allocated are not issued.
+  const wrong = (await (await acclime(accept({ units: 1 }, "ACC-A-2"))).json()).message;
+  assert.equal(wrong.status, "needs_attention");
+  assert.match(wrong.outcome, /Nothing was issued/);
+  assert.ok(!db.findSubscriptionById(s.id)._convertedToHoldingId);
+  const issued = (await (await acclime(accept({}, "ACC-A-3"))).json()).message;
+  assert.equal(issued.status, "applied");
+  assert.ok(
+    db.findSubscriptionById(s.id)._convertedToHoldingId,
+    "Acclime's acceptance issues the holding",
+  );
+  assert.equal((await (await acclime(accept({}, "ACC-A-4"))).json()).message.status, "duplicate");
+});
+
+test("Ops' own receipts and Acclime's confirmation never double-count", async () => {
+  const s = await submittedSubscription();
+  const total = payable(s);
+  w.command(ops(), {
+    type: "receipt",
+    id: s.id,
+    amount: total,
+    currency: s.currency,
+    text: "WIRE-77",
+  });
+  const receipt = w.workflow.receipts.find((r) => r.reference === "WIRE-77");
+  w.command(ops(), { type: "match", id: s.id, target: receipt.id });
+  w.command(ops(), { type: "complete-reconciliation", id: s.id });
+  assert.equal(db.findSubscriptionById(s.id).status, "allocation_pending");
+  // Acclime then confirms the same money under its own reference: shown, flagged, and the
+  // subscription is reopened for verification rather than silently counted twice.
+  const late = (
+    await (
+      await acclime({
+        type: "funds_confirmed",
+        external_id: "ACC-F-9",
+        payload: {
+          payment_reference: s.payment_reference,
+          amount: total,
+          bank_reference: "ACC-RCPT-9",
+        },
+      })
+    ).json()
+  ).message;
+  assert.equal(late.status, "needs_attention");
+  assert.match(late.outcome, /more than the .* payable/);
+});
+
+test("Acclime's due diligence result blocks, clears or asks for more", async () => {
+  const s = await submittedSubscription();
+  await acclime({
+    type: "funds_confirmed",
+    external_id: "ACC-F-C",
+    payload: {
+      payment_reference: s.payment_reference,
+      amount: payable(s),
+      bank_reference: "ACC-RCPT-C",
+    },
+  });
+  const cdd = (result, note, id) =>
+    acclime({
+      type: "cdd_result",
+      external_id: id,
+      payload: { payment_reference: s.payment_reference, result, note },
+    });
+
+  assert.equal(
+    (await (await cdd("fail", "Source of wealth not evidenced", "C-1")).json()).message.status,
+    "needs_attention",
+  );
+  assert.throws(
+    () => w.command(manager(), { type: "verify-funds", id: s.id }),
+    /due diligence check failed: Source of wealth not evidenced/,
+  );
+  assert.equal(
+    (await (await cdd("fail", "Source of wealth not evidenced", "C-1b")).json()).message.status,
+    "duplicate",
+  );
+
+  // More documents: a request goes to the investor, and acceptance waits for them.
+  const more = (
+    await (await cdd("more_documents", "Bank statement for the last 6 months", "C-2")).json()
+  ).message;
+  assert.equal(more.status, "needs_attention");
+  const request_ = db.documentRequests.find(
+    (r) => r.id === db.findSubscriptionById(s.id).cdd.request_id,
+  );
+  assert.equal(request_.status, "requested");
+  assert.throws(
+    () => w.command(manager(), { type: "verify-funds", id: s.id }),
+    /additional due diligence documents/,
+  );
+  request_.status = "received";
+  const cleared = (await (await cdd("pass", null, "C-3")).json()).message;
+  assert.equal(cleared.status, "applied");
+  w.command(manager(), { type: "verify-funds", id: s.id });
+  assert.ok(db.gatesOf(db.findSubscriptionById(s.id)).funds_verified);
+});
+
+test("a declined subscription is refunded in full, and Acclime's confirmation marks it paid", async () => {
+  const s = await submittedSubscription();
+  const total = payable(s);
+  await acclime({
+    type: "funds_confirmed",
+    external_id: "ACC-F-R",
+    payload: {
+      payment_reference: s.payment_reference,
+      amount: total,
+      bank_reference: "ACC-RCPT-R",
+    },
+  });
+  w.command(manager(), {
+    type: "decline-allocation",
+    id: s.id,
+    text: "The underlying share transaction did not complete",
+  });
+  const refund = (over = {}, id = "ACC-R-1") =>
+    acclime({
+      type: "refund_processed",
+      external_id: id,
+      payload: {
+        payment_reference: s.payment_reference,
+        amount: total,
+        bank_reference: "ACC-REF-1",
+        ...over,
+      },
+    });
+  let summary = w.refundSummaryOf(s.id);
+  assert.equal(summary.status, "due");
+  assert.equal(summary.amount, total, "the subscription fee is refunded with the capital");
+
+  // The wrong amount is flagged and nothing is marked paid.
+  assert.equal(
+    (await (await refund({ amount: total - 100 })).json()).message.status,
+    "needs_attention",
+  );
+  assert.equal(w.refundSummaryOf(s.id).status, "due");
+
+  const paid = (await (await refund({}, "ACC-R-2")).json()).message;
+  assert.equal(paid.status, "applied");
+  summary = w.refundSummaryOf(s.id);
+  assert.equal(summary.status, "processed");
+  assert.equal(summary.confirmed_by, "acclime");
+  assert.equal(summary.reference, "ACC-REF-1");
+  assert.equal(db.findSubscriptionById(s.id).status, "funds_returned");
+  const { subscriptionStatusLabel } = await import("../.test-runtime/src/lib/investor-status.mjs");
+  assert.equal(
+    subscriptionStatusLabel(db.toSubscription(db.findSubscriptionById(s.id))),
+    "Refund processed",
+  );
+  assert.equal((await (await refund({}, "ACC-R-3")).json()).message.status, "duplicate");
+  // The investor is told, in the platform.
+  const inbox = (await (await request("messages", investor())).json()).messages;
+  assert.ok(inbox.some((m) => /refund has been processed/.test(m.subject)));
+});
+
+test("Ops confirming a refund through its own screens reads as processed, by Ops", async () => {
+  const s = await submittedSubscription();
+  await acclime({
+    type: "funds_confirmed",
+    external_id: "ACC-F-O",
+    payload: {
+      payment_reference: s.payment_reference,
+      amount: payable(s),
+      bank_reference: "ACC-RCPT-O",
+    },
+  });
+  w.command(manager(), { type: "decline-allocation", id: s.id, text: "Over-subscribed" });
+  const obligation = w.workflow.returns.find((r) => r.subscriptionId === s.id);
+  w.command(ops(), { type: "return", id: s.id, target: obligation.id, status: "processing" });
+  assert.equal(w.refundSummaryOf(s.id).status, "processing");
+  w.command(ops(), { type: "return", id: s.id, target: obligation.id, status: "confirmed" });
+  const summary = w.refundSummaryOf(s.id);
+  assert.equal(summary.status, "processed");
+  assert.equal(summary.confirmed_by, "ops");
+  // A later Acclime message for the same refund changes nothing.
+  const late = (
+    await (
+      await acclime({
+        type: "refund_processed",
+        external_id: "ACC-R-LATE",
+        payload: {
+          payment_reference: s.payment_reference,
+          amount: payable(s),
+          bank_reference: "ACC-REF-L",
+        },
+      })
+    ).json()
+  ).message;
+  assert.equal(late.status, "duplicate");
+});
+
+test("the monthly NAV updates every issued holding in the sub-fund, once a month", async () => {
+  const held = db.holdings.filter((h) => h.fund_id === 1 && h.state === "held");
+  assert.ok(held.length > 0);
+  const nav = (navPerUnit, as_of, id) =>
+    acclime({
+      type: "nav",
+      external_id: id,
+      channel: "feed",
+      payload: { fund_id: 1, as_of, nav_per_unit: navPerUnit },
+    });
+  const applied = (await (await nav(210, "2026-09-30", "NAV-2026-09")).json()).message;
+  assert.equal(applied.status, "applied");
+  for (const h of held) {
+    assert.equal(Number(h.current_nav), Math.round(Number(h.units) * 210 * 100) / 100);
+    assert.equal(h.nav_as_of.slice(0, 10), "2026-09-30");
+  }
+  assert.equal(w.workflow.navRecords.at(-1).holdingsUpdated, held.length);
+  // The investor's own history carries the new month.
+  const history = w.portfolioHistory(db.users.find((u) => u.id === held[0].investor_id));
+  assert.ok(JSON.stringify(history).includes("2026-09-30"));
+
+  assert.equal(
+    (await (await nav(210, "2026-09-30", "NAV-2026-09-b")).json()).message.status,
+    "duplicate",
+  );
+  const changed = (await (await nav(215, "2026-09-30", "NAV-2026-09-c")).json()).message;
+  assert.equal(changed.status, "needs_attention");
+  assert.equal(Number(held[0].current_nav), Math.round(Number(held[0].units) * 210 * 100) / 100);
+  assert.equal(
+    (await (await nav(220, "2026-10-31", "NAV-2026-10")).json()).message.status,
+    "applied",
+  );
+  assert.equal(
+    (
+      await (
+        await acclime({
+          type: "nav",
+          payload: { fund_id: 9999, as_of: "2026-10-31", nav_per_unit: 1 },
+        })
+      ).json()
+    ).message.status,
+    "needs_attention",
+  );
+  assert.equal(
+    (await acclime({ type: "nav", payload: { fund_id: 1, as_of: "not a date", nav_per_unit: 1 } }))
+      .status,
+    422,
+  );
+});
+
+test("the Clients tab compares each client's latest NAV with the capital committed to their holdings", async () => {
+  const { buildPartnerBook } =
+    await import("../.test-runtime/src/features/partners/partner-data.mjs");
+  await acclime({
+    type: "nav",
+    channel: "feed",
+    external_id: "NAV-CLIENTS",
+    payload: { fund_id: 1, as_of: "2026-09-30", nav_per_unit: 250 },
+  });
+  const view = await (await request("workflows", manager())).json();
+  const book = buildPartnerBook(view);
+  const mine = (id) => db.holdings.filter((h) => h.investor_id === id);
+  const holder = book.all.clients.find((c) =>
+    mine(c.id).some((h) => h.fund_id === 1 && h.state === "held"),
+  );
+  assert.ok(holder);
+  const round2 = (n) => Math.round(n * 100) / 100;
+  // Measured against the capital committed to every holding the client has issued.
+  assert.equal(
+    holder.navCost,
+    mine(holder.id).reduce((n, h) => n + Number(h.committed_amount), 0),
+  );
+  assert.equal(
+    round2(holder.navValue),
+    round2(mine(holder.id).reduce((n, h) => n + Number(h.current_nav), 0)),
+  );
+  // The monthly NAV is what values the holdings in that sub-fund.
+  for (const h of mine(holder.id).filter((h) => h.fund_id === 1 && h.state === "held"))
+    assert.equal(Number(h.current_nav), round2(Number(h.units) * 250));
+  // The totals above a client (fund, project, everyone) add the same figures up.
+  const fund = book.all.projects.flatMap((p) => p.funds).find((f) => f.fundId === 1);
+  assert.equal(
+    Math.round(fund.navValue * 100) / 100,
+    Math.round(fund.clients.reduce((n, c) => n + c.navValue, 0) * 100) / 100,
+  );
+  // A client with nothing issued has no NAV to compare.
+  const none = book.all.clients.find((c) => c.holdings.length === 0);
+  assert.equal(none.navCost, 0);
+  assert.equal(none.navValue, 0);
 });

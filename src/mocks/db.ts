@@ -1,5 +1,6 @@
 import type { InvestorSegment, CommercialTerms } from "../lib/investor-access";
 import type { GateEvent } from "../lib/types";
+import type { RefundSummary } from "../lib/acclime";
 import {
   ACKNOWLEDGEMENT_STATEMENTS,
   OFFERING_DOCUMENTS,
@@ -2482,6 +2483,15 @@ export type MockSubscription = {
   payment_declared_at: string | null;
   created_at: string;
   acknowledgements: AcknowledgementTerm[];
+  /** Acclime's due diligence result for this subscription, entered by LUCA or received on the feed. */
+  cdd?: {
+    result: "pass" | "fail" | "more_documents";
+    at: string;
+    note: string | null;
+    message_id: number | null;
+    /** The document request raised when Acclime asked for more. */
+    request_id?: number | null;
+  } | null;
   /** The Fund Manager's two decisions, recorded only through LUCA's console. */
   funds_verified?: GateEvent | null;
   allocation_confirmed?: GateEvent | null;
@@ -2840,6 +2850,12 @@ export function findSubscriptionById(id: number): MockSubscription | undefined {
  * The Fund Manager's two decisions on a subscription. Subscriptions allocated before the gates
  * existed carry them as recorded at the time of allocation, so saved demo data stays consistent.
  */
+let refundReader: (subscriptionId: number) => RefundSummary | null = () => null;
+/** The workflow tells the data layer where refunds stand, so every subscription view can show it. */
+export function setRefundReader(reader: typeof refundReader) {
+  refundReader = reader;
+}
+
 export function gatesOf(
   sub: Pick<
     MockSubscription,
@@ -2903,6 +2919,7 @@ export function toSubscription(sub: MockSubscription): Subscription {
     payment_declared_at: sub.payment_declared_at,
     funds_verified_at: gatesOf(sub).funds_verified?.at ?? null,
     allocation_confirmed_at: gatesOf(sub).allocation_confirmed?.at ?? null,
+    refund: refundReader(sub.id),
   };
 }
 

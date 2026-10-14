@@ -30,6 +30,7 @@ import {
   disclosureAccess,
 } from "../workflow";
 import { attachReferral, submitForReview } from "../onboarding";
+import { createPack } from "../acclime";
 import { http, HttpResponse } from "msw";
 import {
   currentUser,
@@ -468,6 +469,8 @@ export const investorHandlers = [
         );
       sub.payment_declared_at = new Date().toISOString();
       sub.payment_claimed = true;
+      // The signed agreement, KYC and CDD papers and the reference go to Acclime and LUCA.
+      createPack(sub);
       if (sub.status === "awaiting_funds") {
         sub.status = "payment_unmatched";
         sub.owner = "akula_ops";

@@ -51,9 +51,13 @@ export function subscriptionStatusLabel(sub: {
   status: SubscriptionStatus;
   holding_id?: number | null;
   funds_verified_at?: string | null;
+  refund?: { status: string } | null;
   /** The Fund Manager's own view carries the whole record rather than its date. */
   funds_verified?: unknown;
 }): string {
+  // Once the refund has been paid the subscription reads as refunded, whichever way it ended.
+  const ended = ["not_allocated", "rejected", "cancelled", "funds_returned"].includes(sub.status);
+  if (ended && sub.refund?.status === "processed") return "Refund processed";
   return investorStatusLabel(
     sub.status,
     Boolean(sub.holding_id),

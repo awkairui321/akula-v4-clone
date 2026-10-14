@@ -131,6 +131,7 @@ export default function AdminSubscriptionsPage() {
   const [search, setSearch] = useState(queryFromUrl);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [allocateId, setAllocateId] = useState<number | null>(allocateFromUrl);
+  const [declineFirst, setDeclineFirst] = useState(false);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "subscriptions"] });
 
@@ -207,6 +208,7 @@ export default function AdminSubscriptionsPage() {
   };
   const closeAllocate = () => {
     setAllocateId(null);
+    setDeclineFirst(false);
     if (searchParams.has("allocate")) setSearchParams({}, { replace: true });
   };
 
@@ -464,10 +466,18 @@ export default function AdminSubscriptionsPage() {
       )}
 
       {allocating &&
-        (allocating.funds_verified ? (
-          <AllocateDialog subscription={allocating} onClose={closeAllocate} />
+        (allocating.funds_verified || declineFirst ? (
+          <AllocateDialog
+            subscription={allocating}
+            onClose={closeAllocate}
+            startDeclining={declineFirst}
+          />
         ) : (
-          <VerifyFundsDialog subscription={allocating} onClose={closeAllocate} />
+          <VerifyFundsDialog
+            subscription={allocating}
+            onClose={closeAllocate}
+            onDecline={() => setDeclineFirst(true)}
+          />
         ))}
 
       {detail && (

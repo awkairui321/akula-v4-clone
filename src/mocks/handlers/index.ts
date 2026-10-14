@@ -7,6 +7,7 @@ import { adminHandlers } from "./admin";
 import { eamHandlers } from "./eam";
 import { rmHandlers } from "./rm";
 import { clientHandlers } from "./client";
+import { acclimeHandlers } from "./acclime";
 
 export const handlers = [
   ...guardHandlers,
@@ -18,4 +19,5 @@ export const handlers = [
   ...eamHandlers,
   ...rmHandlers,
   ...clientHandlers,
+  ...acclimeHandlers,
 ];

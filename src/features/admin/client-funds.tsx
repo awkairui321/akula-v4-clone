@@ -23,9 +23,26 @@ export const SUMMARY =
   "flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden";
 export const CHEVRON = "size-4 shrink-0 text-muted-foreground transition-transform";
 
+/** The change in value against the capital committed: "+$3,000 · +2.5%", green or red. */
+function NavChange({ value, cost }: { value: number; cost: number }) {
+  if (cost <= 0) return <span className="text-xs text-muted-foreground">No issued holding</span>;
+  const change = value - cost;
+  const pct = (change / cost) * 100;
+  const sign = change > 0.005 ? "+" : change < -0.005 ? "−" : "";
+  return (
+    <span
+      className={`text-xs tabular-nums ${change > 0.005 ? "text-green-700" : change < -0.005 ? "text-red-700" : "text-muted-foreground"}`}
+    >
+      {sign}
+      {formatPrice(Math.abs(change))} · {sign}
+      {Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
 export function Figures({ capital }: { capital?: Capital }) {
   return (
-    <dl className="grid min-w-0 grid-cols-3 gap-2 sm:min-w-80 sm:gap-4">
+    <dl className="grid min-w-0 grid-cols-2 gap-2 sm:min-w-[34rem] sm:grid-cols-4 sm:gap-4">
       {(["committed", "funded", "allocated"] as const).map((key) => (
         <div key={key} className="min-w-0 border-l pl-2 sm:pl-3">
           <dt className="text-xs text-muted-foreground capitalize">{key}</dt>
@@ -34,6 +51,15 @@ export function Figures({ capital }: { capital?: Capital }) {
           </dd>
         </div>
       ))}
+      <div className="min-w-0 border-l pl-2 sm:pl-3">
+        <dt className="text-xs text-muted-foreground">Latest NAV</dt>
+        <dd className="mt-1 text-xs font-medium tabular-nums sm:text-sm">
+          {capital && capital.navCost > 0 ? formatPrice(capital.navValue) : "—"}
+          <span className="block">
+            <NavChange value={capital?.navValue ?? 0} cost={capital?.navCost ?? 0} />
+          </span>
+        </dd>
+      </div>
     </dl>
   );
 }

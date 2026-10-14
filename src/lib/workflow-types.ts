@@ -1,5 +1,6 @@
 import type { CommercialTerms } from "./investor-access";
 import type { Fund, GateEvent, SubscriptionStatus } from "./types";
+import type { AcclimeMessage, NavRecord, RefundSummary, SubscriptionPack } from "./acclime";
 
 export type StaffRole = "luca" | "investment_team" | "ops" | "rm";
 export type Receipt = {
@@ -31,6 +32,11 @@ export type ReturnObligation = {
   amount: number;
   status: "required" | "processing" | "failed" | "confirmed";
   at: string;
+  /** Who confirmed the refund was paid: Ops through their own screens, or Acclime. */
+  source?: "ops" | "acclime";
+  /** The bank reference of the refund payment, when Acclime reported it. */
+  reference?: string | null;
+  acclimeMessageId?: number | null;
 };
 export type Version = {
   id: number;
@@ -95,6 +101,10 @@ export type WorkflowState = {
   receipts: Receipt[];
   allocations: Allocation[];
   returns: ReturnObligation[];
+  /** What Acclime has reported, the subscription packs sent and the monthly NAV: the Fund Manager's only. */
+  acclimeMessages: AcclimeMessage[];
+  packs: SubscriptionPack[];
+  navRecords: NavRecord[];
   versions: Version[];
   dealChanges: DealChange[];
   /** Working edits not yet in a version, for the Fund Manager and Investment Team. */
@@ -188,6 +198,8 @@ export type WorkflowView = WorkflowState & {
     status: SubscriptionStatus;
     needsReview?: number;
     /** LUCA's two decisions, recorded only in LUCA's console. */
+    /** Where the refund stands, once the subscription has ended without acceptance. */
+    refund?: RefundSummary | null;
     fundsVerified?: GateEvent | null;
     allocationConfirmed?: GateEvent | null;
     allocationBlockers: string[];

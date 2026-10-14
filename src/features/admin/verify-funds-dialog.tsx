@@ -20,9 +20,12 @@ const when = (iso: string) =>
 export function VerifyFundsDialog({
   subscription,
   onClose,
+  onDecline,
 }: {
   subscription: AdminSubscription;
   onClose: () => void;
+  /** Declining needs no verification: it returns whatever was paid. */
+  onDecline?: () => void;
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -98,6 +101,16 @@ export function VerifyFundsDialog({
                 <li key={b}>{b}</li>
               ))}
             </ul>
+          )}
+
+          {onDecline && (
+            <button
+              type="button"
+              onClick={onDecline}
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Decline this subscription instead
+            </button>
           )}
 
           <div className="flex gap-3">

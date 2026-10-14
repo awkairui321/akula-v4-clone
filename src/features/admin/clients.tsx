@@ -34,13 +34,15 @@ const KINDS: { key: Kind; label: string }[] = [
   { key: "institutional", label: "Entities" },
 ];
 
-const empty = (): Capital => ({ committed: 0, funded: 0, allocated: 0 });
+const empty = (): Capital => ({ committed: 0, funded: 0, allocated: 0, navValue: 0, navCost: 0 });
 const sum = (items: (Capital | undefined)[]): Capital =>
   items.reduce<Capital>(
     (t, c) => ({
       committed: t.committed + (c?.committed ?? 0),
       funded: t.funded + (c?.funded ?? 0),
       allocated: t.allocated + (c?.allocated ?? 0),
+      navValue: t.navValue + (c?.navValue ?? 0),
+      navCost: t.navCost + (c?.navCost ?? 0),
     }),
     empty(),
   );
@@ -178,7 +180,8 @@ export default function ClientsPage() {
 
       <p className="text-xs text-muted-foreground">
         Committed: live subscriptions · Funded: cash received after fees · Allocated: capital
-        allocated by LUCA
+        allocated by LUCA · Latest NAV: reported value of issued holdings, with the change against
+        the capital committed to them
       </p>
 
       {book.isError ? (

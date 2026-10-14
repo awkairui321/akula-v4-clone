@@ -51,6 +51,8 @@ import AdminVehiclesPage from "@/features/admin/vehicles/vehicles";
 import ProjectPage from "@/features/admin/vehicles/project";
 import AdminVehicleOverviewPage from "@/features/admin/vehicles/vehicle-overview";
 import AdminSubscriptionsPage from "@/features/admin/subscription-inbox";
+import AcclimePage from "@/features/admin/acclime";
+import RefundsPage from "@/features/admin/refunds";
 import AllocationRedirect from "@/features/admin/allocation";
 import AdminSubscriptionHistoryPage from "@/features/admin/subscription-history";
 import AdminCompliancePage from "@/features/admin/compliance";
@@ -285,6 +287,8 @@ function App() {
                       <Route element={<ManagerRoute />}>
                         <Route path="/luca" element={<AdminDashboard />} />
                         <Route path="/luca/subscriptions" element={<AdminSubscriptionsPage />} />
+                        <Route path="/luca/refunds" element={<RefundsPage />} />
+                        <Route path="/luca/acclime" element={<AcclimePage />} />
                         <Route
                           path="/luca/subscriptions/:id/allocate"
                           element={<AllocationRedirect />}

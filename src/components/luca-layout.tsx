@@ -17,6 +17,8 @@ import {
   Building2Icon,
   CreditCard,
   MailIcon,
+  RotateCcwIcon,
+  LandmarkIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,6 +34,8 @@ const NAV_ITEMS = [
   { to: "/luca/publication", label: "Publication", icon: ShieldCheckIcon },
   { to: "/luca/analytics", label: "Analytics", icon: BarChart3Icon },
   { to: "/luca/subscriptions", label: "Subscriptions", icon: CreditCard },
+  { to: "/luca/refunds", label: "Refunds", icon: RotateCcwIcon },
+  { to: "/luca/acclime", label: "Acclime", icon: LandmarkIcon },
   { to: "/luca/clients", label: "Clients", icon: UserCheckIcon },
   { to: "/luca/partners", label: "Partner client book", icon: Building2Icon },
   { to: "/luca/compliance", label: "Compliance", icon: ShieldCheckIcon },

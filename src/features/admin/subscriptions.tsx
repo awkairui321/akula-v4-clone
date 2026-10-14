@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { subscriptionStatusLabel } from "@/lib/investor-status";
+import { SubscriptionPackSummary } from "./subscription-pack";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -358,7 +360,7 @@ export function SubscriptionDialog({
             </p>
           </div>
           <Badge variant={STATUS_VARIANT[subscription.status]} className="shrink-0">
-            {STATUS_LABELS[subscription.status]}
+            {subscriptionStatusLabel(subscription)}
             {subscription.on_hold ? " · On hold" : ""}
           </Badge>
         </div>
@@ -420,6 +422,8 @@ export function SubscriptionDialog({
             after its owner completes the listed step.
           </p>
         </details>
+
+        <SubscriptionPackSummary subscriptionId={subscription.id} />
 
         {/* The action owner and next step stay explicit at every lifecycle stage. */}
         <div className="space-y-3 rounded-lg border-2 border-primary/15 bg-primary/[0.03] p-4">

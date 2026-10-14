@@ -2,6 +2,7 @@ import { mayDiscover, hasInvestmentHistory, setPublishedAudienceReader } from ".
 import { audienceIncludes } from "../lib/investor-access";
 import { missingTransferFields } from "../lib/offering";
 import type { Fund as AudienceFund, GateEvent } from "../lib/types";
+import type { RefundSummary } from "../lib/acclime";
 import * as db from "./db";
 import { inDemoClientCohort } from "../lib/demo-cohort";
 import type {
@@ -18,6 +19,9 @@ export const workflow: WorkflowState = {
   receipts: [],
   allocations: [],
   returns: [],
+  acclimeMessages: [],
+  packs: [],
+  navRecords: [],
   versions: [],
   dealChanges: [],
   unpublished: [],
@@ -31,9 +35,9 @@ export const workflow: WorkflowState = {
   secondary: [],
   events: [],
 };
-const now = () => new Date().toISOString();
-const id = () => ++workflow.sequence;
-const round = (n: number) => Math.round(n * 100) / 100;
+export const now = () => new Date().toISOString();
+export const id = () => ++workflow.sequence;
+export const round = (n: number) => Math.round(n * 100) / 100;
 function requireValue(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
@@ -235,6 +239,29 @@ export function currentVersion(fid: number) {
   return workflow.versions.filter((v) => v.fundId === fid && v.status === "published").at(-1);
 }
 setPublishedAudienceReader((fundId) => currentVersion(fundId)?.snapshot);
+
+/** Where a subscription's refund stands: due, in progress, or paid and by whom. */
+export function refundSummaryOf(subscriptionId: number): RefundSummary | null {
+  const list = workflow.returns.filter((r) => r.subscriptionId === subscriptionId);
+  if (list.length === 0) return null;
+  const done = list.filter((r) => r.status === "confirmed");
+  const all = done.length === list.length;
+  const last = [...done].sort((a, b) => a.at.localeCompare(b.at)).at(-1);
+  return {
+    amount: round(list.reduce((n, r) => n + r.amount, 0)),
+    status: all
+      ? "processed"
+      : list.some((r) => r.status === "failed")
+        ? "failed"
+        : list.some((r) => r.status === "processing" || r.status === "confirmed")
+          ? "processing"
+          : "due",
+    processed_at: all ? (last?.at ?? null) : null,
+    confirmed_by: all ? (last?.source ?? "ops") : null,
+    reference: all ? (last?.reference ?? null) : null,
+  };
+}
+db.setRefundReader(refundSummaryOf);
 export function signedVersion(sid: number) {
   const signature = workflow.signatures.find((s) => s.subscriptionId === sid);
   return workflow.versions.find((v) => v.id === signature?.versionId);
@@ -272,7 +299,7 @@ export function matched(sid: number) {
       .reduce((n, r) => n + r.amount, 0),
   );
 }
-function ensureReturns(sub: db.MockSubscription) {
+export function ensureReturns(sub: db.MockSubscription) {
   const a = workflow.allocations.find((a) => a.subscriptionId === sub.id && !a.voided);
   const due = round(matched(sub.id) - (a ? a.principal + a.fee : 0));
   const existing = workflow.returns
@@ -541,6 +568,15 @@ export function investmentBlockers(s: db.MockSubscription, issuance = false): st
   if (!workflow.signatures.some((signature) => signature.subscriptionId === s.id))
     blockers.push("Investor must complete the subscription signature first.");
   if (s.on_hold) blockers.push("LUCA has placed this subscription on hold.");
+  if (s.cdd?.result === "fail")
+    blockers.push(
+      `Acclime's due diligence check failed${s.cdd.note ? `: ${s.cdd.note}` : ""}. Decline or cancel the subscription.`,
+    );
+  if (
+    s.cdd?.result === "more_documents" &&
+    db.documentRequests.some((r) => r.id === s.cdd?.request_id && r.status === "requested")
+  )
+    blockers.push("Waiting for the investor's additional due diligence documents.");
   if (
     ["cancelled", "rejected", "funds_returned"].includes(s.status) ||
     db.findFundById(s.fund_id)?.state === "cancelled"
@@ -742,6 +778,10 @@ export function view(user: db.MockUser): WorkflowView {
     receipts: workflow.receipts.filter((r) => sid.has(r.subscriptionId)),
     allocations: workflow.allocations.filter((r) => sid.has(r.subscriptionId)),
     returns: workflow.returns.filter((r) => sid.has(r.subscriptionId)),
+    // What Acclime reports, and the packs sent to it, are the Fund Manager's to read.
+    acclimeMessages: user.role === "luca" ? workflow.acclimeMessages : [],
+    packs: user.role === "luca" ? workflow.packs : [],
+    navRecords: user.role === "luca" ? workflow.navRecords : [],
     signatures: workflow.signatures.filter((r) => sid.has(r.subscriptionId)),
     versions,
     // Ops edits go to the Investment Team only; the Fund Manager sees what the team submits.
@@ -795,6 +835,20 @@ export function command(user: db.MockUser, c: WorkflowCommand) {
     });
     persist();
     return view(user);
+  } catch (error) {
+    Object.assign(workflow, before);
+    db.restoreDemoState(dbBefore);
+    throw error;
+  }
+}
+/** Runs a change that either happens completely or not at all, and is saved when it does. */
+export function transaction<T>(change: () => T): T {
+  const before = structuredClone(workflow),
+    dbBefore = db.exportDemoState();
+  try {
+    const result = change();
+    persist();
+    return result;
   } catch (error) {
     Object.assign(workflow, before);
     db.restoreDemoState(dbBefore);
