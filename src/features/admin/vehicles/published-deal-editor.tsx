@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { CheckIcon, TriangleAlertIcon, MinusIcon } from "lucide-react";
 import { friendlyDate, storedDate } from "@/lib/format-date";
-import { AudiencePicker } from "./audience-picker";
+import { RecipientsPicker } from "./recipients-picker";
 import { audienceDraftFrom, useAudienceClients, type AudienceDraft } from "./audience";
 import {
   OFFERING_DOCUMENTS,
@@ -880,6 +880,11 @@ function AreaField({
   );
 }
 
+/**
+ * One section of the editor. Its title sits in a full-width band that stays at the top of the pane
+ * while the section is being worked through, so it is always clear which section you are in and
+ * when you have moved into the next.
+ */
 function EditorSection({
   id,
   label,
@@ -891,18 +896,30 @@ function EditorSection({
   note?: string;
   children: ReactNode;
 }) {
+  const position = SECTIONS.findIndex((section) => section.id === id) + 1;
   return (
-    <section
-      id={id}
-      aria-label={label}
-      className="scroll-mt-6 space-y-6 border-b pb-12 last:border-b-0"
-    >
-      <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">{label}</h2>
-        {note && <p className="max-w-3xl text-sm text-muted-foreground">{note}</p>}
+    <section id={sectionDomId(id)} aria-label={label}>
+      <div className="sticky top-0 z-10 border-y bg-muted px-6 py-3 sm:px-10">
+        <p className="text-xs tracking-wide text-muted-foreground uppercase tabular-nums">
+          Section {position} of {SECTIONS.length}
+        </p>
+        <h2 className="text-lg font-semibold tracking-tight">{label}</h2>
       </div>
-      {children}
+      <div className="space-y-10 px-6 py-8 sm:px-10">
+        {note && <p className="max-w-3xl text-sm text-muted-foreground">{note}</p>}
+        {children}
+      </div>
     </section>
+  );
+}
+
+/** A titled group of fields inside a section. */
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-4">
+      <h3 className="border-b pb-2 text-base font-semibold">{title}</h3>
+      {children}
+    </div>
   );
 }
 
@@ -950,8 +967,7 @@ function TransferAccountSection({ fund }: { fund: Fund }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-base font-semibold">Transfer account</h3>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+        <p className="max-w-3xl text-sm text-muted-foreground">
           {locked
             ? "This deal is published, so the transfer account is fixed and cannot be changed."
             : "Investors are shown these details once they have signed. They cannot be changed after the deal is published, and the deal cannot be published without them."}
@@ -1007,17 +1023,18 @@ function TransferAccountSection({ fund }: { fund: Fund }) {
 }
 
 /** The editor's sections, in the order they are worked through. */
+/** Namespaced: the deal page behind the editor already uses ids like "overview" and "market". */
+const sectionDomId = (id: string) => `editor-section-${id}`;
+
 const SECTIONS = [
-  { id: "audience", label: "Who receives this deal" },
-  { id: "terms", label: "Identity and terms" },
-  { id: "offering", label: "Offering and transfer account" },
-  { id: "fees", label: "Fees" },
-  { id: "company", label: "Company" },
-  { id: "metrics", label: "Charts and metrics" },
-  { id: "people", label: "Comparables and people" },
-  { id: "narrative", label: "Narrative" },
-  { id: "sourcing", label: "Sourcing and recording" },
-  { id: "quality", label: "Quality checks" },
+  { id: "audience", label: "Recipients" },
+  { id: "transfer", label: "Transfer account" },
+  { id: "overview", label: "Overview" },
+  { id: "market", label: "Market" },
+  { id: "business", label: "Business model" },
+  { id: "financials", label: "Financials" },
+  { id: "risks", label: "Risks" },
+  { id: "documents", label: "Documents and updates" },
 ];
 
 const SECTOR_OPTIONS = Object.entries(SECTOR_LABELS);
@@ -1154,6 +1171,19 @@ export default function PublishedDealEditor({
 
   const problemsIn = (field: CollectionField) => formatProblems(draft[field], LINE_FORMATS[field]);
 
+  // The section being worked on, so the list on the left shows where you are.
+  const paneRef = useRef<HTMLDivElement>(null);
+  const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
+  const onScroll = () => {
+    const top = paneRef.current?.getBoundingClientRect().top ?? 0;
+    let current = SECTIONS[0].id;
+    for (const section of SECTIONS) {
+      const el = document.getElementById(sectionDomId(section.id));
+      if (el && el.getBoundingClientRect().top - top <= 80) current = section.id;
+    }
+    setActiveSection(current);
+  };
+
   const close = () => {
     setDraft(draftFrom(fund));
     setAudience(audienceDraftFrom(fund));
@@ -1191,10 +1221,15 @@ export default function PublishedDealEditor({
                     type="button"
                     onClick={() =>
                       document
-                        .getElementById(section.id)
+                        .getElementById(sectionDomId(section.id))
                         ?.scrollIntoView({ behavior: "smooth", block: "start" })
                     }
-                    className="flex w-full items-baseline gap-2 rounded-md px-3 py-2 text-left text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-current={activeSection === section.id ? "step" : undefined}
+                    className={`flex w-full items-baseline gap-2 rounded-md px-3 py-2 text-left hover:bg-muted hover:text-foreground ${
+                      activeSection === section.id
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground"
+                    }`}
                   >
                     <span className="w-4 text-xs tabular-nums">{index + 1}</span>
                     {section.label}
@@ -1204,11 +1239,11 @@ export default function PublishedDealEditor({
             </ol>
           </nav>
 
-          <div className="min-w-0 flex-1 space-y-12 overflow-y-auto px-6 py-8 sm:px-10">
+          <div ref={paneRef} onScroll={onScroll} className="min-w-0 flex-1 overflow-y-auto">
             <EditorSection
               id="audience"
-              label="Who receives this deal"
-              note="Choose which onboarded clients can discover and subscribe to this fund. When you approve and publish, the deal goes to exactly these clients."
+              label="Recipients"
+              note="Choose which onboarded clients can see and subscribe to this deal. On publishing, it goes to exactly these clients."
             >
               {audienceError ? (
                 <div role="alert" className="space-y-2 text-sm">
@@ -1220,7 +1255,7 @@ export default function PublishedDealEditor({
               ) : audienceLoading ? (
                 <p className="text-sm text-muted-foreground">Loading client audience…</p>
               ) : (
-                <AudiencePicker
+                <RecipientsPicker
                   fund={fund}
                   clients={audienceClients}
                   value={audience}
@@ -1239,260 +1274,297 @@ export default function PublishedDealEditor({
               )}
             </EditorSection>
 
-            <EditorSection id="terms" label="Identity and transaction terms">
-              <div className="grid grid-cols-2 gap-4">
-                <LockedField
-                  label="Project identity"
-                  value={`${fund.codename} · ${fund.asset.name}`}
-                  hint="Protected so subscriptions, documents and audit records keep the same immutable vehicle identity."
-                />
-                <Field label="Status">
-                  <Select
-                    disabled={user?.role === "investment_team"}
-                    value={draft.state}
-                    onValueChange={(v) => set("state", v as FundStatus)}
-                  >
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue>{FUND_STATUS_LABELS[draft.state]}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FUND_STATUS_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Vehicle type">
-                  <Select
-                    value={draft.vehicle_type}
-                    onValueChange={(v) => set("vehicle_type", v as string)}
-                  >
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue>
-                        {VEHICLE_TYPE_OPTIONS.find((o) => o.value === draft.vehicle_type)?.label ??
-                          draft.vehicle_type}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VEHICLE_TYPE_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Sector">
-                  <Select value={draft.sector} onValueChange={(v) => set("sector", v as string)}>
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue>{SECTOR_LABELS[draft.sector] ?? draft.sector}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SECTOR_OPTIONS.map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Stage">
-                  <Select
-                    value={draft.funding_stage}
-                    onValueChange={(v) => set("funding_stage", v as string)}
-                  >
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue>
-                        {STAGE_LABELS[draft.funding_stage] ?? draft.funding_stage}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STAGE_OPTIONS.map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <TextField
-                  label="Minimum investment"
-                  type="number"
-                  value={draft.min_subscription}
-                  onChange={(v) => set("min_subscription", v)}
-                  hint="Minimum ticket per investor, in USD."
-                />
-                <TextField
-                  label="Maximum investment"
-                  type="number"
-                  value={draft.max_subscription}
-                  onChange={(v) => set("max_subscription", v)}
-                  hint="Optional — leave blank for no cap."
-                />
-                <TextField
-                  label="Share class name"
-                  value={draft.share_class_name}
-                  onChange={(v) => set("share_class_name", v)}
-                />
-                <Field label="Share class type">
-                  <Select
-                    value={draft.share_class_type}
-                    onValueChange={(v) => set("share_class_type", v as string)}
-                  >
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue>
-                        {SHARE_CLASS_TYPE_OPTIONS.find((o) => o.value === draft.share_class_type)
-                          ?.label ?? draft.share_class_type}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SHARE_CLASS_TYPE_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <TextField
-                  label="Open date"
-                  type="date"
-                  value={draft.opened_at}
-                  onChange={(v) => set("opened_at", v)}
-                />
-                <TextField
-                  label="Expected holding period"
-                  value={draft.holding_period_note}
-                  onChange={(v) => set("holding_period_note", v)}
-                  hint="Free text, e.g. “3–5 years”."
-                />
-                <TextField
-                  label="Increment"
-                  type="number"
-                  value={draft.subscription_increment}
-                  onChange={(v) => set("subscription_increment", v)}
-                  hint="Ticket step above the minimum."
-                />
-                <TextField
-                  label="Closes in days"
-                  type="number"
-                  value={draft.closes_in_days}
-                  onChange={(v) => set("closes_in_days", v)}
-                  hint="Leave blank for open-ended."
-                />
-                <TextField
-                  label="Security"
-                  value={draft.security_type}
-                  onChange={(v) => set("security_type", v)}
-                />
-                <LockedField
-                  label="Last reported round"
-                  value={lastReportedRound(draft.funding_rounds)}
-                  hint="The most recent funding round below · a company fact, not a term of this deal."
-                />
-                <TextField
-                  label="Acquired valuation"
-                  type="number"
-                  value={draft.implied_valuation}
-                  onChange={(v) => set("implied_valuation", v)}
-                />
-                <TextField
-                  label="Target amount"
-                  type="number"
-                  value={draft.supply_total}
-                  onChange={(v) => set("supply_total", v)}
-                />
-                <Field label="Fund manager">
-                  <Select
-                    value={draft.fund_manager_id}
-                    onValueChange={(v) => set("fund_manager_id", v as string)}
-                  >
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue>
-                        {managers.find((m) => String(m.id) === draft.fund_manager_id)?.name ??
-                          fund.fund_manager.name}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {managers.map((manager) => (
-                        <SelectItem key={manager.id} value={String(manager.id)}>
-                          {manager.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <TextField
-                  label="Price per share"
-                  type="number"
-                  value={draft.price}
-                  onChange={(v) => set("price", v)}
-                />
-                <Field label="Transaction type">
-                  <Select
-                    value={draft.deal_type}
-                    onValueChange={(v) => set("deal_type", v as string)}
-                  >
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue>
-                        {draft.deal_type === "primary" ? "Primary" : "Secondary"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="primary">Primary</SelectItem>
-                      <SelectItem value="secondary">Secondary</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
+            <EditorSection id="transfer" label="Transfer account">
+              <TransferAccountSection fund={fund} />
             </EditorSection>
 
-            <EditorSection
-              id="offering"
-              label="Offering and transfer account"
-              note="What investors are told about the fund and sub-fund, the documents that govern it and where they send their money."
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TextField
-                  label="Fund"
-                  value={draft.offering_fund_name}
-                  onChange={(v) => set("offering_fund_name", v)}
+            <EditorSection id="overview" label="Overview">
+              <Group title="Deal terms">
+                <div className="grid grid-cols-2 gap-4">
+                  <LockedField
+                    label="Project identity"
+                    value={`${fund.codename} · ${fund.asset.name}`}
+                    hint="Protected so subscriptions, documents and audit records keep the same immutable vehicle identity."
+                  />
+                  <Field label="Status">
+                    <Select
+                      disabled={user?.role === "investment_team"}
+                      value={draft.state}
+                      onValueChange={(v) => set("state", v as FundStatus)}
+                    >
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue>{FUND_STATUS_LABELS[draft.state]}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FUND_STATUS_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Vehicle type">
+                    <Select
+                      value={draft.vehicle_type}
+                      onValueChange={(v) => set("vehicle_type", v as string)}
+                    >
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue>
+                          {VEHICLE_TYPE_OPTIONS.find((o) => o.value === draft.vehicle_type)
+                            ?.label ?? draft.vehicle_type}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VEHICLE_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Sector">
+                    <Select value={draft.sector} onValueChange={(v) => set("sector", v as string)}>
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue>{SECTOR_LABELS[draft.sector] ?? draft.sector}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SECTOR_OPTIONS.map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Stage">
+                    <Select
+                      value={draft.funding_stage}
+                      onValueChange={(v) => set("funding_stage", v as string)}
+                    >
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue>
+                          {STAGE_LABELS[draft.funding_stage] ?? draft.funding_stage}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STAGE_OPTIONS.map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <TextField
+                    label="Minimum investment"
+                    type="number"
+                    value={draft.min_subscription}
+                    onChange={(v) => set("min_subscription", v)}
+                    hint="Minimum ticket per investor, in USD."
+                  />
+                  <TextField
+                    label="Maximum investment"
+                    type="number"
+                    value={draft.max_subscription}
+                    onChange={(v) => set("max_subscription", v)}
+                    hint="Optional — leave blank for no cap."
+                  />
+                  <TextField
+                    label="Share class name"
+                    value={draft.share_class_name}
+                    onChange={(v) => set("share_class_name", v)}
+                  />
+                  <Field label="Share class type">
+                    <Select
+                      value={draft.share_class_type}
+                      onValueChange={(v) => set("share_class_type", v as string)}
+                    >
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue>
+                          {SHARE_CLASS_TYPE_OPTIONS.find((o) => o.value === draft.share_class_type)
+                            ?.label ?? draft.share_class_type}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SHARE_CLASS_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <TextField
+                    label="Open date"
+                    type="date"
+                    value={draft.opened_at}
+                    onChange={(v) => set("opened_at", v)}
+                  />
+                  <TextField
+                    label="Expected holding period"
+                    value={draft.holding_period_note}
+                    onChange={(v) => set("holding_period_note", v)}
+                    hint="Free text, e.g. “3–5 years”."
+                  />
+                  <TextField
+                    label="Increment"
+                    type="number"
+                    value={draft.subscription_increment}
+                    onChange={(v) => set("subscription_increment", v)}
+                    hint="Ticket step above the minimum."
+                  />
+                  <TextField
+                    label="Closes in days"
+                    type="number"
+                    value={draft.closes_in_days}
+                    onChange={(v) => set("closes_in_days", v)}
+                    hint="Leave blank for open-ended."
+                  />
+                  <TextField
+                    label="Security"
+                    value={draft.security_type}
+                    onChange={(v) => set("security_type", v)}
+                  />
+                  <LockedField
+                    label="Last reported round"
+                    value={lastReportedRound(draft.funding_rounds)}
+                    hint="The most recent funding round below · a company fact, not a term of this deal."
+                  />
+                  <TextField
+                    label="Acquired valuation"
+                    type="number"
+                    value={draft.implied_valuation}
+                    onChange={(v) => set("implied_valuation", v)}
+                  />
+                  <TextField
+                    label="Target amount"
+                    type="number"
+                    value={draft.supply_total}
+                    onChange={(v) => set("supply_total", v)}
+                  />
+                  <Field label="Fund manager">
+                    <Select
+                      value={draft.fund_manager_id}
+                      onValueChange={(v) => set("fund_manager_id", v as string)}
+                    >
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue>
+                          {managers.find((m) => String(m.id) === draft.fund_manager_id)?.name ??
+                            fund.fund_manager.name}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {managers.map((manager) => (
+                          <SelectItem key={manager.id} value={String(manager.id)}>
+                            {manager.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <TextField
+                    label="Price per share"
+                    type="number"
+                    value={draft.price}
+                    onChange={(v) => set("price", v)}
+                  />
+                  <Field label="Transaction type">
+                    <Select
+                      value={draft.deal_type}
+                      onValueChange={(v) => set("deal_type", v as string)}
+                    >
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue>
+                          {draft.deal_type === "primary" ? "Primary" : "Secondary"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="primary">Primary</SelectItem>
+                        <SelectItem value="secondary">Secondary</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+              </Group>
+              <Group title="Fees">
+                <p className="text-sm text-muted-foreground">
+                  This fund has one fee schedule. It applies to every investor in it and is
+                  published with the rest of the offering. Existing applications keep the fees they
+                  were made at.
+                </p>
+                <div className="grid grid-cols-3 gap-4">
+                  <TextField
+                    label="Subscription fee %"
+                    type="number"
+                    value={draft.subscription_fee_pct}
+                    onChange={(v) => set("subscription_fee_pct", v)}
+                  />
+                  <TextField
+                    label="Annual management fee %"
+                    type="number"
+                    value={draft.management_fee_pct}
+                    onChange={(v) => set("management_fee_pct", v)}
+                  />
+                  <TextField
+                    label="Carried interest %"
+                    type="number"
+                    value={draft.carried_interest_pct}
+                    onChange={(v) => set("carried_interest_pct", v)}
+                  />
+                </div>
+                {legacyAudience && (
+                  <p className="text-xs text-muted-foreground">
+                    Partner-referred investors pay a {draft.subscription_fee_pct || "0"}%
+                    subscription fee. Independent investors pay{" "}
+                    {Number.isFinite(Number(draft.subscription_fee_pct))
+                      ? Number(draft.subscription_fee_pct) + 1
+                      : "—"}
+                    %, one percentage point more.
+                  </p>
+                )}
+              </Group>
+              <Group title="Fund and offering">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField
+                    label="Fund"
+                    value={draft.offering_fund_name}
+                    onChange={(v) => set("offering_fund_name", v)}
+                  />
+                  <TextField
+                    label="Sub-fund"
+                    value={draft.offering_sub_fund_name}
+                    onChange={(v) => set("offering_sub_fund_name", v)}
+                  />
+                  <TextField
+                    label="Fund code"
+                    hint="Starts every payment reference, for example DASVCCII-SERAPONG"
+                    value={draft.offering_fund_code}
+                    onChange={(v) => set("offering_fund_code", v)}
+                  />
+                  <TextField
+                    label="Governing agreement"
+                    hint="Named in the capital call notice"
+                    value={draft.offering_agreement_name}
+                    onChange={(v) => set("offering_agreement_name", v)}
+                  />
+                  <TextField
+                    label="Agreement date"
+                    type="date"
+                    value={draft.offering_agreement_date}
+                    onChange={(v) => set("offering_agreement_date", v)}
+                  />
+                </div>
+                <AreaField
+                  label="Underlying exposure"
+                  rows={3}
+                  value={draft.offering_exposure}
+                  onChange={(v) => set("offering_exposure", v)}
                 />
-                <TextField
-                  label="Sub-fund"
-                  value={draft.offering_sub_fund_name}
-                  onChange={(v) => set("offering_sub_fund_name", v)}
-                />
-                <TextField
-                  label="Fund code"
-                  hint="Starts every payment reference, for example DASVCCII-SERAPONG"
-                  value={draft.offering_fund_code}
-                  onChange={(v) => set("offering_fund_code", v)}
-                />
-                <TextField
-                  label="Governing agreement"
-                  hint="Named in the capital call notice"
-                  value={draft.offering_agreement_name}
-                  onChange={(v) => set("offering_agreement_name", v)}
-                />
-                <TextField
-                  label="Agreement date"
-                  type="date"
-                  value={draft.offering_agreement_date}
-                  onChange={(v) => set("offering_agreement_date", v)}
-                />
-              </div>
-              <AreaField
-                label="Underlying exposure"
-                rows={3}
-                value={draft.offering_exposure}
-                onChange={(v) => set("offering_exposure", v)}
-              />
-              <div className="space-y-2">
-                <h3 className="text-base font-semibold">Offering documents</h3>
-                <p className="max-w-3xl text-sm text-muted-foreground">
+              </Group>
+              <Group title="Offering documents">
+                <p className="text-xs text-muted-foreground">
                   The version recorded against each investor's confirmation. Investors see a
                   labelled placeholder until the signed-off document is attached.
                 </p>
@@ -1508,233 +1580,119 @@ export default function PublishedDealEditor({
                     />
                   ))}
                 </div>
-              </div>
-              <TransferAccountSection fund={fund} />
-            </EditorSection>
-
-            <EditorSection id="fees" label="Fees">
-              <p className="text-sm text-muted-foreground">
-                This fund has one fee schedule. It applies to every investor in it and is published
-                with the rest of the offering. Existing applications keep the fees they were made
-                at.
-              </p>
-              <div className="grid grid-cols-3 gap-4">
-                <TextField
-                  label="Subscription fee %"
-                  type="number"
-                  value={draft.subscription_fee_pct}
-                  onChange={(v) => set("subscription_fee_pct", v)}
-                />
-                <TextField
-                  label="Annual management fee %"
-                  type="number"
-                  value={draft.management_fee_pct}
-                  onChange={(v) => set("management_fee_pct", v)}
-                />
-                <TextField
-                  label="Carried interest %"
-                  type="number"
-                  value={draft.carried_interest_pct}
-                  onChange={(v) => set("carried_interest_pct", v)}
-                />
-              </div>
-              {legacyAudience && (
-                <p className="text-xs text-muted-foreground">
-                  Partner-referred investors pay a {draft.subscription_fee_pct || "0"}% subscription
-                  fee. Independent investors pay{" "}
-                  {Number.isFinite(Number(draft.subscription_fee_pct))
-                    ? Number(draft.subscription_fee_pct) + 1
-                    : "—"}
-                  %, one percentage point more.
-                </p>
-              )}
-            </EditorSection>
-
-            <EditorSection id="company" label="Company and opportunity narrative">
-              <div className="grid grid-cols-2 gap-4">
-                <TextField
-                  label="Founded"
-                  type="number"
-                  value={draft.founded_year}
-                  onChange={(v) => set("founded_year", v)}
-                />
-                <TextField
-                  label="Headquarters"
-                  value={draft.headquarters}
-                  onChange={(v) => set("headquarters", v)}
-                />
-                <TextField
-                  label="Headcount"
-                  type="number"
-                  value={draft.employee_count}
-                  onChange={(v) => set("employee_count", v)}
-                />
-                <TextField
-                  label="Shelf descriptor"
-                  value={draft.descriptor}
-                  onChange={(v) => set("descriptor", v)}
-                />
-              </div>
-              <AreaField
-                label="Company description"
-                value={draft.description}
-                onChange={(v) => set("description", v)}
-              />
-              <AreaField
-                label="Company overview"
-                value={draft.about}
-                onChange={(v) => set("about", v)}
-              />
-              <AreaField
-                label="LUCA thesis"
-                value={draft.thesis}
-                onChange={(v) => set("thesis", v)}
-              />
-              <AreaField
-                label="Investment highlights · one per line"
-                rows={5}
-                value={draft.highlights}
-                onChange={(v) => set("highlights", v)}
-              />
-              <AreaField
-                label="Key risks · Title | Body"
-                rows={5}
-                value={draft.risks}
-                onChange={(v) => set("risks", v)}
-                problems={problemsIn("risks")}
-              />
-            </EditorSection>
-
-            <EditorSection id="metrics" label="Charts and financial metrics">
-              <AreaField
-                label="Key metrics · Label | Value | Note"
-                rows={6}
-                value={draft.key_metrics}
-                onChange={(v) => set("key_metrics", v)}
-                problems={problemsIn("key_metrics")}
-              />
-              <AreaField
-                label="Revenue chart · Period | USD billions"
-                rows={4}
-                value={draft.revenue_points}
-                onChange={(v) => set("revenue_points", v)}
-                problems={problemsIn("revenue_points")}
-              />
-              <AreaField
-                label="Valuation chart and funding rounds · Date | Round | Valuation | Raised | Lead"
-                rows={5}
-                value={draft.funding_rounds}
-                onChange={(v) => set("funding_rounds", v)}
-                problems={problemsIn("funding_rounds")}
-              />
-            </EditorSection>
-
-            <EditorSection id="people" label="Comparables, activity and people">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TextField
-                  label="Comparable basis"
-                  value={draft.comparable_basis}
-                  onChange={(v) => set("comparable_basis", v)}
-                />
-                <TextField
-                  label="Our entry multiple"
-                  value={draft.entry_multiple}
-                  onChange={(v) => set("entry_multiple", v)}
-                />
-              </div>
-              <AreaField
-                label="Public peers · Name | Multiple"
-                rows={3}
-                value={draft.peers}
-                onChange={(v) => set("peers", v)}
-                problems={problemsIn("peers")}
-              />
-              <AreaField
-                label="Comparable note"
-                rows={3}
-                value={draft.comparable_note}
-                onChange={(v) => set("comparable_note", v)}
-              />
-              <AreaField
-                label="Deal activity · Date | Update | commit/milestone/update"
-                rows={4}
-                value={draft.activities}
-                onChange={(v) => set("activities", v)}
-                problems={problemsIn("activities")}
-              />
-              <AreaField
-                label="Management team · Role | Name"
-                rows={4}
-                value={draft.team}
-                onChange={(v) => set("team", v)}
-                problems={problemsIn("team")}
-              />
-              <AreaField
-                label="Recent developments · Date | Update"
-                rows={4}
-                value={draft.developments}
-                onChange={(v) => set("developments", v)}
-                problems={problemsIn("developments")}
-              />
-            </EditorSection>
-
-            <EditorSection id="narrative" label="Deal overview page · company narrative">
-              <div className="grid gap-4 sm:grid-cols-2">
+              </Group>
+              <Group title="Company">
+                <div className="grid grid-cols-2 gap-4">
+                  <TextField
+                    label="Founded"
+                    type="number"
+                    value={draft.founded_year}
+                    onChange={(v) => set("founded_year", v)}
+                  />
+                  <TextField
+                    label="Headquarters"
+                    value={draft.headquarters}
+                    onChange={(v) => set("headquarters", v)}
+                  />
+                  <TextField
+                    label="Headcount"
+                    type="number"
+                    value={draft.employee_count}
+                    onChange={(v) => set("employee_count", v)}
+                  />
+                  <TextField
+                    label="Shelf descriptor"
+                    value={draft.descriptor}
+                    onChange={(v) => set("descriptor", v)}
+                  />
+                </div>
                 <TextField
                   label="Tagline"
                   value={draft.tagline}
                   onChange={(v) => set("tagline", v)}
                   hint="One line shown under the company name."
                 />
-                <TextField
-                  label="Typical buyer"
-                  value={draft.typical_buyer}
-                  onChange={(v) => set("typical_buyer", v)}
-                />
-                <TextField
-                  label="Commercial model"
-                  value={draft.commercial_model}
-                  onChange={(v) => set("commercial_model", v)}
-                />
-              </div>
-              <AreaField
-                label="How the company creates value · Label | Text"
-                rows={5}
-                value={draft.how_it_works}
-                onChange={(v) => set("how_it_works", v)}
-                problems={problemsIn("how_it_works")}
-              />
-              <div className="grid gap-4 sm:grid-cols-2">
                 <AreaField
-                  label="In-practice example · lead line"
-                  rows={2}
-                  value={draft.in_practice_lead}
-                  onChange={(v) => set("in_practice_lead", v)}
+                  label="Company description"
+                  value={draft.description}
+                  onChange={(v) => set("description", v)}
                 />
                 <AreaField
-                  label="In-practice example · detail"
-                  rows={2}
-                  value={draft.in_practice_text}
-                  onChange={(v) => set("in_practice_text", v)}
+                  label="Company overview"
+                  value={draft.about}
+                  onChange={(v) => set("about", v)}
                 />
-                <TextField
-                  label="In-practice tag"
-                  value={draft.in_practice_tag}
-                  onChange={(v) => set("in_practice_tag", v)}
-                  hint="e.g. “Company-reported customer example”."
+              </Group>
+              <Group title="Investment thesis">
+                <AreaField
+                  label="LUCA thesis"
+                  value={draft.thesis}
+                  onChange={(v) => set("thesis", v)}
                 />
-                <TextField
-                  label="In-practice source label"
-                  value={draft.in_practice_source_label}
-                  onChange={(v) => set("in_practice_source_label", v)}
+                <AreaField
+                  label="Investment highlights · one per line"
+                  rows={5}
+                  value={draft.highlights}
+                  onChange={(v) => set("highlights", v)}
                 />
-                <TextField
-                  label="In-practice source URL"
-                  value={draft.in_practice_source_href}
-                  onChange={(v) => set("in_practice_source_href", v)}
-                  hint="Optional — leave blank when there is no linkable source."
+                <AreaField
+                  label="Investment thesis points · Title | Text"
+                  rows={4}
+                  value={draft.thesis_points}
+                  onChange={(v) => set("thesis_points", v)}
+                  problems={problemsIn("thesis_points")}
                 />
-              </div>
+                <AreaField
+                  label="How the company creates value · Label | Text"
+                  rows={5}
+                  value={draft.how_it_works}
+                  onChange={(v) => set("how_it_works", v)}
+                  problems={problemsIn("how_it_works")}
+                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <AreaField
+                    label="In-practice example · lead line"
+                    rows={2}
+                    value={draft.in_practice_lead}
+                    onChange={(v) => set("in_practice_lead", v)}
+                  />
+                  <AreaField
+                    label="In-practice example · detail"
+                    rows={2}
+                    value={draft.in_practice_text}
+                    onChange={(v) => set("in_practice_text", v)}
+                  />
+                  <TextField
+                    label="In-practice tag"
+                    value={draft.in_practice_tag}
+                    onChange={(v) => set("in_practice_tag", v)}
+                    hint="e.g. “Company-reported customer example”."
+                  />
+                  <TextField
+                    label="In-practice source label"
+                    value={draft.in_practice_source_label}
+                    onChange={(v) => set("in_practice_source_label", v)}
+                  />
+                  <TextField
+                    label="In-practice source URL"
+                    value={draft.in_practice_source_href}
+                    onChange={(v) => set("in_practice_source_href", v)}
+                    hint="Optional — leave blank when there is no linkable source."
+                  />
+                </div>
+              </Group>
+              <Group title="Management team">
+                <AreaField
+                  label="Management team · Role | Name"
+                  rows={4}
+                  value={draft.team}
+                  onChange={(v) => set("team", v)}
+                  problems={problemsIn("team")}
+                />
+              </Group>
+            </EditorSection>
+
+            <EditorSection id="market" label="Market">
               <AreaField
                 label="Market context · one paragraph per line"
                 rows={4}
@@ -1748,12 +1706,18 @@ export default function PublishedDealEditor({
                 onChange={(v) => set("competitive_landscape", v)}
                 problems={problemsIn("competitive_landscape")}
               />
-              <AreaField
-                label="Investment thesis points · Title | Text"
-                rows={4}
-                value={draft.thesis_points}
-                onChange={(v) => set("thesis_points", v)}
-                problems={problemsIn("thesis_points")}
+            </EditorSection>
+
+            <EditorSection id="business" label="Business model">
+              <TextField
+                label="Typical buyer"
+                value={draft.typical_buyer}
+                onChange={(v) => set("typical_buyer", v)}
+              />
+              <TextField
+                label="Commercial model"
+                value={draft.commercial_model}
+                onChange={(v) => set("commercial_model", v)}
               />
               <AreaField
                 label="Business model columns · Title | Text"
@@ -1781,95 +1745,177 @@ export default function PublishedDealEditor({
                   onChange={(v) => set("product_disclosures_source", v)}
                 />
               </div>
-              <AreaField
-                label="Other financial indicators · Value | Label | Source | Word (yes/no)"
-                rows={3}
-                value={draft.financial_indicators}
-                onChange={(v) => set("financial_indicators", v)}
-                problems={problemsIn("financial_indicators")}
-              />
             </EditorSection>
 
-            <EditorSection id="sourcing" label="Deal overview page · sourcing and recording">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TextField
-                  label="Primary source title"
-                  value={draft.primary_source_title}
-                  onChange={(v) => set("primary_source_title", v)}
-                  hint="e.g. the deck or data-room package this page is built from."
+            <EditorSection id="financials" label="Financials">
+              <Group title="Key statistics">
+                <AreaField
+                  label="Key metrics · Label | Value | Note"
+                  rows={6}
+                  value={draft.key_metrics}
+                  onChange={(v) => set("key_metrics", v)}
+                  problems={problemsIn("key_metrics")}
                 />
-                <TextField
-                  label="Primary source meta"
-                  value={draft.primary_source_meta}
-                  onChange={(v) => set("primary_source_meta", v)}
-                  hint="e.g. “LUCA SGP Pte. Ltd., data room, September 2026”."
+                <AreaField
+                  label="Revenue chart · Period | USD billions"
+                  rows={4}
+                  value={draft.revenue_points}
+                  onChange={(v) => set("revenue_points", v)}
+                  problems={problemsIn("revenue_points")}
                 />
-              </div>
-              <AreaField
-                label="Primary source description"
-                rows={2}
-                value={draft.primary_source_text}
-                onChange={(v) => set("primary_source_text", v)}
-              />
-              <AreaField
-                label="How figures were checked"
-                rows={2}
-                value={draft.figures_checked_note}
-                onChange={(v) => set("figures_checked_note", v)}
-              />
-              <AreaField
-                label="How figures were checked · links · Label | URL"
-                rows={2}
-                value={draft.figures_checked_links}
-                onChange={(v) => set("figures_checked_links", v)}
-                problems={problemsIn("figures_checked_links")}
-              />
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox
-                  checked={draft.recording_available}
-                  onChange={(e) => set("recording_available", e.target.checked)}
+                <AreaField
+                  label="Valuation chart and funding rounds · Date | Round | Valuation | Raised | Lead"
+                  rows={5}
+                  value={draft.funding_rounds}
+                  onChange={(v) => set("funding_rounds", v)}
+                  problems={problemsIn("funding_rounds")}
                 />
-                Recorded overview available
-              </label>
-              {draft.recording_available && (
-                <TextField
-                  label="Recording URL"
-                  value={draft.recording_embed_url}
-                  onChange={(v) => set("recording_embed_url", v)}
+                <AreaField
+                  label="Other financial indicators · Value | Label | Source | Word (yes/no)"
+                  rows={3}
+                  value={draft.financial_indicators}
+                  onChange={(v) => set("financial_indicators", v)}
+                  problems={problemsIn("financial_indicators")}
                 />
-              )}
-            </EditorSection>
-
-            <EditorSection id="quality" label="Publication quality gate">
-              <div className="rounded-lg border bg-muted/40 px-4 py-2">
-                {checks.map((check) => (
-                  <CheckRow key={check.label} check={check} />
-                ))}
-              </div>
-            </EditorSection>
-
-            {changingStatus && activeSubscriptionCount > 0 && (
-              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                <p className="font-medium">
-                  {activeSubscriptionCount} active subscription
-                  {activeSubscriptionCount === 1 ? "" : "s"} on this deal
-                </p>
-                <p>
-                  Changing status from {FUND_STATUS_LABELS[fund.state]} to{" "}
-                  {FUND_STATUS_LABELS[draft.state]} does not change those subscriptions — confirm
-                  this is intended before publishing.
-                </p>
-                <label className="flex cursor-pointer items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={statusChangeAcknowledged}
-                    onChange={(e) => setStatusChangeAcknowledged(e.target.checked)}
-                    className="mt-0.5 size-4 rounded border-border"
+              </Group>
+              <Group title="Comparables">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField
+                    label="Comparable basis"
+                    value={draft.comparable_basis}
+                    onChange={(v) => set("comparable_basis", v)}
                   />
-                  <span>I understand and want to proceed.</span>
+                  <TextField
+                    label="Our entry multiple"
+                    value={draft.entry_multiple}
+                    onChange={(v) => set("entry_multiple", v)}
+                  />
+                </div>
+                <AreaField
+                  label="Public peers · Name | Multiple"
+                  rows={3}
+                  value={draft.peers}
+                  onChange={(v) => set("peers", v)}
+                  problems={problemsIn("peers")}
+                />
+                <AreaField
+                  label="Comparable note"
+                  rows={3}
+                  value={draft.comparable_note}
+                  onChange={(v) => set("comparable_note", v)}
+                />
+              </Group>
+            </EditorSection>
+
+            <EditorSection id="risks" label="Risks">
+              <AreaField
+                label="Key risks · Title | Body"
+                rows={5}
+                value={draft.risks}
+                onChange={(v) => set("risks", v)}
+                problems={problemsIn("risks")}
+              />
+            </EditorSection>
+
+            <EditorSection id="documents" label="Documents and updates">
+              <Group title="Sources">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField
+                    label="Primary source title"
+                    value={draft.primary_source_title}
+                    onChange={(v) => set("primary_source_title", v)}
+                    hint="e.g. the deck or data-room package this page is built from."
+                  />
+                  <TextField
+                    label="Primary source meta"
+                    value={draft.primary_source_meta}
+                    onChange={(v) => set("primary_source_meta", v)}
+                    hint="e.g. “LUCA SGP Pte. Ltd., data room, September 2026”."
+                  />
+                </div>
+                <AreaField
+                  label="Primary source description"
+                  rows={2}
+                  value={draft.primary_source_text}
+                  onChange={(v) => set("primary_source_text", v)}
+                />
+                <AreaField
+                  label="How figures were checked"
+                  rows={2}
+                  value={draft.figures_checked_note}
+                  onChange={(v) => set("figures_checked_note", v)}
+                />
+                <AreaField
+                  label="How figures were checked · links · Label | URL"
+                  rows={2}
+                  value={draft.figures_checked_links}
+                  onChange={(v) => set("figures_checked_links", v)}
+                  problems={problemsIn("figures_checked_links")}
+                />
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={draft.recording_available}
+                    onChange={(e) => set("recording_available", e.target.checked)}
+                  />
+                  Recorded overview available
                 </label>
-              </div>
-            )}
+                {draft.recording_available && (
+                  <TextField
+                    label="Recording URL"
+                    value={draft.recording_embed_url}
+                    onChange={(v) => set("recording_embed_url", v)}
+                  />
+                )}
+              </Group>
+              <Group title="Updates">
+                <AreaField
+                  label="Deal activity · Date | Update | commit/milestone/update"
+                  rows={4}
+                  value={draft.activities}
+                  onChange={(v) => set("activities", v)}
+                  problems={problemsIn("activities")}
+                />
+                <AreaField
+                  label="Recent developments · Date | Update"
+                  rows={4}
+                  value={draft.developments}
+                  onChange={(v) => set("developments", v)}
+                  problems={problemsIn("developments")}
+                />
+              </Group>
+              <Group title="Before publishing">
+                <div className="rounded-lg border bg-muted/40 px-4 py-2">
+                  {checks.map((check) => (
+                    <CheckRow key={check.label} check={check} />
+                  ))}
+                </div>
+              </Group>
+            </EditorSection>
+
+            <div className="px-6 pb-8 sm:px-10">
+              {changingStatus && activeSubscriptionCount > 0 && (
+                <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  <p className="font-medium">
+                    {activeSubscriptionCount} active subscription
+                    {activeSubscriptionCount === 1 ? "" : "s"} on this deal
+                  </p>
+                  <p>
+                    Changing status from {FUND_STATUS_LABELS[fund.state]} to{" "}
+                    {FUND_STATUS_LABELS[draft.state]} does not change those subscriptions — confirm
+                    this is intended before publishing.
+                  </p>
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={statusChangeAcknowledged}
+                      onChange={(e) => setStatusChangeAcknowledged(e.target.checked)}
+                      className="mt-0.5 size-4 rounded border-border"
+                    />
+                    <span>I understand and want to proceed.</span>
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1898,7 +1944,7 @@ export default function PublishedDealEditor({
               onClick={() => submit(false)}
             >
               {audienceEmpty
-                ? "Choose who receives this deal"
+                ? "Choose recipients"
                 : failures > 0
                   ? "Resolve quality-gate issues"
                   : save.isPending
