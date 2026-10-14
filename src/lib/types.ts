@@ -369,8 +369,6 @@ export type OfferingDocumentStatus = {
 export type AcknowledgementsResponse = {
   /** The offering documents, and when this investor opened each one. */
   documents?: OfferingDocumentStatus[];
-  /** The first confirmation stays unavailable until the Risk Disclosure Statement is opened. */
-  risk_disclosure_opened?: boolean;
   required_count: number;
   accepted_count: number;
   complete: boolean;

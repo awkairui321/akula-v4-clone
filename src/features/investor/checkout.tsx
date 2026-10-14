@@ -11,7 +11,6 @@ import { Separator } from "@/components/ui/separator";
 import { StepTracker, type StepState } from "@/components/ui/step-tracker";
 import { formatAmountInput, formatUsdPrecise, numericValue } from "@/lib/currency";
 import {
-  DOCUMENT_GATED_STATEMENT,
   FEE_FOOTNOTE,
   INVESTMENT_DESCRIPTION,
   MANAGER_LEGAL_NAME,
@@ -387,7 +386,6 @@ function TermsStep({
   const ack = data?.acknowledgements;
   const terms = ack?.terms ?? [];
   const allComplete = ack?.complete ?? false;
-  const riskOpened = ack?.risk_disclosure_opened ?? false;
 
   function handleToggle(termId: number, accepted: boolean) {
     if (accepted) {
@@ -491,29 +489,19 @@ function TermsStep({
             </div>
           )}
           {terms.map((term) => {
-            const waiting = term.key === DOCUMENT_GATED_STATEMENT && !riskOpened && !term.accepted;
             return (
               <label
                 key={term.id}
-                className={`flex items-start gap-3 rounded-lg p-3 ${
-                  waiting ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-muted/50"
-                }`}
+                className="flex cursor-pointer items-start gap-3 rounded-lg p-3 hover:bg-muted/50"
               >
                 <input
                   type="checkbox"
                   checked={term.accepted}
                   onChange={() => handleToggle(term.id, term.accepted)}
-                  disabled={waiting || acceptMutation.isPending || withdrawMutation.isPending}
+                  disabled={acceptMutation.isPending || withdrawMutation.isPending}
                   className="mt-0.5 size-4 shrink-0 rounded border-border"
                 />
-                <span className="text-sm">
-                  {term.body}
-                  {waiting && (
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      Available once you have opened the Risk Disclosure Statement.
-                    </span>
-                  )}
-                </span>
+                <span className="text-sm">{term.body}</span>
               </label>
             );
           })}

@@ -8,13 +8,11 @@ import type { Fund } from "./types";
 export const MANAGER_LEGAL_NAME = "LUCA SGP Pte. Ltd.";
 export const PLATFORM_LEGAL_NAME = "Akula Labs Pte. Ltd.";
 
-export type OfferingDocumentKind = "ppm" | "supplement" | "agreement" | "risk_disclosure";
+export type OfferingDocumentKind = "ppm" | "term_sheet";
 
 export const OFFERING_DOCUMENTS: { kind: OfferingDocumentKind; label: string }[] = [
   { kind: "ppm", label: "Private placement memorandum" },
-  { kind: "supplement", label: "Sub-fund supplement" },
-  { kind: "agreement", label: "Subscription agreement" },
-  { kind: "risk_disclosure", label: "Risk Disclosure Statement" },
+  { kind: "term_sheet", label: "Term sheet" },
 ];
 
 export const documentLabel = (kind: OfferingDocumentKind) =>
@@ -175,28 +173,24 @@ export const placeholderTransferAccount = (fundId: number, fundName: string): Tr
 // Confirmations and notices
 // ---------------------------------------------------------------------------
 
-/** The four confirmations an investor gives before signing. Wording is subject to counsel's sign-off. */
+/** The confirmations an investor gives before signing. Wording is subject to counsel's sign-off. */
 export const ACKNOWLEDGEMENT_STATEMENTS: { key: string; body: string }[] = [
   {
-    key: "read_documents",
-    body: "I have read and understood the private placement memorandum, the sub-fund supplement, the subscription agreement and the risk disclosure statement. I have made my own investment decision and have not relied on advice from LUCA SGP or Akula Labs.",
-  },
-  {
     key: "high_risk_illiquid",
-    body: "I understand that this is a high-risk, illiquid investment. I may not be able to sell or redeem my shares for an extended period, there is no guaranteed exit and I could lose all of the money I invest.",
+    body: "I understand that this is a high-risk, illiquid investment. I may not be able to sell or redeem my shares for an extended period and there is no guaranteed exit.",
   },
   {
     key: "acceptance_discretion",
-    body: "I understand that my subscription is not accepted until LUCA SGP confirms my allocation. LUCA SGP may accept or reject any subscription at its sole discretion, including where the underlying share transaction does not complete. If my subscription is not accepted, the full amount I have paid will be returned to the account it came from, without interest.",
+    body: "I acknowledge that my subscription is subject to acceptance by LUCA SGP, which may accept or reject it at its sole discretion, including where the underlying share transaction is not completed. If my subscription is not accepted, the full amount paid will be returned to the originating account, without interest.",
   },
   {
     key: "accredited_status",
-    body: "I confirm that I remain an accredited investor, that the status and opt-in recorded during my onboarding are still accurate and that I understand I will not receive certain protections that apply to retail investors.",
+    body: "I confirm that I am an accredited investor and that the status and opt-in recorded during my onboarding remain accurate.",
   },
 ];
 
-/** The statement that stays unavailable until the Risk Disclosure Statement has been opened. */
-export const DOCUMENT_GATED_STATEMENT = "read_documents";
+/** A confirmation that was dropped; older saved subscriptions may still carry it. */
+export const RETIRED_STATEMENTS = ["read_documents"];
 
 export function disclaimerText(label?: string): string {
   return `This platform is operated by ${PLATFORM_LEGAL_NAME} as technology provider to ${MANAGER_LEGAL_NAME}, the fund manager of ${label ?? "the funds offered on this platform"}. Akula Labs does not provide investment advice, does not arrange or deal in investments and does not receive or hold investor money. Investments are offered only to accredited investors under the fund's offering documents.`;

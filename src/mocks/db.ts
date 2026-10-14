@@ -3,6 +3,7 @@ import type { GateEvent } from "../lib/types";
 import type { RefundSummary } from "../lib/acclime";
 import {
   ACKNOWLEDGEMENT_STATEMENTS,
+  RETIRED_STATEMENTS,
   OFFERING_DOCUMENTS,
   fundLabel,
   offeringOf,
@@ -2985,9 +2986,10 @@ export function toAdminSubscription(sub: MockSubscription) {
 }
 
 export function acknowledgementsResponse(sub: MockSubscription) {
-  const required = sub.acknowledgements.filter((t) => t.required);
+  const terms = sub.acknowledgements.filter((t) => !RETIRED_STATEMENTS.includes(t.key));
+  const required = terms.filter((t) => t.required);
   const accepted = required.filter((t) => t.accepted);
-  const acceptedDates = sub.acknowledgements
+  const acceptedDates = terms
     .map((t) => t.accepted_at)
     .filter((d): d is string => Boolean(d))
     .sort();
@@ -3000,12 +3002,11 @@ export function acknowledgementsResponse(sub: MockSubscription) {
       version: offering?.documents[kind].version ?? "1.0",
       opened_at: sub.documents_opened?.[kind]?.at ?? null,
     })),
-    risk_disclosure_opened: Boolean(sub.documents_opened?.risk_disclosure),
     required_count: required.length,
     accepted_count: accepted.length,
     complete: required.length > 0 && accepted.length === required.length,
     accepted_at: acceptedDates.length > 0 ? acceptedDates[acceptedDates.length - 1] : null,
-    terms: sub.acknowledgements,
+    terms,
   };
 }
 

@@ -3,7 +3,6 @@ import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { DOCUMENT_REQUEST_KINDS } from "@/lib/document-catalogue";
 import { ACCREDITED_BASES, labelForBasis } from "@/lib/accredited-investor";
 import {
-  DOCUMENT_GATED_STATEMENT,
   OFFERING_DOCUMENTS,
   documentLabel,
   offeringOf,
@@ -504,11 +503,6 @@ export const investorHandlers = [
       return HttpResponse.json({ error: "Acknowledgement term not found" }, { status: 404 });
     if (!["reserved", "documents_pending"].includes(sub.status))
       return HttpResponse.json({ error: "Signed acknowledgments are immutable" }, { status: 422 });
-    if (term.key === DOCUMENT_GATED_STATEMENT && !sub.documents_opened?.risk_disclosure)
-      return HttpResponse.json(
-        { error: "Open the Risk Disclosure Statement before confirming that you have read it." },
-        { status: 422 },
-      );
     const user = currentUser(request)!;
     const fund = findFundById(sub.fund_id);
     // Each confirmation keeps who gave it and the versions of the documents in force at the time.

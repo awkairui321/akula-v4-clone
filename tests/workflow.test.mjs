@@ -2546,65 +2546,71 @@ test("a new subscription is paid with a sub-fund reference, and a second one sta
   assert.match(db.subscriptions[0].payment_reference, /^AK-/);
 });
 
-test("confirmations: four statements, the first waits for the Risk Disclosure Statement, each is logged", async () => {
+test("confirmations: three statements, nothing gates them, each is logged against the two documents", async () => {
   const user = investor();
   const sub = (
     await (await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" })).json()
   ).subscription;
   const ack = () => request(`subscriptions/${sub.id}/acknowledgements`, user);
   const start = (await (await ack()).json()).acknowledgements;
-  assert.equal(start.terms.length, 4);
-  assert.equal(start.required_count, 4);
-  assert.equal(start.risk_disclosure_opened, false);
+  assert.deepEqual(
+    start.documents.map((d) => d.kind),
+    ["ppm", "term_sheet"],
+    "the offering documents are the PPM and the term sheet",
+  );
+  assert.deepEqual(
+    start.terms.map((t) => t.key),
+    ["high_risk_illiquid", "acceptance_discretion", "accredited_status"],
+  );
+  assert.equal(start.required_count, 3);
   assert.doesNotMatch(JSON.stringify(start.terms), /reduced/);
   assert.doesNotMatch(JSON.stringify(start.terms), /right of first refusal/i);
+  assert.doesNotMatch(
+    start.terms.find((t) => t.key === "accredited_status").body,
+    /retail/i,
+    "the accredited confirmation no longer carries the retail-protections clause",
+  );
 
   const accept = (term) =>
     request(`subscriptions/${sub.id}/acknowledgements`, user, "POST", {
       acknowledgement: { acknowledgement_term_id: term.id },
     });
-  const reading = start.terms.find((t) => t.key === "read_documents");
-  const blocked = await accept(reading);
-  assert.equal(blocked.status, 422);
-  assert.match((await blocked.json()).error, /Risk Disclosure Statement/);
-  // The other three do not wait on a document.
-  for (const term of start.terms.filter((t) => t.key !== "read_documents"))
-    assert.equal((await accept(term)).status, 200);
+  // A confirmation from an earlier version of the checkout is ignored, not required.
+  const record = db.findSubscriptionById(sub.id);
+  record.acknowledgements.unshift({ ...start.terms[0], id: 99, key: "read_documents" });
+  const withRetired = (await (await ack()).json()).acknowledgements;
+  assert.equal(withRetired.required_count, 3);
+  assert.ok(!withRetired.terms.some((t) => t.key === "read_documents"));
 
-  // Opening any other document does not unlock it; the Risk Disclosure Statement does.
-  await request(`subscriptions/${sub.id}/document_opened`, user, "POST", { kind: "ppm" });
-  assert.equal((await accept(reading)).status, 422);
   const events = w.workflow.events.length;
+  for (const term of start.terms) assert.equal((await accept(term)).status, 200);
+  assert.equal(
+    (await (await ack()).json()).acknowledgements.complete,
+    true,
+    "all three ticked completes the step",
+  );
+
+  // Opening a document is still recorded, against the version the investor saw.
   const opened = await request(`subscriptions/${sub.id}/document_opened`, user, "POST", {
-    kind: "risk_disclosure",
+    kind: "term_sheet",
   });
-  assert.equal((await opened.json()).acknowledgements.risk_disclosure_opened, true);
+  assert.ok(
+    (await opened.json()).acknowledgements.documents.find((d) => d.kind === "term_sheet").opened_at,
+  );
   assert.equal(
     (await request(`subscriptions/${sub.id}/document_opened`, user, "POST", { kind: "nonsense" }))
       .status,
     404,
   );
-  assert.equal((await accept(reading)).status, 200);
-  assert.equal(
-    (await (await ack()).json()).acknowledgements.complete,
-    true,
-    "all four ticked completes the step",
-  );
 
   // Who, when and against which document versions is kept on every confirmation.
   const kept = db
     .findSubscriptionById(sub.id)
-    .acknowledgements.find((t) => t.key === "read_documents");
+    .acknowledgements.find((t) => t.key === "high_risk_illiquid");
   assert.equal(kept.accepted_by.email, user.email);
   assert.ok(kept.accepted_at);
-  assert.deepEqual(Object.keys(kept.document_versions).sort(), [
-    "agreement",
-    "ppm",
-    "risk_disclosure",
-    "supplement",
-  ]);
+  assert.deepEqual(Object.keys(kept.document_versions).sort(), ["ppm", "term_sheet"]);
   assert.ok(w.workflow.events.length > events);
-  assert.match(w.workflow.events.at(-1).label, /Confirmation 1 given by .* on subscription/);
   // Another investor cannot open documents on this subscription.
   assert.equal(
     (
