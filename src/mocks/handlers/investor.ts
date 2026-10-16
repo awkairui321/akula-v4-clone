@@ -2,6 +2,7 @@ import { commercialTerms, fundForSegment } from "../../lib/investor-access";
 import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { DOCUMENT_REQUEST_KINDS } from "@/lib/document-catalogue";
 import { labelForBasis } from "@/lib/accredited-investor";
+import { readinessIssues } from "@/lib/subscription-readiness";
 import {
   EVIDENCE_KINDS,
   evidenceLabel,
@@ -80,11 +81,31 @@ import {
   latestAccreditedDeclaration,
 } from "../db";
 
+/** What stands between this investor and a new subscription: the same list the page shows. */
+function subscriptionIssues(user: NonNullable<ReturnType<typeof currentUser>>) {
+  return readinessIssues({
+    kyc_status: user.kyc_status,
+    nda_status: user.nda_status,
+    missing_consents: consentsForUser(user.id)
+      .filter((c) => c.required && !c.granted)
+      .map((c) => c.title),
+  });
+}
+
 function unauthorized() {
   return HttpResponse.json({ error: "Not authenticated" }, { status: 401 });
 }
 
 export const investorHandlers = [
+  // GET /api/v1/investor/subscription_readiness — whether this investor can start a subscription,
+  // and if not, what to put right first.
+  http.get("*/api/v1/investor/subscription_readiness", ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    const issues = subscriptionIssues(user);
+    return HttpResponse.json({ ready: issues.length === 0, issues });
+  }),
+
   // GET /api/v1/investor/declaration — the investor's last declaration, so the next one starts
   // from the same choice and the proof already on file.
   http.get("*/api/v1/investor/declaration", ({ request }) => {
@@ -420,19 +441,18 @@ export const investorHandlers = [
         { status: 403 },
       );
     if (!fund) return HttpResponse.json({ error: "Fund not found" }, { status: 404 });
-    if (
-      !user.has_investor_profile ||
-      user.kyc_status !== "approved" ||
-      user.nda_status !== "signed" ||
-      !consentsForUser(user.id)
-        .filter((c) => c.required)
-        .every((c) => c.granted) ||
-      fund.state !== "open"
-    )
+    const issues = user.has_investor_profile ? subscriptionIssues(user) : [];
+    if (issues.length > 0)
       return HttpResponse.json(
         {
-          error: "Complete eligibility, signature and explicit consents; choose an open offering.",
+          error: `You cannot subscribe yet. ${issues.map((issue) => issue.title).join(". ")}.`,
+          issues,
         },
+        { status: 422 },
+      );
+    if (!user.has_investor_profile || fund.state !== "open")
+      return HttpResponse.json(
+        { error: "Complete your account setup and choose an open offering." },
         { status: 422 },
       );
     const min = parseFloat(fund.min_subscription);

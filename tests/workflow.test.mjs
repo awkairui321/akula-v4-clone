@@ -20,6 +20,7 @@ for (const file of [
   "src/lib/format-date.ts",
   "src/lib/accredited-investor.ts",
   "src/lib/accredited-evidence.ts",
+  "src/lib/subscription-readiness.ts",
   "src/lib/offering.ts",
   "src/lib/receipts.ts",
   "src/lib/acclime.ts",
@@ -3344,4 +3345,75 @@ test("accredited investor evidence: one choice, its own documents, and what reac
       `${doc.kind} is listed`,
     );
   assert.equal(catalogue.documentKindLabel("source_of_wealth"), "Source of wealth declaration");
+});
+
+test("eligibility, NDA and consents: caught before a subscription starts, and at allocation rather than when verifying funds", async () => {
+  const readiness = await import("../.test-runtime/src/lib/subscription-readiness.mjs");
+  assert.deepEqual(
+    readiness.readinessIssues({
+      kyc_status: "approved",
+      nda_status: "signed",
+      missing_consents: [],
+    }),
+    [],
+  );
+  const everything = readiness.readinessIssues({
+    kyc_status: "pending",
+    nda_status: "not_started",
+    missing_consents: ["Privacy notice", "Electronic delivery"],
+  });
+  assert.deepEqual(
+    everything.map((i) => i.key),
+    ["identity", "nda", "consents"],
+  );
+  assert.match(everything[2].detail, /Privacy notice, Electronic delivery/);
+
+  // Before: an investor missing a required consent cannot start, and is told which one.
+  const user = investor();
+  const status = async () => (await request("investor/subscription_readiness", user)).json();
+  assert.equal((await status()).ready, true);
+  const consent = db.consentsForUser(user.id).find((c) => c.required && c.granted);
+  db.withdrawConsent(user.id, consent.id);
+  const blocked = await status();
+  assert.equal(blocked.ready, false);
+  assert.deepEqual(
+    blocked.issues.map((i) => i.key),
+    ["consents"],
+  );
+  assert.ok(blocked.issues[0].detail.includes(consent.title));
+  const attempt = await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" });
+  assert.equal(attempt.status, 422);
+  const refused = await attempt.json();
+  assert.match(refused.error, /cannot subscribe yet/);
+  assert.equal(refused.issues.length, 1);
+  db.grantConsent(user.id, consent.id);
+  assert.equal((await status()).ready, true);
+  assert.equal(
+    (await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" })).status,
+    200,
+  );
+  assert.equal((await request("investor/subscription_readiness", manager())).status, 401);
+
+  // After: if it lapses while the funds are in, verifying the funds still works and the
+  // allocation is what stops.
+  const s = funded();
+  const owner = db.users.find((u) => u.id === s.investor_id);
+  const lapsed = db.consentsForUser(owner.id).find((c) => c.required && c.granted);
+  db.withdrawConsent(owner.id, lapsed.id);
+  const live = (await (await request("workflows", manager())).json()).subscriptions.find(
+    (x) => x.id === s.id,
+  );
+  assert.ok(!live.verificationBlockers.some((b) => /remain approved/.test(b)));
+  assert.ok(live.allocationBlockers.some((b) => /remain approved/.test(b)));
+  const command = (body) => request("workflows", manager(), "POST", { id: s.id, ...body });
+  assert.equal((await command({ type: "verify-funds" })).status, 200);
+  const terms = w.allocationTerms(db.findSubscriptionById(s.id));
+  const stopped = await command({ type: "allocate", amount: terms.capital, price: terms.price });
+  assert.equal(stopped.status, 422);
+  assert.match((await stopped.json()).error, /remain approved/);
+  db.grantConsent(owner.id, lapsed.id);
+  assert.equal(
+    (await command({ type: "allocate", amount: terms.capital, price: terms.price })).status,
+    200,
+  );
 });

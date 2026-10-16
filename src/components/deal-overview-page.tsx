@@ -1,3 +1,7 @@
+import {
+  SubscribeBlockedDialog,
+  useSubscriptionReadiness,
+} from "@/features/investor/subscribe-readiness";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -834,7 +838,11 @@ function TermsPanel({ fund, showFees = true }: { fund: Fund; showFees?: boolean 
 
 function SubscribeCalculator({ fund }: { fund: Fund }) {
   const [amount, setAmount] = useState(fund.min_subscription);
+  const [showBlocked, setShowBlocked] = useState(false);
   const navigate = useNavigate();
+  // A gap in the investor's eligibility, NDA or consents is raised here, before they subscribe.
+  const issues = useSubscriptionReadiness().data?.issues ?? [];
+  const blocked = issues.length > 0;
   const numAmount = parseFloat(amount);
   const minSub = parseFloat(fund.min_subscription);
   const maxSub = fund.max_subscription ? parseFloat(fund.max_subscription) : null;
@@ -910,12 +918,31 @@ function SubscribeCalculator({ fund }: { fund: Fund }) {
         </div>
       </div>
       <Button
-        className="w-full"
-        disabled={!valid}
-        onClick={() => navigate(`/checkout/${fund.id}?amount=${amount}`)}
+        className={`w-full ${blocked ? "opacity-60" : ""}`}
+        disabled={!valid && !blocked}
+        aria-disabled={blocked || undefined}
+        onClick={() =>
+          blocked ? setShowBlocked(true) : navigate(`/checkout/${fund.id}?amount=${amount}`)
+        }
       >
         Start subscription
       </Button>
+      {blocked && (
+        <p className="text-xs text-amber-800">
+          You can't subscribe yet: {issues[0].title.toLowerCase()}
+          {issues.length > 1 ? ` and ${issues.length - 1} more` : ""}.{" "}
+          <button
+            type="button"
+            onClick={() => setShowBlocked(true)}
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            See what to do
+          </button>
+        </p>
+      )}
+      {showBlocked && (
+        <SubscribeBlockedDialog issues={issues} onClose={() => setShowBlocked(false)} />
+      )}
     </div>
   );
 }

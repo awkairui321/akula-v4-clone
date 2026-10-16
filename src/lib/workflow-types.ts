@@ -202,6 +202,8 @@ export type WorkflowView = WorkflowState & {
     refund?: RefundSummary | null;
     fundsVerified?: GateEvent | null;
     allocationConfirmed?: GateEvent | null;
+    /** What stops the funds being verified. Eligibility is checked later, at allocation. */
+    verificationBlockers: string[];
     allocationBlockers: string[];
     reconciliationBlockers: string[];
     /** The unit price on the offering version the investor signed. */

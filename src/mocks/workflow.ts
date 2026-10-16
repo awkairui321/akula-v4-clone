@@ -560,10 +560,19 @@ export function resetDemo() {
   localStorage.removeItem(KEY);
   location.reload();
 }
-export function investmentBlockers(s: db.MockSubscription, issuance = false): string[] {
+/**
+ * What stops a subscription moving forward. Whether the investor's eligibility, NDA and consents
+ * still stand is a condition of confirming the allocation, so it is left out when the question is
+ * only whether the funds can be verified.
+ */
+export function investmentBlockers(
+  s: db.MockSubscription,
+  issuance = false,
+  forFundsVerification = false,
+): string[] {
   const blockers: string[] = [];
   const investor = db.findUserById(s.investor_id);
-  if (!investor || !disclosureAccess(investor))
+  if (!forFundsVerification && (!investor || !disclosureAccess(investor)))
     blockers.push("Investor eligibility, NDA and required consents must remain approved.");
   if (!workflow.signatures.some((signature) => signature.subscriptionId === s.id))
     blockers.push("Investor must complete the subscription signature first.");
@@ -725,6 +734,12 @@ export function view(user: db.MockUser): WorkflowView {
       needsReview: s.needs_review_version_id,
       fundsVerified: db.gatesOf(s).funds_verified,
       allocationConfirmed: db.gatesOf(s).allocation_confirmed,
+      verificationBlockers: [
+        ...(s.status === "reconciliation"
+          ? ["Akula Ops must complete reconciliation before LUCA verifies the funds."]
+          : []),
+        ...investmentBlockers(s, false, true),
+      ],
       allocationBlockers: [
         ...(s.status === "reconciliation"
           ? ["Akula Ops must complete reconciliation before LUCA allocates."]
@@ -1034,7 +1049,8 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         s.status === "allocation_pending",
         "Akula Ops must complete reconciliation before LUCA verifies the funds.",
       );
-      const blockers = investmentBlockers(s);
+      // Eligibility, NDA and consents are checked when the allocation is confirmed, not here.
+      const blockers = investmentBlockers(s, false, true);
       requireValue(!blockers.length, blockers.join(" "));
       requireValue(
         matched(s.id) >= round(Number(s.amount) + Number(s.subscription_fee)),

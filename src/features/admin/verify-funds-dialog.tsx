@@ -41,10 +41,9 @@ export function VerifyFundsDialog({
     ) ?? [];
   const received = receipts.reduce((n, r) => n + r.amount, 0);
   const payable = Number(subscription.amount) + Number(subscription.subscription_fee);
-  // The allocation step has its own check; only what stops the funds being verified shows here.
-  const blockers = (live?.allocationBlockers ?? []).filter(
-    (b) => b !== "Verify the funds before confirming the allocation.",
-  );
+  // Only what stops the funds being verified shows here. Whether the investor's eligibility,
+  // NDA and consents still stand is checked when the allocation is confirmed.
+  const blockers = live?.verificationBlockers ?? [];
 
   const run = useMutation({
     mutationFn: (command: WorkflowCommand) =>
