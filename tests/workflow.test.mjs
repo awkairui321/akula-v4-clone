@@ -21,6 +21,7 @@ for (const file of [
   "src/lib/accredited-investor.ts",
   "src/lib/accredited-evidence.ts",
   "src/lib/subscription-readiness.ts",
+  "src/lib/distributions.ts",
   "src/lib/offering.ts",
   "src/lib/receipts.ts",
   "src/lib/acclime.ts",
@@ -3509,4 +3510,128 @@ test("the Fund Manager sees Acclime's acceptance of the investor once it is reco
     payload: { payment_reference: s.payment_reference, result: "fail", note: "Adverse media" },
   });
   assert.equal((await view()).acclimeDueDiligence.result, "fail");
+});
+
+test("distributions: the Fund Manager records them, each payment is confirmed, and the investor's holdings follow", async () => {
+  const dist = await import("../.test-runtime/src/lib/distributions.mjs");
+  assert.deepEqual(
+    dist
+      .planDistribution(
+        [
+          { holdingId: 1, investorId: 2, units: 80.4 },
+          { holdingId: 2, investorId: 3, units: 0.001 },
+        ],
+        1.25,
+      )
+      .map((l) => l.amount),
+    [100.5],
+    "pro rata to the cent, and nobody is paid nothing",
+  );
+
+  // A fund with issued holdings.
+  const byFund = new Map();
+  for (const h of db.holdings.filter((x) => x.state === "held"))
+    byFund.set(h.fund_id, [...(byFund.get(h.fund_id) ?? []), h]);
+  // A fund the demo investor holds, so the result can be read back through their own session.
+  const [fundId, held] = [...byFund.entries()].find(([, rows]) =>
+    rows.some((h) => h.investor_id === investor().id),
+  );
+  const record = (user, distribution, id = fundId) =>
+    request("workflows", user, "POST", { type: "record-distribution", id, distribution });
+  const income = {
+    kind: "income",
+    perUnit: 1.25,
+    recordDate: "2026-09-30",
+    fullExit: false,
+    exitRoute: null,
+    note: "Q3",
+  };
+
+  // Only the Fund Manager records them, with sensible details.
+  for (const user of [investor(), ops(), rm(), db.users.find((u) => u.role === "investment_team")])
+    assert.equal((await record(user, income)).status, 422, user.role);
+  assert.equal((await record(manager(), { ...income, perUnit: 0 })).status, 422);
+  assert.equal((await record(manager(), { ...income, recordDate: "soon" })).status, 422);
+  assert.equal((await record(manager(), { ...income, kind: "bonus" })).status, 422);
+  assert.equal((await record(manager(), income, 999999)).status, 422);
+  assert.equal((await record(manager(), income)).status, 200);
+
+  const events = async (user) => (await (await request("workflows", user)).json()).distributions;
+  const [event] = await events(manager());
+  assert.equal(event.lines.length, held.length);
+  for (const line of event.lines) {
+    const holding = held.find((h) => h.id === line.holdingId);
+    assert.equal(line.amount, Math.round(Number(holding.units) * 1.25 * 100) / 100);
+    assert.equal(line.status, "due");
+  }
+  for (const user of [investor(), ops(), rm()])
+    assert.deepEqual(await events(user), [], `${user.role} does not see the ledger`);
+
+  // Confirming one payment updates that holder's holding and tells them.
+  const first = event.lines.find((l) => l.investorId === investor().id);
+  const owner = investor();
+  const holding = db.holdings.find((h) => h.id === first.holdingId);
+  const before = Number(holding.distributions);
+  const confirm = (body) =>
+    request("workflows", manager(), "POST", {
+      type: "confirm-distribution",
+      id: event.id,
+      ...body,
+    });
+  assert.equal((await confirm({ target: first.id })).status, 422, "a reference is needed");
+  assert.equal((await confirm({ target: first.id, text: "ACC-PAY-1" })).status, 200);
+  assert.equal(
+    Number(db.holdings.find((h) => h.id === first.holdingId).distributions),
+    before + first.amount,
+  );
+  const shown = (await (await request("holdings", owner)).json()).holdings.find(
+    (h) => h.id === holding.id,
+  );
+  assert.equal(shown.distribution_payments[0].amount, first.amount);
+  assert.equal(shown.distribution_payments[0].kind, "income");
+  assert.equal(shown.state, "held", "income does not close a holding");
+  const mail = (await (await request("messages", owner)).json()).messages;
+  assert.match(mail[0].subject, /Income distribution paid/);
+  assert.equal((await confirm({ target: first.id, text: "ACC-PAY-1" })).status, 422, "only once");
+
+  // The rest, in one go.
+  if (event.lines.length > 1) assert.equal((await confirm({ text: "ACC-BATCH" })).status, 200);
+  assert.ok(dist.eventTotals((await events(manager()))[0]).settled || event.lines.length === 1);
+
+  // Exit proceeds close the holding in the investor's portfolio.
+  const exit = {
+    kind: "exit_proceeds",
+    perUnit: 2,
+    recordDate: "2026-10-10",
+    fullExit: true,
+    exitRoute: "acquisition",
+    note: null,
+  };
+  assert.equal((await record(manager(), exit)).status, 200);
+  const exitEvent = (await events(manager())).find((e) => e.kind === "exit_proceeds");
+  assert.equal((await confirm2(exitEvent.id, { text: "ACC-EXIT" })).status, 200);
+  function confirm2(id, body) {
+    return request("workflows", manager(), "POST", { type: "confirm-distribution", id, ...body });
+  }
+  const closed = db.holdings.find((h) => h.id === exitEvent.lines[0].holdingId);
+  assert.equal(closed.state, "realized");
+  assert.equal(closed.exit_type, "acquisition");
+  assert.ok(closed.exit_date);
+  assert.equal(Number(closed.final_proceeds), exitEvent.lines[0].amount);
+  assert.equal(
+    closed.moic,
+    (Number(closed.distributions) / Number(closed.committed_amount)).toFixed(2),
+  );
+  const exited = db.users.find((u) => u.id === closed.investor_id);
+  const shownExit = (await (await request("holdings", exited)).json()).holdings.find(
+    (h) => h.id === closed.id,
+  );
+  assert.equal(shownExit.state, "realized");
+  assert.ok(shownExit.distribution_payments.some((p) => p.kind === "exit_proceeds"));
+  assert.match(
+    (await (await request("messages", exited)).json()).messages[0].subject,
+    /holding has been realised/,
+  );
+  // Nothing is left to pay on a fund whose holdings have all been sold.
+  assert.equal((await record(manager(), income)).status, 422);
 });

@@ -1,3 +1,4 @@
+import type { DistributionEvent, DistributionInput } from "./distributions";
 import type { CommercialTerms } from "./investor-access";
 import type { Fund, GateEvent, SubscriptionStatus } from "./types";
 import type { AcclimeMessage, NavRecord, RefundSummary, SubscriptionPack } from "./acclime";
@@ -105,6 +106,8 @@ export type WorkflowState = {
   acclimeMessages: AcclimeMessage[];
   packs: SubscriptionPack[];
   navRecords: NavRecord[];
+  /** Income, returns of capital and exit proceeds paid to investors: the Fund Manager's only. */
+  distributions: DistributionEvent[];
   versions: Version[];
   dealChanges: DealChange[];
   /** Working edits not yet in a version, for the Fund Manager and Investment Team. */
@@ -171,6 +174,8 @@ export type WorkflowCommand = {
   text?: string;
   status?: string;
   due?: string;
+  /** For recording a distribution: what is paid, and on what basis. */
+  distribution?: DistributionInput;
 };
 export type WorkflowView = WorkflowState & {
   actor: { id: number; role: string; email: string };
@@ -229,6 +234,7 @@ export type WorkflowView = WorkflowState & {
     investor_id: number;
     fund_id: number;
     asset_name: string;
+    state: string;
     committed_amount: string;
     current_nav: string;
     nav_as_of: string | null;

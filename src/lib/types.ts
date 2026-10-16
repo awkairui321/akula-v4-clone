@@ -401,6 +401,8 @@ export type Holding = {
   exit_type: string | null;
   final_proceeds: string | null;
   moic: string | null;
+  /** The payments behind the distributions total, newest first. */
+  distribution_payments?: { id: number; kind: string; amount: number; paid_at: string }[];
 };
 
 /** Typed document kinds for deal materials (factsheet, offering memorandum, etc.). */

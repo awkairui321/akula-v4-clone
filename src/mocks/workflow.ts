@@ -1,3 +1,9 @@
+import {
+  DISTRIBUTION_KINDS,
+  distributionKindLabel,
+  planDistribution,
+  type DistributionEvent,
+} from "../lib/distributions";
 import { missingEvidence } from "../lib/accredited-evidence";
 import { mayDiscover, hasInvestmentHistory, setPublishedAudienceReader } from "./investor-access";
 import { audienceIncludes } from "../lib/investor-access";
@@ -23,6 +29,7 @@ export const workflow: WorkflowState = {
   acclimeMessages: [],
   packs: [],
   navRecords: [],
+  distributions: [],
   versions: [],
   dealChanges: [],
   unpublished: [],
@@ -816,6 +823,7 @@ export function view(user: db.MockUser): WorkflowView {
     acclimeMessages: user.role === "luca" ? workflow.acclimeMessages : [],
     packs: user.role === "luca" ? workflow.packs : [],
     navRecords: user.role === "luca" ? workflow.navRecords : [],
+    distributions: user.role === "luca" ? workflow.distributions : [],
     signatures: workflow.signatures.filter((r) => sid.has(r.subscriptionId)),
     versions,
     // Ops edits go to the Investment Team only; the Fund Manager sees what the team submits.
@@ -1535,6 +1543,127 @@ function perform(user: db.MockUser, c: WorkflowCommand) {
         .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id - a.id)[0];
       h.current_nav = latest.amount.toFixed(2);
       h.nav_as_of = latest.at;
+      break;
+    }
+    // Gate for every payment that is not a refund: LUCA records what is paid to holders of a fund.
+    case "record-distribution": {
+      role("luca");
+      const input = c.distribution;
+      requireValue(input, "Enter the details of the distribution.");
+      const fund = db.findFundById(c.id!);
+      requireValue(fund, "Offering not found.");
+      requireValue(
+        DISTRIBUTION_KINDS.some((k) => k.value === input.kind),
+        "Choose the type of distribution.",
+      );
+      requireValue(
+        Number.isFinite(input.perUnit) && input.perUnit > 0,
+        "Enter an amount per unit above zero.",
+      );
+      requireValue(Number.isFinite(Date.parse(input.recordDate)), "Choose the record date.");
+      const holders = db.holdings.filter((h) => h.fund_id === fund.id && h.state === "held");
+      requireValue(holders.length > 0, "This fund has no issued holdings to pay.");
+      const plan = planDistribution(
+        holders.map((h) => ({
+          holdingId: h.id,
+          investorId: h.investor_id,
+          units: Number(h.units),
+        })),
+        input.perUnit,
+      );
+      requireValue(plan.length > 0, "That amount per unit is too small to pay anyone.");
+      const event: DistributionEvent = {
+        id: id(),
+        fundId: fund.id,
+        fundName: fund.name,
+        assetName: fund.asset.name,
+        kind: input.kind,
+        perUnit: input.perUnit,
+        recordDate: new Date(input.recordDate).toISOString(),
+        fullExit: input.kind === "exit_proceeds" && input.fullExit,
+        exitRoute: input.kind === "exit_proceeds" ? input.exitRoute?.trim() || null : null,
+        note: input.note?.trim() || null,
+        recordedBy: user.email,
+        recordedAt: now(),
+        lines: plan.map((line) => ({
+          id: id(),
+          holdingId: line.holdingId,
+          investorId: line.investorId,
+          investorName:
+            db.adminInvestors().find((i) => i.id === line.investorId)?.full_name ??
+            db.findUserById(line.investorId)?.email ??
+            `Investor ${line.investorId}`,
+          units: line.units,
+          amount: line.amount,
+          status: "due",
+          paidAt: null,
+          reference: null,
+        })),
+      };
+      workflow.distributions.push(event);
+      recordAudit(
+        user.id,
+        `${user.email} recorded a ${distributionKindLabel(event.kind).toLowerCase()} for ${fund.name}: ${event.lines.length} payments.`,
+      );
+      break;
+    }
+    // LUCA confirms payments from Acclime's advice. The holdings the money belongs to are updated
+    // as each payment is confirmed: the distributions received, and for a full exit the closing.
+    case "confirm-distribution": {
+      role("luca");
+      const event = workflow.distributions.find((e) => e.id === c.id);
+      requireValue(event, "Distribution not found.");
+      const reference = text();
+      const paidAt =
+        c.due && Number.isFinite(Date.parse(c.due)) ? new Date(c.due).toISOString() : now();
+      const lines = event.lines.filter(
+        (l) => l.status === "due" && (c.target === undefined || l.id === c.target),
+      );
+      requireValue(lines.length > 0, "Nothing here is waiting to be paid.");
+      for (const line of lines) {
+        line.status = "processed";
+        line.paidAt = paidAt;
+        line.reference = reference;
+        const holding = db.holdings.find((h) => h.id === line.holdingId);
+        if (!holding) continue;
+        holding.distributions = (Number(holding.distributions) + line.amount).toFixed(2);
+        const exit = event.kind === "exit_proceeds";
+        if (exit)
+          holding.final_proceeds = (Number(holding.final_proceeds ?? 0) + line.amount).toFixed(2);
+        if (exit && event.fullExit) {
+          holding.state = "realized";
+          holding.exit_date = paidAt;
+          holding.exit_type = event.exitRoute ?? "sale";
+          holding.current_nav = holding.final_proceeds ?? holding.current_nav;
+          holding.moic = (Number(holding.distributions) / Number(holding.committed_amount)).toFixed(
+            2,
+          );
+        }
+        const money = `$${line.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        db.sendInvestorMessage(
+          line.investorId,
+          exit && event.fullExit
+            ? `Your ${event.assetName} holding has been realised`
+            : `${distributionKindLabel(event.kind)} paid: ${event.assetName}`,
+          exit && event.fullExit
+            ? `Your holding in ${event.fundName} has been realised and ${money} has been paid to your own bank account. The holding now appears under Realized in your portfolio.`
+            : `${money} has been paid to your own bank account from your holding in ${event.fundName} (${line.units.toLocaleString("en-US")} units). It now appears against the holding in your portfolio.`,
+          "distribution",
+        );
+        db.recordClientEvent(
+          line.investorId,
+          "milestone",
+          `${distributionKindLabel(event.kind)} of ${money} paid for the ${event.assetName} holding.`,
+          user.email,
+          ["luca", "investor"],
+        );
+      }
+      workflow.events.push({
+        id: id(),
+        actorId: user.id,
+        label: `${user.email} confirmed ${lines.length} ${lines.length === 1 ? "payment" : "payments"} for distribution #${event.id} (${reference}).`,
+        at: now(),
+      });
       break;
     }
     case "secondary": {

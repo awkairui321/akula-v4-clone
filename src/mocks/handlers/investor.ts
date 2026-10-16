@@ -35,6 +35,7 @@ import {
   currentVersion,
   disclosureAccess,
   accreditationProofLapsed,
+  workflow,
 } from "../workflow";
 import { attachReferral, submitForReview } from "../onboarding";
 import { createPack } from "../acclime";
@@ -400,7 +401,22 @@ export const investorHandlers = [
     const mine = holdings
       .filter((h) => h.investor_id === user.id)
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      .map(({ investor_id, ...holding }) => holding);
+      .map(({ investor_id, ...holding }) => ({
+        ...holding,
+        // The payments behind the distributions total, newest first.
+        distribution_payments: workflow.distributions
+          .flatMap((event) =>
+            event.lines
+              .filter((line) => line.holdingId === holding.id && line.status === "processed")
+              .map((line) => ({
+                id: line.id,
+                kind: event.kind,
+                amount: line.amount,
+                paid_at: line.paidAt ?? event.recordedAt,
+              })),
+          )
+          .sort((a, b) => b.paid_at.localeCompare(a.paid_at)),
+      }));
     return HttpResponse.json({ holdings: mine });
   }),
 

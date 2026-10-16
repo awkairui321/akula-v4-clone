@@ -448,6 +448,8 @@ function PortfolioHero({
   const gain = navTotal - invested;
   const gainPct = invested ? (gain / invested) * 100 : 0;
   const sign = gain > 0 ? "+" : "";
+  // Cash paid out of every holding, including those already sold.
+  const received = holdings.reduce((sum, h) => sum + numericValue(h.distributions), 0);
 
   if (heldPositions.length === 0) return null;
 
@@ -461,7 +463,9 @@ function PortfolioHero({
       </div>
 
       {/* Primary figures: one row, separated by whitespace rather than boxes */}
-      <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+      <div
+        className={`grid gap-x-8 gap-y-4 ${received > 0 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}
+      >
         <div>
           <p className="text-xs text-muted-foreground">Reported portfolio value</p>
           <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
@@ -487,6 +491,17 @@ function PortfolioHero({
             {gainPct.toFixed(1)}% on invested capital
           </p>
         </div>
+        {received > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground">Distributions received</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
+              {formatPrice(received)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Income, capital returned and exit proceeds
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Trend + updates sit side by side beneath the figures */}
@@ -712,6 +727,12 @@ function LatestUpdates({
 
 /* ─── Issued holdings: smaller cards, NAV + gain only, details in a dropdown ─── */
 
+const PAYMENT_KIND_LABELS: Record<string, string> = {
+  income: "Income distribution",
+  return_of_capital: "Return of capital",
+  exit_proceeds: "Exit proceeds",
+};
+
 function HoldingCard({
   holding,
   portfolioTotal = 0,
@@ -726,6 +747,8 @@ function HoldingCard({
   const gain =
     (realized && holding.final_proceeds ? numericValue(holding.final_proceeds) : nav) - committed;
   const gainPct = committed > 0 ? (gain / committed) * 100 : 0;
+  const received = numericValue(holding.distributions);
+  const payments = holding.distribution_payments ?? [];
 
   const subscribed = holding.subscribed_at
     ? new Date(holding.subscribed_at).toLocaleDateString()
@@ -744,7 +767,7 @@ function HoldingCard({
           className={
             realized
               ? "flex flex-wrap items-center justify-between gap-4"
-              : "grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_7rem_9rem_3rem_3.5rem]"
+              : "grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_7rem_9rem_6.5rem_3rem_3.5rem]"
           }
         >
           <div
@@ -787,6 +810,14 @@ function HoldingCard({
                     {gain >= 0 ? "+" : ""}
                     {formatPrice(gain)} ({gainPct >= 0 ? "+" : ""}
                     {gainPct.toFixed(1)}%)
+                  </p>
+                </div>
+                <div className={`text-right ${received > 0 ? "" : "hidden sm:block"}`}>
+                  <p className="text-[11px] text-muted-foreground sm:hidden">Distributions</p>
+                  <p
+                    className={`text-sm font-medium tabular-nums ${received > 0 ? "" : "text-muted-foreground"}`}
+                  >
+                    {received > 0 ? formatPricePrecise(received) : "—"}
                   </p>
                 </div>
               </>
@@ -858,6 +889,12 @@ function HoldingCard({
                   <p className="font-medium">{holding.units}</p>
                 </div>
               </div>
+              {received > 0 && (
+                <div>
+                  <p className="text-muted-foreground">Distributions received</p>
+                  <p className="font-medium">{formatPricePrecise(received)}</p>
+                </div>
+              )}
               {realized && (
                 <>
                   <div>
@@ -875,6 +912,30 @@ function HoldingCard({
                 </>
               )}
             </div>
+            {payments.length > 0 && (
+              <div className="space-y-1 border-t pt-2">
+                <p className="text-muted-foreground">Payments received</p>
+                <ul className="divide-y">
+                  {payments.map((payment) => (
+                    <li key={payment.id} className="flex justify-between gap-4 py-1.5">
+                      <span>
+                        {PAYMENT_KIND_LABELS[payment.kind] ?? payment.kind}
+                        <span className="ml-2 text-muted-foreground">
+                          {new Date(payment.paid_at).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </span>
+                      <span className="font-medium tabular-nums">
+                        {formatPricePrecise(payment.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="text-muted-foreground">
               Company valuations are context only and are not used by Akula to calculate
               performance. The holding value above is the administrator-reported record.
@@ -953,10 +1014,11 @@ export default function Subscriptions() {
               Issued holdings
             </div>
             {held.length > 0 && (
-              <div className="hidden grid-cols-[minmax(0,1fr)_7rem_9rem_3rem_3.5rem] gap-x-4 text-xs text-muted-foreground sm:grid">
+              <div className="hidden grid-cols-[minmax(0,1fr)_7rem_9rem_6.5rem_3rem_3.5rem] gap-x-4 text-xs text-muted-foreground sm:grid">
                 <span>Company</span>
                 <span className="text-right">Reported value</span>
                 <span className="text-right">Unrealized gain</span>
+                <span className="text-right">Distributions</span>
                 <span className="text-right">Weight</span>
                 <span />
               </div>
