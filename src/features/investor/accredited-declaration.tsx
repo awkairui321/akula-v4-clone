@@ -88,7 +88,9 @@ export default function AccreditedDeclarationPage() {
   });
 
   // Staff and advisers never see this page; someone who already declared this session carries on.
-  if (!user || !entersInvestorPortal(user) || hasDeclared(user.id)) {
+  // Someone whose proof has lapsed is sent back here to renew it, even in the same session.
+  const renewing = new URLSearchParams(location.search).get("renew") === "1";
+  if (!user || !entersInvestorPortal(user) || (hasDeclared(user.id) && !renewing)) {
     return <Navigate to={user ? landingPathForRole(user, activeProfile) : "/login"} replace />;
   }
 
@@ -131,6 +133,13 @@ export default function AccreditedDeclarationPage() {
             Singapore law. Read what this means for you, then tell us how you qualify and upload
             your proof.
           </p>
+
+          {renewing && (
+            <p className="mt-6 max-w-3xl border-l-2 border-amber-600 bg-amber-500/5 px-4 py-3 text-sm leading-6">
+              Your accreditation proof has expired. Upload current documents and confirm your
+              declaration again to continue.
+            </p>
+          )}
 
           <div className="mt-12 grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] lg:gap-16">
             {/* The warning: what the term means and what the investor gives up */}

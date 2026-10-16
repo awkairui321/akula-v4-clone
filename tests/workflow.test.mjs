@@ -3417,3 +3417,96 @@ test("eligibility, NDA and consents: caught before a subscription starts, and at
     200,
   );
 });
+
+test("an expired accreditation proof stops a subscription and an allocation, not the verification of funds", async () => {
+  const readiness = await import("../.test-runtime/src/lib/subscription-readiness.mjs");
+  const lapsed = readiness.readinessIssues({
+    kyc_status: "approved",
+    nda_status: "signed",
+    missing_consents: [],
+    accreditation_lapsed: true,
+  });
+  assert.deepEqual(
+    lapsed.map((i) => i.key),
+    ["accreditation"],
+  );
+  assert.equal(lapsed[0].to, "/accredited-investor?renew=1");
+
+  const proof = (investorId, kinds, at) => {
+    db.verificationDocumentsByInvestor[investorId] = kinds.map((document_type) => ({
+      id: db.nextDocumentId(),
+      document_type,
+      status: "pending",
+      notes: `${document_type}.pdf`,
+      has_file: true,
+      created_at: at,
+    }));
+  };
+  const monthsAgo = (n) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - n);
+    return d.toISOString();
+  };
+  const kinds = ["notice_of_assessment", "source_of_wealth"];
+
+  // Starting a subscription: no declaration on record is not held up; a lapsed proof is.
+  const user = investor();
+  const ready = async () => (await request("investor/subscription_readiness", user)).json();
+  assert.equal((await ready()).ready, true, "no declaration on record");
+  db.recordAccreditedDeclaration(user.id, "income", kinds);
+  proof(user.id, kinds, monthsAgo(1));
+  assert.equal((await ready()).ready, true, "current proof");
+  proof(user.id, kinds, monthsAgo(7));
+  const stale = await ready();
+  assert.deepEqual(
+    stale.issues.map((i) => i.key),
+    ["accreditation"],
+  );
+  const attempt = await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" });
+  assert.equal(attempt.status, 422);
+  assert.match((await attempt.json()).error, /accreditation proof has expired/);
+  proof(user.id, kinds, monthsAgo(0));
+  assert.equal((await ready()).ready, true, "renewed proof");
+
+  // Confirming an allocation: the proof lapsed while the funds were in.
+  const s = funded();
+  const owner = db.users.find((u) => u.id === s.investor_id);
+  db.recordAccreditedDeclaration(owner.id, "income", kinds);
+  proof(owner.id, kinds, monthsAgo(8));
+  const live = async () =>
+    (await (await request("workflows", manager())).json()).subscriptions.find((x) => x.id === s.id);
+  let view = await live();
+  assert.ok(!view.verificationBlockers.some((b) => /accreditation proof/.test(b)));
+  assert.ok(view.allocationBlockers.some((b) => /accreditation proof has expired/.test(b)));
+  const command = (body) => request("workflows", manager(), "POST", { id: s.id, ...body });
+  assert.equal((await command({ type: "verify-funds" })).status, 200);
+  const terms = w.allocationTerms(db.findSubscriptionById(s.id));
+  const stopped = await command({ type: "allocate", amount: terms.capital, price: terms.price });
+  assert.equal(stopped.status, 422);
+  assert.match((await stopped.json()).error, /accreditation proof has expired/);
+  proof(owner.id, kinds, monthsAgo(0));
+  assert.equal(
+    (await command({ type: "allocate", amount: terms.capital, price: terms.price })).status,
+    200,
+  );
+});
+
+test("the Fund Manager sees Acclime's acceptance of the investor once it is recorded", async () => {
+  const s = funded();
+  const view = async () =>
+    (await (await request("workflows", manager())).json()).subscriptions.find((x) => x.id === s.id);
+  assert.equal((await view()).acclimeDueDiligence, null, "nothing recorded yet");
+  const sent = await request("admin/acclime/messages", manager(), "POST", {
+    type: "cdd_result",
+    payload: { payment_reference: s.payment_reference, result: "pass" },
+  });
+  assert.equal(sent.status, 201);
+  const accepted = (await view()).acclimeDueDiligence;
+  assert.equal(accepted.result, "pass");
+  assert.ok(accepted.at);
+  await request("admin/acclime/messages", manager(), "POST", {
+    type: "cdd_result",
+    payload: { payment_reference: s.payment_reference, result: "fail", note: "Adverse media" },
+  });
+  assert.equal((await view()).acclimeDueDiligence.result, "fail");
+});

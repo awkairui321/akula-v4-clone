@@ -1,3 +1,4 @@
+import { missingEvidence } from "../lib/accredited-evidence";
 import { mayDiscover, hasInvestmentHistory, setPublishedAudienceReader } from "./investor-access";
 import { audienceIncludes } from "../lib/investor-access";
 import { missingTransferFields } from "../lib/offering";
@@ -40,6 +41,19 @@ export const id = () => ++workflow.sequence;
 export const round = (n: number) => Math.round(n * 100) / 100;
 function requireValue(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
+}
+/**
+ * Whether the proof behind the investor's accredited investor declaration is no longer current.
+ * An investor who declared before proof was collected has no declaration on record, and is not
+ * held up by this.
+ */
+export function accreditationProofLapsed(investorId: number): boolean {
+  const declaration = db.latestAccreditedDeclaration(investorId);
+  if (!declaration) return false;
+  return (
+    missingEvidence(declaration.basis, db.verificationDocumentsByInvestor[investorId] ?? [])
+      .length > 0
+  );
 }
 export function disclosureAccess(user: db.MockUser) {
   return (
@@ -574,6 +588,10 @@ export function investmentBlockers(
   const investor = db.findUserById(s.investor_id);
   if (!forFundsVerification && (!investor || !disclosureAccess(investor)))
     blockers.push("Investor eligibility, NDA and required consents must remain approved.");
+  if (!forFundsVerification && accreditationProofLapsed(s.investor_id))
+    blockers.push(
+      "The investor's accreditation proof has expired. Current documents are needed before the allocation can be confirmed.",
+    );
   if (!workflow.signatures.some((signature) => signature.subscriptionId === s.id))
     blockers.push("Investor must complete the subscription signature first.");
   if (s.on_hold) blockers.push("LUCA has placed this subscription on hold.");
@@ -732,6 +750,7 @@ export function view(user: db.MockUser): WorkflowView {
       holdingId: s._convertedToHoldingId,
       currency: s.currency,
       needsReview: s.needs_review_version_id,
+      acclimeDueDiligence: s.cdd ? { result: s.cdd.result, at: s.cdd.at, note: s.cdd.note } : null,
       fundsVerified: db.gatesOf(s).funds_verified,
       allocationConfirmed: db.gatesOf(s).allocation_confirmed,
       verificationBlockers: [

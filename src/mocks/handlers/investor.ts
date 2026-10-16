@@ -34,6 +34,7 @@ import {
   requestWithdrawal,
   currentVersion,
   disclosureAccess,
+  accreditationProofLapsed,
 } from "../workflow";
 import { attachReferral, submitForReview } from "../onboarding";
 import { createPack } from "../acclime";
@@ -89,6 +90,7 @@ function subscriptionIssues(user: NonNullable<ReturnType<typeof currentUser>>) {
     missing_consents: consentsForUser(user.id)
       .filter((c) => c.required && !c.granted)
       .map((c) => c.title),
+    accreditation_lapsed: accreditationProofLapsed(user.id),
   });
 }
 

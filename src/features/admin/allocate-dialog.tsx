@@ -12,6 +12,23 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+/** Whether Acclime, the fund administrator, has accepted this investor into the fund. */
+function AcclimeAcceptance({
+  result,
+}: {
+  result: { result: "pass" | "fail" | "more_documents"; at: string } | null;
+}) {
+  if (result?.result === "pass")
+    return <span className="text-green-700">Accepted · {shortDate(result.at)}</span>;
+  if (result?.result === "fail") return <span className="text-destructive">Not accepted</span>;
+  if (result?.result === "more_documents")
+    return <span className="text-amber-700">Further documents requested</span>;
+  return <span className="text-amber-700">Awaiting confirmation</span>;
+}
+
 /**
  * The allocation decision for one subscription: confirm it, or decline it and return the funds.
  * Both go to Akula Ops (issue the holding, or return the money) and to the investor.
@@ -91,6 +108,10 @@ export function AllocateDialog({
               ...(declining
                 ? []
                 : [
+                    {
+                      label: "Acclime acceptance",
+                      value: <AcclimeAcceptance result={live?.acclimeDueDiligence ?? null} />,
+                    },
                     {
                       label: "Class unit price",
                       value: unitPrice > 0 ? formatPricePrecise(unitPrice) : "—",

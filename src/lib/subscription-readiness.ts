@@ -6,7 +6,7 @@
  */
 
 export type ReadinessIssue = {
-  key: "identity" | "nda" | "consents";
+  key: "identity" | "accreditation" | "nda" | "consents";
   title: string;
   detail: string;
   /** What the investor does about it, and where. */
@@ -19,6 +19,8 @@ export function readinessIssues(input: {
   nda_status: string;
   /** Titles of the required consents that are not granted. */
   missing_consents: string[];
+  /** The proof behind their accredited investor declaration has passed its validity period. */
+  accreditation_lapsed?: boolean;
 }): ReadinessIssue[] {
   const issues: ReadinessIssue[] = [];
 
@@ -39,6 +41,17 @@ export function readinessIssues(input: {
           : "Complete identity verification so LUCA can approve your account.",
       action: pending || failed ? "Open messages" : "Verify identity",
       to: pending || failed ? "/messages" : "/onboarding/kyc",
+    });
+  }
+
+  if (input.accreditation_lapsed) {
+    issues.push({
+      key: "accreditation",
+      title: "Your accreditation proof has expired",
+      detail:
+        "Upload current documents so LUCA can confirm that you are still an accredited investor.",
+      action: "Upload new proof",
+      to: "/accredited-investor?renew=1",
     });
   }
 

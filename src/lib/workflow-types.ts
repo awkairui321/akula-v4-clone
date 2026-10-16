@@ -200,6 +200,12 @@ export type WorkflowView = WorkflowState & {
     /** LUCA's two decisions, recorded only in LUCA's console. */
     /** Where the refund stands, once the subscription has ended without acceptance. */
     refund?: RefundSummary | null;
+    /** Acclime's due diligence result, which is its acceptance of the investor into the fund. */
+    acclimeDueDiligence?: {
+      result: "pass" | "fail" | "more_documents";
+      at: string;
+      note: string | null;
+    } | null;
     fundsVerified?: GateEvent | null;
     allocationConfirmed?: GateEvent | null;
     /** What stops the funds being verified. Eligibility is checked later, at allocation. */
