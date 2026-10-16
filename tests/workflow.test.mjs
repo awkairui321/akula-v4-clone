@@ -1403,6 +1403,13 @@ test("custom commercial fee is displayed, saved and retained through allocation 
   await request("demo/investor-segment", user, "PATCH", { segment: "independent" });
   const displayed = (await (await request("funds/1", user)).json()).fund;
   assert.equal(Number(displayed.subscription_fee_pct), 3.5);
+  // Subscriptions move in steps of $1,000.
+  for (const amount of ["25500", "25000.50"])
+    assert.equal(
+      (await request("subscriptions", user, "POST", { fund_id: 1, amount })).status,
+      422,
+      amount,
+    );
   const response = await request("subscriptions", user, "POST", { fund_id: 1, amount: "25000" });
   assert.equal(response.status, 200);
   const created = (await response.json()).subscription;
@@ -2753,11 +2760,19 @@ test("investor-facing status wording, offering defaults and US$ amounts", async 
   );
   assert.match(offering.disclaimerText(), /funds offered on this platform/);
 
-  assert.equal(currency.formatUsdPrecise(25000), "$25,000.00");
-  assert.equal(currency.formatUsdCode(25000), "USD 25,000.00");
-  assert.equal(currency.formatUsdPrecise("1234567.5"), "$1,234,567.50");
-  assert.equal(currency.formatAmountInput("25000"), "25,000.00");
-  assert.equal(currency.formatAmountInput("25000.5"), "25,000.50");
+  // No cents on amounts; only distributions and per-unit rates carry them.
+  assert.equal(currency.formatUsdPrecise(25000), "$25,000");
+  assert.equal(currency.formatUsdCode(25000), "USD 25,000");
+  assert.equal(currency.formatUsdPrecise("1234567.5"), "$1,234,568");
+  assert.equal(currency.formatPricePrecise(338.13), "$338");
+  assert.equal(currency.formatPriceCents(338.13), "$338.13");
+  assert.equal(currency.formatAmountInput("25000"), "25,000");
+  assert.equal(currency.formatPct("2"), "2.0%");
+  assert.equal(currency.formatPct(1.55), "1.6%");
+  assert.equal(currency.formatPct(null), "—");
+  assert.equal(currency.isWholeThousands(26000), true);
+  assert.equal(currency.isWholeThousands(25500), false);
+  assert.equal(currency.isWholeThousands(25000.5), false);
   assert.equal(currency.formatAmountInput(""), "");
 });
 

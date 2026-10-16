@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/auth-context";
+import { formatPct, isWholeThousands, SUBSCRIPTION_STEP } from "@/lib/currency";
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -717,16 +718,23 @@ function qualityGate(draft: Draft): Check[] {
       status: "pass",
     },
     {
-      label: "Minimum investment is a sane positive amount",
+      label: "Minimum, maximum and increment are positive amounts in steps of $1,000",
       status: check(
         Number(draft.min_subscription) > 0 &&
+          [draft.min_subscription, draft.max_subscription, draft.subscription_increment]
+            .filter((v) => v.trim() !== "")
+            .every((v) => isWholeThousands(Number(v))) &&
           (draft.max_subscription.trim() === "" ||
             Number(draft.max_subscription) >= Number(draft.min_subscription)),
       ),
     },
     {
-      label: "Fee components within sane bounds",
-      status: check(fees.every((fee) => fee >= 0 && fee <= 30) && Number(fees[0]) <= 10),
+      label: "Fee components within sane bounds, to one decimal place",
+      status: check(
+        fees.every(
+          (fee) => fee >= 0 && fee <= 30 && Math.abs(fee * 10 - Math.round(fee * 10)) < 1e-9,
+        ) && Number(fees[0]) <= 10,
+      ),
     },
     {
       label: "No pooling, marketplace or guaranteed early-exit language",
@@ -825,18 +833,21 @@ function TextField({
   value,
   onChange,
   type = "text",
+  step,
   hint,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  step?: number;
   hint?: string;
 }) {
   return (
     <Field label={label} hint={hint}>
       <Input
         type={type}
+        step={step}
         className="h-10 text-base md:text-sm"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -1360,6 +1371,7 @@ export default function PublishedDealEditor({
                   <TextField
                     label="Minimum investment"
                     type="number"
+                    step={SUBSCRIPTION_STEP}
                     value={draft.min_subscription}
                     onChange={(v) => set("min_subscription", v)}
                     hint="Minimum ticket per investor, in USD."
@@ -1367,6 +1379,7 @@ export default function PublishedDealEditor({
                   <TextField
                     label="Maximum investment"
                     type="number"
+                    step={SUBSCRIPTION_STEP}
                     value={draft.max_subscription}
                     onChange={(v) => set("max_subscription", v)}
                     hint="Optional — leave blank for no cap."
@@ -1411,6 +1424,7 @@ export default function PublishedDealEditor({
                   <TextField
                     label="Increment"
                     type="number"
+                    step={SUBSCRIPTION_STEP}
                     value={draft.subscription_increment}
                     onChange={(v) => set("subscription_increment", v)}
                     hint="Ticket step above the minimum."
@@ -1498,30 +1512,33 @@ export default function PublishedDealEditor({
                   <TextField
                     label="Subscription fee %"
                     type="number"
+                    step={0.1}
                     value={draft.subscription_fee_pct}
                     onChange={(v) => set("subscription_fee_pct", v)}
                   />
                   <TextField
                     label="Annual management fee %"
                     type="number"
+                    step={0.1}
                     value={draft.management_fee_pct}
                     onChange={(v) => set("management_fee_pct", v)}
                   />
                   <TextField
                     label="Carried interest %"
                     type="number"
+                    step={0.1}
                     value={draft.carried_interest_pct}
                     onChange={(v) => set("carried_interest_pct", v)}
                   />
                 </div>
                 {legacyAudience && (
                   <p className="text-xs text-muted-foreground">
-                    Partner-referred investors pay a {draft.subscription_fee_pct || "0"}%
+                    Partner-referred investors pay a {formatPct(draft.subscription_fee_pct || 0)}{" "}
                     subscription fee. Independent investors pay{" "}
                     {Number.isFinite(Number(draft.subscription_fee_pct))
-                      ? Number(draft.subscription_fee_pct) + 1
+                      ? formatPct(Number(draft.subscription_fee_pct) + 1)
                       : "—"}
-                    %, one percentage point more.
+                    , one percentage point more.
                   </p>
                 )}
               </Group>

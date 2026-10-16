@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { formatPrice } from "@/lib/currency";
+import { formatPrice, formatPct } from "@/lib/currency";
 import type { EamRevenueData } from "./types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -147,7 +147,7 @@ export default function RevenuePage() {
                     <span className="text-sm">Client subscription fee</span>
                     <span className="text-sm font-medium">
                       {data.client_subscription_fee_pct != null
-                        ? `${data.client_subscription_fee_pct}% upfront`
+                        ? `${formatPct(data.client_subscription_fee_pct)} upfront`
                         : "—"}
                     </span>
                   </div>
@@ -155,7 +155,7 @@ export default function RevenuePage() {
                     <span className="text-sm">EAM revenue share</span>
                     <span className="text-sm font-medium">
                       {data.revenue_share_pct != null
-                        ? `${data.revenue_share_pct}% of client fee`
+                        ? `${formatPct(data.revenue_share_pct)} of client fee`
                         : "—"}
                     </span>
                   </div>

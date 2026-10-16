@@ -9,7 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StepTracker, type StepState } from "@/components/ui/step-tracker";
-import { formatAmountInput, formatUsdPrecise, numericValue } from "@/lib/currency";
+import {
+  formatAmountInput,
+  formatPct,
+  formatUsdPrecise,
+  isWholeThousands,
+  numericValue,
+  SUBSCRIPTION_STEP,
+} from "@/lib/currency";
 import {
   FEE_FOOTNOTE,
   INVESTMENT_DESCRIPTION,
@@ -175,7 +182,7 @@ function CopyableRow({ label, value, mono }: { label: string; value: string; mon
 // Step 1: Amount
 // ---------------------------------------------------------------------------
 
-const pct = (value: string | number) => `${Number(value).toFixed(2)}%`;
+const pct = formatPct;
 
 /** What is wrong with an amount, in words, or null when it can be subscribed. */
 function amountProblem(fund: Fund, amount: number): string | null {
@@ -185,16 +192,17 @@ function amountProblem(fund: Fund, amount: number): string | null {
   if (!(amount > 0)) return "Enter the amount you wish to subscribe.";
   if (amount < min) return `The minimum subscription is ${formatUsdPrecise(min)}.`;
   if (max !== null && amount > max) return `The maximum subscription is ${formatUsdPrecise(max)}.`;
+  if (!isWholeThousands(amount))
+    return `Subscriptions are in multiples of ${formatUsdPrecise(SUBSCRIPTION_STEP)}.`;
   if (step > 0 && Math.abs((amount - min) / step - Math.round((amount - min) / step)) > 1e-6)
     return `Subscriptions above the minimum are in multiples of ${formatUsdPrecise(step)}.`;
   return null;
 }
 
-/** Digits and one decimal point, at most two decimals: what an amount field will accept. */
+/** Whole dollars only: what an amount field will accept. */
 function cleanAmountText(value: string): string {
-  const stripped = value.replace(/[^0-9.]/g, "");
-  const [whole, ...rest] = stripped.split(".");
-  return rest.length ? `${whole}.${rest.join("").slice(0, 2)}` : whole;
+  // Anything after a decimal point is dropped rather than run into the dollars.
+  return value.split(".")[0].replace(/[^0-9]/g, "");
 }
 
 function AmountStep({
@@ -244,7 +252,7 @@ function AmountStep({
             <div className="relative">
               <Input
                 id="checkout-amount"
-                inputMode="decimal"
+                inputMode="numeric"
                 autoComplete="off"
                 className="tabular-nums"
                 value={text}
@@ -267,8 +275,8 @@ function AmountStep({
             ) : (
               <p className="text-xs text-muted-foreground">
                 Minimum {formatUsdPrecise(minSub)}
-                {maxSub !== null && ` · Maximum ${formatUsdPrecise(maxSub)}`} · Subject to
-                availability
+                {maxSub !== null && ` · Maximum ${formatUsdPrecise(maxSub)}`} · In steps of{" "}
+                {formatUsdPrecise(SUBSCRIPTION_STEP)} · Subject to availability
               </p>
             )}
           </div>

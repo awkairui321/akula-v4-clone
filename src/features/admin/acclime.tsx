@@ -5,7 +5,7 @@ import { CheckIcon, ChevronRightIcon, MinusIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
-import { formatPricePrecise } from "@/lib/currency";
+import { formatPricePrecise, formatPriceCents } from "@/lib/currency";
 import {
   ACCLIME_MESSAGE_TYPES,
   ACCLIME_STATUS_LABELS,
@@ -765,7 +765,7 @@ export default function AcclimePage() {
                       timeZone: "UTC",
                     })}
                   </span>
-                  <span className="tabular-nums">{formatPricePrecise(r.navPerUnit)} per unit</span>
+                  <span className="tabular-nums">{formatPriceCents(r.navPerUnit)} per unit</span>
                   <span className="text-muted-foreground">
                     {r.holdingsUpdated} holding{r.holdingsUpdated === 1 ? "" : "s"} updated
                   </span>

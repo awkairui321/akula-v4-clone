@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
-import { formatPricePrecise } from "@/lib/currency";
+import { formatPriceCents, formatPrice } from "@/lib/currency";
 import { REFUND_STATUS_LABELS } from "@/lib/acclime";
 import {
   DISTRIBUTION_KINDS,
@@ -118,7 +118,7 @@ export default function PaymentsOutPage() {
         <div>
           <dt className="text-xs text-muted-foreground">Waiting to be paid</dt>
           <dd className="mt-1 text-2xl font-semibold tabular-nums">
-            {formatPricePrecise(waitingTotal)}
+            {formatPriceCents(waitingTotal)}
           </dd>
           <dd className="mt-0.5 text-xs text-muted-foreground">
             {waitingCount === 0
@@ -131,18 +131,18 @@ export default function PaymentsOutPage() {
           <dd className="mt-1 space-y-0.5 text-sm tabular-nums">
             <p className="flex justify-between gap-4">
               <span className="text-muted-foreground">Refunds</span>
-              <span className="font-medium">{formatPricePrecise(refundsDueTotal)}</span>
+              <span className="font-medium">{formatPrice(refundsDueTotal)}</span>
             </p>
             <p className="flex justify-between gap-4">
               <span className="text-muted-foreground">Distributions</span>
-              <span className="font-medium">{formatPricePrecise(distributionsOwed)}</span>
+              <span className="font-medium">{formatPriceCents(distributionsOwed)}</span>
             </p>
           </dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Paid out to date</dt>
           <dd className="mt-1 text-2xl font-semibold tabular-nums">
-            {formatPricePrecise(paidTotal)}
+            {formatPriceCents(paidTotal)}
           </dd>
           <dd className="mt-0.5 text-xs text-muted-foreground">Refunds and distributions</dd>
         </div>
@@ -240,7 +240,7 @@ function RefundRow({ subscription: s }: { subscription: WorkflowView["subscripti
         Refund · {REFUND_REASONS[s.status] ?? s.status}
       </p>
       <p className="text-sm font-semibold tabular-nums lg:text-right">
-        {formatPricePrecise(refund.amount)}
+        {formatPrice(refund.amount)}
       </p>
       <div>
         <p
@@ -293,7 +293,7 @@ function EventBlock({
             {distributionKindLabel(event.kind)} · {event.fundName}
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {formatPricePrecise(event.perUnit)} per unit · record date {day(event.recordDate)}
+            {formatPriceCents(event.perUnit)} per unit · record date {day(event.recordDate)}
             {event.kind === "exit_proceeds" &&
               (event.fullExit
                 ? ` · full exit${event.exitRoute ? ` (${event.exitRoute})` : ""}, closes the holdings`
@@ -303,7 +303,7 @@ function EventBlock({
         </div>
         <div className="flex items-center gap-4">
           <p className="text-right text-sm tabular-nums">
-            <span className="font-semibold">{formatPricePrecise(totals.total)}</span>
+            <span className="font-semibold">{formatPriceCents(totals.total)}</span>
             <span className="ml-2 text-xs text-muted-foreground">
               {totals.paidCount} of {totals.count} paid
             </span>
@@ -333,7 +333,7 @@ function EventBlock({
               {line.units.toLocaleString("en-US")} units
             </p>
             <p className="text-sm font-semibold tabular-nums lg:text-right">
-              {formatPricePrecise(line.amount)}
+              {formatPriceCents(line.amount)}
             </p>
             <div>
               <p
@@ -514,12 +514,12 @@ function RecordDistributionDialog({ view, onClose }: { view: WorkflowView; onClo
                 label: "Units",
                 value: plan.reduce((n, l) => n + l.units, 0).toLocaleString("en-US"),
               },
-              { label: "Total to pay", value: formatPricePrecise(total) },
+              { label: "Total to pay", value: formatPriceCents(total) },
               ...(exit && fullExit && committed > 0
                 ? [
                     {
                       label: "Capital these holders invested",
-                      value: formatPricePrecise(committed),
+                      value: formatPrice(committed),
                     },
                     {
                       label: "Proceeds against invested capital",
@@ -602,7 +602,7 @@ function ConfirmPaymentDialog({
                 label: line ? "Investor" : "Investors",
                 value: line ? line.investorName : due.length,
               },
-              { label: "Amount", value: formatPricePrecise(total) },
+              { label: "Amount", value: formatPriceCents(total) },
               { label: "Paid to", value: "Each investor's own bank account" },
             ]}
           />

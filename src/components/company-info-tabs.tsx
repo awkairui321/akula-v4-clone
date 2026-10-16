@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { formatPricePrecise } from "@/lib/currency";
+import { formatPriceCents } from "@/lib/currency";
 import {
   ShieldAlertIcon,
   TrendingUpIcon,
@@ -418,7 +418,7 @@ function FinancialsTab({ fund }: { fund: Fund }) {
                 </>
               )}
               <span className="text-muted-foreground">Price per share</span>
-              <span className="text-right font-medium">{formatPricePrecise(fund.price)}</span>
+              <span className="text-right font-medium">{formatPriceCents(fund.price)}</span>
             </div>
           </CardContent>
         </Card>

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { formatPricePrecise } from "@/lib/currency";
+import { formatPriceCents } from "@/lib/currency";
 
 type TickerItem = {
   asset_name: string;
@@ -17,7 +17,7 @@ function TickerItemDisplay({ item }: { item: TickerItem }) {
     <span className="inline-flex items-center gap-2 px-6 whitespace-nowrap">
       <span className="font-semibold text-foreground">{item.asset_name}</span>
       <span className="text-xs text-muted-foreground uppercase">{item.class_type}</span>
-      <span className="font-mono text-foreground">{formatPricePrecise(item.price_per_share)}</span>
+      <span className="font-mono text-foreground">{formatPriceCents(item.price_per_share)}</span>
     </span>
   );
 }

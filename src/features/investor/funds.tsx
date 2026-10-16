@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { formatPrice, formatPriceCompact, formatPricePrecise } from "@/lib/currency";
+import { formatPrice, formatPriceCompact, formatPricePrecise, formatPct } from "@/lib/currency";
 import { ArrowRightIcon, ClockIcon, SearchIcon, CompassIcon } from "lucide-react";
 import "./opportunities.css";
 
@@ -90,7 +90,9 @@ function FundCard({ fund }: { fund: Fund }) {
             {fund.eligible_segments && (
               <>
                 <span className="text-muted-foreground">Subscription fee</span>
-                <span className="text-right font-medium">{fund.subscription_fee_pct}%</span>
+                <span className="text-right font-medium">
+                  {formatPct(fund.subscription_fee_pct)}
+                </span>
               </>
             )}
           </div>

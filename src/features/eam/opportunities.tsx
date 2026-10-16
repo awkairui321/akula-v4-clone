@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { formatPrice, formatPricePrecise } from "@/lib/currency";
+import { formatPrice, formatPricePrecise, formatPct } from "@/lib/currency";
 import { SECTOR_LABELS, STAGE_LABELS } from "@/lib/types";
 import type { EamFund, AdviserClient } from "./types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -136,9 +136,7 @@ function TermGrid({ fund }: { fund: EamFund }) {
       </div>
       <div>
         <p className="text-xs text-muted-foreground">Upfront fee</p>
-        <p className="text-sm font-medium">
-          {fund.subscription_fee_pct ? `${fund.subscription_fee_pct}%` : "—"}
-        </p>
+        <p className="text-sm font-medium">{formatPct(fund.subscription_fee_pct)}</p>
       </div>
     </div>
   );

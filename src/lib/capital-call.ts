@@ -61,7 +61,7 @@ export function buildCapitalCall(input: {
     purpose: `The capital called under this notice will be used to fund the acquisition of an interest in ${(asset.legal_name ?? asset.name).replace(/\.$/, "")}. ${asset.description}${founded}`,
     investor_name: input.investorName,
     commitment: input.amount,
-    fee_label: `Placement Fee (${Number(feePct.toFixed(2))}%)`,
+    fee_label: `Placement Fee (${feePct.toFixed(1)}%)`,
     fee: input.fee,
     amount_due: (Number(input.amount) + Number(input.fee)).toFixed(2),
     wire_reference: input.paymentReference,

@@ -8,7 +8,13 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { SECTOR_LABELS, STAGE_LABELS } from "@/lib/types";
 import type { Asset, Document, Fund } from "@/lib/types";
-import { formatPrice, formatPricePrecise } from "@/lib/currency";
+import {
+  formatPrice,
+  formatPricePrecise,
+  formatPct,
+  isWholeThousands,
+  SUBSCRIPTION_STEP,
+} from "@/lib/currency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -819,11 +825,11 @@ function TermsPanel({ fund, showFees = true }: { fund: Fund; showFees?: boolean 
           <div className="space-y-1.5">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subscription fee</span>
-              <span>{fund.subscription_fee_pct}%</span>
+              <span>{formatPct(fund.subscription_fee_pct)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Management fee</span>
-              <span>{fund.management_fee_pct}% p.a.</span>
+              <span>{formatPct(fund.management_fee_pct)} p.a.</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Carried interest</span>
@@ -848,7 +854,8 @@ function SubscribeCalculator({ fund }: { fund: Fund }) {
   const maxSub = fund.max_subscription ? parseFloat(fund.max_subscription) : null;
   const feePct = parseFloat(fund.subscription_fee_pct);
   const fee = numAmount * (feePct / 100);
-  const valid = numAmount >= minSub && (!maxSub || numAmount <= maxSub);
+  const valid =
+    numAmount >= minSub && (!maxSub || numAmount <= maxSub) && isWholeThousands(numAmount);
 
   if (fund.investor_access && !fund.investor_access.canSubscribe) {
     // A subscription already under way can still be finished; a new one cannot be started.
@@ -897,11 +904,12 @@ function SubscribeCalculator({ fund }: { fund: Fund }) {
         onChange={(e) => setAmount(e.target.value)}
         min={fund.min_subscription}
         max={fund.max_subscription ?? undefined}
-        step="1000"
+        step={SUBSCRIPTION_STEP}
       />
       <p className="text-xs text-muted-foreground">
         Min {formatPricePrecise(fund.min_subscription)}
-        {fund.max_subscription && ` · Max ${formatPricePrecise(fund.max_subscription)}`}
+        {fund.max_subscription && ` · Max ${formatPricePrecise(fund.max_subscription)}`} · in steps
+        of {formatPricePrecise(SUBSCRIPTION_STEP)}
       </p>
       <div className="space-y-1 rounded-lg border p-2.5 text-sm">
         <div className="flex justify-between">
@@ -909,7 +917,9 @@ function SubscribeCalculator({ fund }: { fund: Fund }) {
           <span>{valid ? formatPricePrecise(numAmount) : "—"}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Fee ({fund.subscription_fee_pct}%)</span>
+          <span className="text-muted-foreground">
+            Fee ({formatPct(fund.subscription_fee_pct)})
+          </span>
           <span>{valid ? formatPricePrecise(fee) : "—"}</span>
         </div>
         <div className="flex justify-between border-t pt-1 font-medium">

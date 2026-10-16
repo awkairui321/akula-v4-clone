@@ -5,7 +5,7 @@ import { ArrowLeftIcon, PlusIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { SECTOR_LABELS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
-import { formatPrice, formatPricePrecise } from "@/lib/currency";
+import { formatPrice, formatPct, formatPriceCents } from "@/lib/currency";
 import { fundAudienceLabel } from "@/lib/investor-access";
 import { useAuth } from "@/contexts/auth-context";
 import { DEAL_DOCUMENT_KINDS } from "@/lib/types";
@@ -274,12 +274,14 @@ export default function ProjectPage() {
                     ].map(([label, fee]) => (
                       <div key={label}>
                         <dt className="text-xs text-muted-foreground">{label}</dt>
-                        <dd className="mt-1 text-lg font-semibold tabular-nums">{fee}%</dd>
+                        <dd className="mt-1 text-lg font-semibold tabular-nums">
+                          {formatPct(fee)}
+                        </dd>
                       </div>
                     ))}
                   </dl>
                   <p className="text-xs text-muted-foreground">
-                    {formatPricePrecise(fund.price)} / unit · Minimum{" "}
+                    {formatPriceCents(fund.price)} / unit · Minimum{" "}
                     {formatPrice(fund.min_subscription)} · {formatClose(daysUntil(fund.closes_at))}
                   </p>
                   <div className="min-h-36 space-y-2">

@@ -241,7 +241,7 @@ function NewDealDialog({
         )}
 
         <p className="mt-3.5 rounded-lg border bg-muted p-4 text-xs text-muted-foreground">
-          Defaults to LUCA SGP as fund manager, {formatPrice(25000)} minimum, 4% upfront fee.
+          Defaults to LUCA SGP as fund manager, {formatPrice(25000)} minimum, 4.0% upfront fee.
           Complete the rest in the published-deal editor.
         </p>
 

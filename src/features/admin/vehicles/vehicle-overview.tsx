@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { SECTOR_LABELS, DEAL_DOCUMENT_KINDS } from "@/lib/types";
 import type { Fund } from "@/lib/types";
 import type { AdminDocument, SubscriptionsResponse } from "../types";
-import { formatPrice, formatPricePrecise } from "@/lib/currency";
+import { formatPrice, formatPct, formatPriceCents } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -250,7 +250,7 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           <div>
             <p className="text-xs text-muted-foreground">Price / unit</p>
             <p className="mt-1 text-xl font-semibold tabular-nums">
-              {formatPricePrecise(fund.price)}
+              {formatPriceCents(fund.price)}
             </p>
           </div>
           <div>
@@ -262,7 +262,7 @@ function DealWorkspace({ fund }: { fund: Fund }) {
           <div>
             <p className="text-xs text-muted-foreground">Fees</p>
             <p className="mt-1 text-xl font-semibold tabular-nums">
-              {fund.subscription_fee_pct}% · {fund.management_fee_pct}% ·{" "}
+              {formatPct(fund.subscription_fee_pct)} · {formatPct(fund.management_fee_pct)} ·{" "}
               {fund.carried_interest_pct}%
             </p>
             <p className="mt-1 text-xs text-muted-foreground">Subscription · management · carry</p>

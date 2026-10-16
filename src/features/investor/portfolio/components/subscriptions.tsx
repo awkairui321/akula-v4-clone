@@ -6,7 +6,7 @@ import type { Subscription, Holding, Fund } from "@/lib/types";
 import { CLOSED_SUBSCRIPTION_STATUSES } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatPrice, formatPricePrecise, numericValue } from "@/lib/currency";
+import { formatPrice, formatPriceCents, formatPricePrecise, numericValue } from "@/lib/currency";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
 /* ─── RM highlight (an adviser's recommendation for this investor) ─── */
@@ -495,7 +495,7 @@ function PortfolioHero({
           <div>
             <p className="text-xs text-muted-foreground">Distributions received</p>
             <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
-              {formatPrice(received)}
+              {formatPriceCents(received)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               Income, capital returned and exit proceeds
@@ -787,7 +787,7 @@ function HoldingCard({
                 <div className="text-right">
                   <p className="text-[11px] text-muted-foreground">Final proceeds</p>
                   <p className="text-sm font-medium tabular-nums">
-                    {holding.final_proceeds ? formatPricePrecise(holding.final_proceeds) : "—"}
+                    {holding.final_proceeds ? formatPriceCents(holding.final_proceeds) : "—"}
                   </p>
                 </div>
                 <div className="text-right">
@@ -817,7 +817,7 @@ function HoldingCard({
                   <p
                     className={`text-sm font-medium tabular-nums ${received > 0 ? "" : "text-muted-foreground"}`}
                   >
-                    {received > 0 ? formatPricePrecise(received) : "—"}
+                    {received > 0 ? formatPriceCents(received) : "—"}
                   </p>
                 </div>
               </>
@@ -892,7 +892,7 @@ function HoldingCard({
               {received > 0 && (
                 <div>
                   <p className="text-muted-foreground">Distributions received</p>
-                  <p className="font-medium">{formatPricePrecise(received)}</p>
+                  <p className="font-medium">{formatPriceCents(received)}</p>
                 </div>
               )}
               {realized && (
@@ -929,7 +929,7 @@ function HoldingCard({
                         </span>
                       </span>
                       <span className="font-medium tabular-nums">
-                        {formatPricePrecise(payment.amount)}
+                        {formatPriceCents(payment.amount)}
                       </span>
                     </li>
                   ))}

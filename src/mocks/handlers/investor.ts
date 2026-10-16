@@ -3,6 +3,7 @@ import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { DOCUMENT_REQUEST_KINDS } from "@/lib/document-catalogue";
 import { labelForBasis } from "@/lib/accredited-investor";
 import { readinessIssues } from "@/lib/subscription-readiness";
+import { isWholeThousands } from "@/lib/currency";
 import {
   EVIDENCE_KINDS,
   evidenceLabel,
@@ -478,6 +479,7 @@ export const investorHandlers = [
     const amount = parseFloat(body.amount);
     if (
       !Number.isFinite(amount) ||
+      !isWholeThousands(amount) ||
       Math.abs(
         (amount - min) / Number(fund.subscription_increment) -
           Math.round((amount - min) / Number(fund.subscription_increment)),
