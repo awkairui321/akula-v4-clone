@@ -5,9 +5,11 @@ import { api } from "@/lib/api";
 import {
   EVIDENCE_DOCUMENTS,
   EVIDENCE_RULES,
+  evidenceLabel,
   isCurrent,
   type EvidenceKind,
 } from "@/lib/accredited-evidence";
+import { isMocking } from "@/mocks/browser";
 import { Button } from "@/components/ui/button";
 
 export type UploadedDocument = {
@@ -129,5 +131,53 @@ export function EvidenceRow({
         />
       </div>
     </li>
+  );
+}
+
+// A one-page placeholder PDF, for the demo shortcut below.
+const SAMPLE_PDF = "data:application/pdf;base64,JVBERi0xLjQKJSVFT0YK";
+
+/**
+ * Demo only: attaches a placeholder file for each document still missing, so the AI check can be
+ * walked through without choosing files. The files are named as samples, so LUCA's queue shows
+ * what they are. Never shown outside the simulated environment.
+ */
+export function SampleDocumentsButton({ kinds }: { kinds: EvidenceKind[] }) {
+  const qc = useQueryClient();
+  const attach = useMutation({
+    mutationFn: async () => {
+      for (const kind of kinds)
+        await api("/api/v1/onboarding/documents", {
+          method: "POST",
+          body: {
+            name: `Sample ${evidenceLabel(kind).toLowerCase()} (demo).pdf`,
+            kind,
+            file_data_url: SAMPLE_PDF,
+          },
+        });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["onboardingDocuments"] }),
+  });
+  if (!isMocking || kinds.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed px-3 py-2.5">
+      <p className="min-w-0 flex-1 basis-48 text-xs leading-5 text-[#718896]">
+        Demo shortcut. Adds placeholder files for the {kinds.length} missing document
+        {kinds.length === 1 ? "" : "s"}. They are marked as samples.
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={attach.isPending}
+        onClick={() => attach.mutate()}
+      >
+        {attach.isPending ? "Attaching..." : "Attach sample documents"}
+      </Button>
+      {attach.isError && (
+        <p role="alert" className="w-full text-xs text-destructive">
+          {attach.error.message}
+        </p>
+      )}
+    </div>
   );
 }

@@ -19,7 +19,11 @@ import {
   missingEvidence,
   optionFor,
 } from "@/lib/accredited-evidence";
-import { EvidenceRow, useOnboardingDocuments } from "@/features/investor/evidence-upload";
+import {
+  EvidenceRow,
+  SampleDocumentsButton,
+  useOnboardingDocuments,
+} from "@/features/investor/evidence-upload";
 import { Button } from "@/components/ui/button";
 import DisclaimerFooter from "@/components/disclaimer-footer";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -253,6 +257,9 @@ export default function AccreditedDeclarationPage() {
                         <EvidenceRow key={kind} kind={kind} uploaded={latest.get(kind)} />
                       ))}
                     </ul>
+                    <div className="mt-3">
+                      <SampleDocumentsButton kinds={missing} />
+                    </div>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-[#718896]">
                       <li>
                         Documents must be dated within the last {EVIDENCE_RULES.maxAgeMonths}{" "}
