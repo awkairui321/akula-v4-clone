@@ -4,11 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
-import { formatPriceCents, formatPrice } from "@/lib/currency";
-import { REFUND_STATUS_LABELS } from "@/lib/acclime";
+import { ChevronRightIcon } from "lucide-react";
+import { formatPrice, formatPriceCents } from "@/lib/currency";
 import {
   DISTRIBUTION_KINDS,
-  DISTRIBUTION_STATUS_LABELS,
   distributionKindLabel,
   eventTotals,
   planDistribution,
@@ -37,22 +36,61 @@ const day = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 const REFUND_REASONS: Record<string, string> = {
-  not_allocated: "Not accepted",
-  cancelled: "Cancelled",
-  rejected: "Not accepted",
-  funds_returned: "Not accepted",
+  not_allocated: "Subscription not accepted",
+  cancelled: "Subscription cancelled",
+  rejected: "Subscription not accepted",
+  funds_returned: "Subscription not accepted",
   allocated: "Funds in excess of the allocation",
 };
 
 const row = "grid gap-1.5 sm:grid-cols-[9rem_1fr] sm:items-center sm:gap-4";
-const COLUMNS = "lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_8rem_minmax(0,1.3fr)_9rem]";
+/** Payee, payment, amount, status, action. Every row on the page shares these columns. */
+const COLUMNS = "lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.4fr)_7.5rem_minmax(0,1.1fr)_10rem]";
 
-type Tab = "all" | "refunds" | "distributions";
+type StatusFilter = "to_pay" | "paid" | "all";
+type TypeFilter = "all" | "refunds" | "distributions";
+type Refunded = WorkflowView["subscriptions"][number];
+type Item =
+  | { kind: "refund"; key: string; settled: boolean; at: string; subscription: Refunded }
+  | { kind: "event"; key: string; settled: boolean; at: string; event: DistributionEvent };
+
+/** Whole dollars when there are no cents to show, otherwise dollars and cents. */
+const money = (n: number) => (Number.isInteger(n) ? formatPrice(n) : formatPriceCents(n));
+
+const TONES = {
+  due: { dot: "bg-amber-500", text: "text-foreground" },
+  active: { dot: "bg-blue-500", text: "text-foreground" },
+  failed: { dot: "bg-red-600", text: "text-red-700" },
+  paid: { dot: "bg-green-600", text: "text-foreground" },
+};
+
+function Status({
+  tone,
+  label,
+  detail,
+}: {
+  tone: keyof typeof TONES;
+  label: string;
+  detail?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className={`flex items-center gap-2 text-sm ${TONES[tone].text}`}>
+        <span className={`size-2 shrink-0 rounded-full ${TONES[tone].dot}`} aria-hidden />
+        {label}
+      </p>
+      {detail && <p className="mt-0.5 truncate pl-4 text-xs text-muted-foreground">{detail}</p>}
+    </div>
+  );
+}
 
 /** Every payment LUCA makes out of the fund's bank account: refunds and distributions. */
 export default function PaymentsOutPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>("all");
+  const [status, setStatus] = useState<StatusFilter>("to_pay");
+  const [type, setType] = useState<TypeFilter>("all");
+  const [closed, setClosed] = useState<Set<number>>(new Set());
+  const [opened, setOpened] = useState<Set<number>>(new Set());
   const [recording, setRecording] = useState(false);
   const [paying, setPaying] = useState<{
     event: DistributionEvent;
@@ -63,155 +101,189 @@ export default function PaymentsOutPage() {
     queryFn: () => api<WorkflowView>("/api/v1/workflows"),
   });
 
-  const refunds = useMemo(
-    () =>
-      (view?.subscriptions ?? [])
-        .filter((s) => s.refund)
-        .sort((a, b) => {
-          const settled = (x: typeof a) => (x.refund?.status === "processed" ? 1 : 0);
-          return (
-            settled(a) - settled(b) ||
-            (b.refund?.processed_at ?? "").localeCompare(a.refund?.processed_at ?? "") ||
-            b.id - a.id
-          );
-        }),
-    [view],
-  );
-  const events = useMemo(
-    () =>
-      [...(view?.distributions ?? [])].sort(
-        (a, b) => Number(eventTotals(a).settled) - Number(eventTotals(b).settled) || b.id - a.id,
-      ),
-    [view],
-  );
+  const items = useMemo<Item[]>(() => {
+    const refunds: Item[] = (view?.subscriptions ?? [])
+      .filter((s) => s.refund)
+      .map((s) => ({
+        kind: "refund",
+        key: `refund-${s.id}`,
+        settled: s.refund!.status === "processed",
+        at: s.refund!.processed_at ?? "9999",
+        subscription: s,
+      }));
+    const events: Item[] = (view?.distributions ?? []).map((event) => ({
+      kind: "event",
+      key: `event-${event.id}`,
+      settled: eventTotals(event).settled,
+      at: event.recordedAt,
+      event,
+    }));
+    return [...refunds, ...events].sort(
+      (a, b) => Number(a.settled) - Number(b.settled) || b.at.localeCompare(a.at),
+    );
+  }, [view]);
 
-  const refundsDue = refunds.filter((s) => s.refund?.status !== "processed");
-  const refundsDueTotal = refundsDue.reduce((n, s) => n + (s.refund?.amount ?? 0), 0);
-  const distributionsOwed = events.reduce((n, e) => n + eventTotals(e).owed, 0);
-  const distributionsDueCount = events.reduce(
-    (n, e) => n + e.lines.filter((l) => l.status === "due").length,
+  const refundsDue = items.filter(
+    (i): i is Extract<Item, { kind: "refund" }> => i.kind === "refund" && !i.settled,
+  );
+  const refundsPaid = items.filter(
+    (i): i is Extract<Item, { kind: "refund" }> => i.kind === "refund" && i.settled,
+  );
+  const events = items.filter((i): i is Extract<Item, { kind: "event" }> => i.kind === "event");
+  const sum = (list: Item[], f: (i: Item) => number) => list.reduce((n, i) => n + f(i), 0);
+  const refundAmount = (i: Item) =>
+    i.kind === "refund" ? (i.subscription.refund?.amount ?? 0) : 0;
+  const eventPart = (part: "owed" | "paidAmount") => (i: Item) =>
+    i.kind === "event" ? eventTotals(i.event)[part] : 0;
+
+  const refundsOwed = sum(refundsDue, refundAmount);
+  const refundsSettled = sum(refundsPaid, refundAmount);
+  const distributionsOwed = sum(events, eventPart("owed"));
+  const distributionsSettled = sum(events, eventPart("paidAmount"));
+  const dueLines = events.reduce(
+    (n, i) => n + i.event.lines.filter((l) => l.status === "due").length,
     0,
   );
-  const paidTotal =
-    refunds
-      .filter((s) => s.refund?.status === "processed")
-      .reduce((n, s) => n + (s.refund?.amount ?? 0), 0) +
-    events.reduce((n, e) => n + eventTotals(e).paidAmount, 0);
-  const waitingCount = refundsDue.length + distributionsDueCount;
-  const waitingTotal = refundsDueTotal + distributionsOwed;
+  const toPayCount = refundsDue.length + dueLines;
+  const paidCount =
+    refundsPaid.length + events.reduce((n, i) => n + eventTotals(i.event).paidCount, 0);
+
+  const shown = items.filter(
+    (i) =>
+      (status === "all" || (status === "paid" ? i.settled : !i.settled)) &&
+      (type === "all" || (type === "refunds" ? i.kind === "refund" : i.kind === "event")),
+  );
+  // A distribution still being paid opens by default; a settled one stays folded away.
+  const isOpen = (item: Extract<Item, { kind: "event" }>) =>
+    item.settled ? opened.has(item.event.id) : !closed.has(item.event.id);
+  const toggle = (item: Extract<Item, { kind: "event" }>) => {
+    const set = item.settled ? opened : closed;
+    const next = new Set(set);
+    if (!next.delete(item.event.id)) next.add(item.event.id);
+    (item.settled ? setOpened : setClosed)(next);
+  };
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">Payments out</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Everything paid from the fund's bank account to investors: refunds of subscriptions that
-            were not accepted, and distributions, including the proceeds of an exit. Each payment is
-            confirmed here once the bank or Acclime has made it.
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Money paid from the fund's bank account to investors. Confirm each payment here once the
+            bank or Acclime has made it.
           </p>
         </div>
         <Button onClick={() => setRecording(true)}>Record distribution</Button>
       </div>
 
-      <dl className="grid gap-x-10 gap-y-4 border-y py-5 sm:grid-cols-3">
-        <div>
-          <dt className="text-xs text-muted-foreground">Waiting to be paid</dt>
-          <dd className="mt-1 text-2xl font-semibold tabular-nums">
-            {formatPriceCents(waitingTotal)}
+      <dl className="grid gap-y-6 border-y py-6 sm:grid-cols-2">
+        <div className="sm:pr-8">
+          <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            To pay
+          </dt>
+          <dd className="mt-1.5 text-3xl font-semibold tracking-tight tabular-nums">
+            {money(refundsOwed + distributionsOwed)}
           </dd>
-          <dd className="mt-0.5 text-xs text-muted-foreground">
-            {waitingCount === 0
-              ? "Nothing outstanding"
-              : `${waitingCount} payment${waitingCount === 1 ? "" : "s"}`}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Of which</dt>
-          <dd className="mt-1 space-y-0.5 text-sm tabular-nums">
-            <p className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Refunds</span>
-              <span className="font-medium">{formatPrice(refundsDueTotal)}</span>
-            </p>
-            <p className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Distributions</span>
-              <span className="font-medium">{formatPriceCents(distributionsOwed)}</span>
-            </p>
+          <dd className="mt-1.5 text-sm text-muted-foreground">
+            {toPayCount === 0
+              ? "Nothing is waiting to be paid."
+              : `${toPayCount} payment${toPayCount === 1 ? "" : "s"}: refunds ${money(refundsOwed)}, distributions ${money(distributionsOwed)}`}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Paid out to date</dt>
-          <dd className="mt-1 text-2xl font-semibold tabular-nums">
-            {formatPriceCents(paidTotal)}
+        <div className="sm:border-l sm:pl-8">
+          <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Paid out
+          </dt>
+          <dd className="mt-1.5 text-3xl font-semibold tracking-tight tabular-nums">
+            {money(refundsSettled + distributionsSettled)}
           </dd>
-          <dd className="mt-0.5 text-xs text-muted-foreground">Refunds and distributions</dd>
+          <dd className="mt-1.5 text-sm text-muted-foreground">
+            {paidCount} payment{paidCount === 1 ? "" : "s"}: refunds {money(refundsSettled)},
+            distributions {money(distributionsSettled)}
+          </dd>
         </div>
       </dl>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-        <TabsList variant="line" className="w-full justify-start border-b">
-          <TabsTrigger value="all" className="flex-none">
-            All
-          </TabsTrigger>
-          <TabsTrigger value="refunds" className="flex-none">
-            Refunds
-            {refundsDue.length > 0 && (
-              <span className="text-xs text-muted-foreground">{refundsDue.length}</span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="distributions" className="flex-none">
-            Distributions
-            {distributionsDueCount > 0 && (
-              <span className="text-xs text-muted-foreground">{distributionsDueCount}</span>
-            )}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {isLoading ? (
-        <p className="py-12 text-center text-muted-foreground">Loading...</p>
-      ) : (
-        <div className="space-y-8">
-          {tab !== "distributions" && (
-            <section aria-label="Refunds" className="space-y-2">
-              {tab === "all" && <h2 className="text-sm font-semibold">Refunds</h2>}
-              {refunds.length === 0 ? (
-                <p className="border-y py-8 text-center text-sm text-muted-foreground">
-                  No subscription has been refunded or is due a refund.
-                </p>
-              ) : (
-                <ul className="divide-y border-y">
-                  {refunds.map((s) => (
-                    <RefundRow key={s.id} subscription={s} />
-                  ))}
-                </ul>
-              )}
-            </section>
-          )}
-
-          {tab !== "refunds" && (
-            <section aria-label="Distributions" className="space-y-2">
-              {tab === "all" && <h2 className="text-sm font-semibold">Distributions</h2>}
-              {events.length === 0 ? (
-                <p className="border-y py-8 text-center text-sm text-muted-foreground">
-                  No distribution has been recorded. Record one when a fund pays income or returns
-                  capital, or when a holding is sold.
-                </p>
-              ) : (
-                <div className="space-y-6">
-                  {events.map((event) => (
-                    <EventBlock
-                      key={event.id}
-                      event={event}
-                      onPay={(line) => setPaying({ event, line })}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          <Tabs value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
+            <TabsList variant="line" className="justify-start">
+              <TabsTrigger value="to_pay" className="flex-none px-3">
+                To pay
+                {toPayCount > 0 && (
+                  <span className="rounded-full bg-amber-100 px-1.5 text-xs text-amber-800">
+                    {toPayCount}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="paid" className="flex-none px-3">
+                Paid
+              </TabsTrigger>
+              <TabsTrigger value="all" className="flex-none px-3">
+                All
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="flex gap-1 pb-1" role="group" aria-label="Type of payment">
+            {(
+              [
+                ["all", "All types"],
+                ["refunds", "Refunds"],
+                ["distributions", "Distributions"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={type === value}
+                onClick={() => setType(value)}
+                className={`rounded px-2.5 py-1 text-xs ${type === value ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted/60"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+
+        {isLoading ? (
+          <p className="py-12 text-center text-muted-foreground">Loading...</p>
+        ) : shown.length === 0 ? (
+          <p className="border-y py-12 text-center text-sm text-muted-foreground">
+            {status === "to_pay"
+              ? "Nothing is waiting to be paid."
+              : status === "paid"
+                ? "No payment has been made yet."
+                : "No payments yet. Record a distribution when a fund pays income, returns capital or a holding is sold."}
+          </p>
+        ) : (
+          <div>
+            <div
+              className={`hidden gap-x-4 border-b pb-2 text-xs text-muted-foreground lg:grid ${COLUMNS}`}
+            >
+              <span>Payee</span>
+              <span>Payment</span>
+              <span className="text-right">Amount</span>
+              <span>Status</span>
+              <span />
+            </div>
+            <ul className="divide-y border-b">
+              {shown.map((item) =>
+                item.kind === "refund" ? (
+                  <RefundRow key={item.key} subscription={item.subscription} />
+                ) : (
+                  <EventRows
+                    key={item.key}
+                    event={item.event}
+                    open={isOpen(item)}
+                    onToggle={() => toggle(item)}
+                    onPay={(line) => setPaying({ event: item.event, line })}
+                  />
+                ),
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
 
       {recording && view && (
         <RecordDistributionDialog view={view} onClose={() => setRecording(false)} />
@@ -221,10 +293,21 @@ export default function PaymentsOutPage() {
   );
 }
 
-function RefundRow({ subscription: s }: { subscription: WorkflowView["subscriptions"][number] }) {
+function RefundRow({ subscription: s }: { subscription: Refunded }) {
   const refund = s.refund!;
+  const tone =
+    refund.status === "processed"
+      ? "paid"
+      : refund.status === "failed"
+        ? "failed"
+        : refund.status === "processing"
+          ? "active"
+          : "due";
+  const label = { due: "To pay", processing: "In progress", failed: "Failed", processed: "Paid" }[
+    refund.status
+  ];
   return (
-    <li className={`grid items-center gap-x-4 gap-y-1 py-3.5 ${COLUMNS}`}>
+    <li className={`grid items-center gap-x-4 gap-y-1.5 py-4 ${COLUMNS}`}>
       <div className="min-w-0">
         <Link
           to={`/luca/investors/${s.investor_id}`}
@@ -233,29 +316,29 @@ function RefundRow({ subscription: s }: { subscription: WorkflowView["subscripti
           {s.investor_name}
         </Link>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {s.fund_name} · #{s.id} · <span className="font-mono">{s.payment_reference}</span>
+          {s.fund_name} · #{s.id}
         </p>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Refund · {REFUND_REASONS[s.status] ?? s.status}
-      </p>
+      <div className="min-w-0">
+        <p className="text-sm">Refund</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {REFUND_REASONS[s.status] ?? s.status}
+        </p>
+      </div>
       <p className="text-sm font-semibold tabular-nums lg:text-right">
         {formatPrice(refund.amount)}
       </p>
-      <div>
-        <p
-          className={`text-sm ${refund.status === "processed" ? "text-green-700" : refund.status === "failed" ? "text-destructive" : "text-amber-700"}`}
-        >
-          {REFUND_STATUS_LABELS[refund.status]}
-        </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {refund.status === "processed"
-            ? `${refund.confirmed_by === "acclime" ? "Confirmed by Acclime" : "Confirmed by Ops"}${refund.processed_at ? ` · ${day(refund.processed_at)}` : ""}${refund.reference ? ` · ${refund.reference}` : ""}`
+      <Status
+        tone={tone}
+        label={label}
+        detail={
+          refund.status === "processed"
+            ? `${refund.processed_at ? day(refund.processed_at) : ""}${refund.reference ? ` · ${refund.reference}` : ""}`
             : refund.status === "processing"
               ? "With Ops and Acclime"
-              : "Paid back to the investor's own account"}
-        </p>
-      </div>
+              : "To the investor's account"
+        }
+      />
       <div className="lg:text-right">
         {refund.status !== "processed" && (
           <Button
@@ -276,88 +359,124 @@ function RefundRow({ subscription: s }: { subscription: WorkflowView["subscripti
   );
 }
 
-/** One recorded distribution: what it is, the total, and what each holder is owed. */
-function EventBlock({
+/** One recorded distribution as a single row, opening to show what each holder is paid. */
+function EventRows({
   event,
+  open,
+  onToggle,
   onPay,
 }: {
   event: DistributionEvent;
+  open: boolean;
+  onToggle: () => void;
   onPay: (line?: DistributionLine) => void;
 }) {
   const totals = eventTotals(event);
+  const exit = event.kind === "exit_proceeds";
   return (
-    <article className="space-y-1">
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+    <li>
+      <div className={`grid items-center gap-x-4 gap-y-1.5 py-4 ${COLUMNS}`}>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex min-w-0 items-center gap-2 text-left"
+        >
+          <ChevronRightIcon
+            className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
+          />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">{event.fundName}</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {totals.count} investor{totals.count === 1 ? "" : "s"}
+            </span>
+          </span>
+        </button>
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold">
-            {distributionKindLabel(event.kind)} · {event.fundName}
-          </h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="text-sm">
+            {distributionKindLabel(event.kind)}
+            {exit && event.fullExit && (
+              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                Full exit
+              </span>
+            )}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {formatPriceCents(event.perUnit)} per unit · record date {day(event.recordDate)}
-            {event.kind === "exit_proceeds" &&
-              (event.fullExit
-                ? ` · full exit${event.exitRoute ? ` (${event.exitRoute})` : ""}, closes the holdings`
-                : " · partial sale, holdings stay open")}
-            {event.note ? ` · ${event.note}` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <p className="text-right text-sm tabular-nums">
-            <span className="font-semibold">{formatPriceCents(totals.total)}</span>
-            <span className="ml-2 text-xs text-muted-foreground">
-              {totals.paidCount} of {totals.count} paid
-            </span>
-          </p>
+        <p className="text-sm font-semibold tabular-nums lg:text-right">
+          {formatPriceCents(totals.total)}
+        </p>
+        <div className="min-w-0">
+          <Status
+            tone={totals.settled ? "paid" : totals.paidCount > 0 ? "active" : "due"}
+            label={totals.settled ? "Paid" : totals.paidCount > 0 ? "Part paid" : "To pay"}
+            detail={
+              totals.settled
+                ? `${day(
+                    event.lines
+                      .map((l) => l.paidAt ?? "")
+                      .sort()
+                      .at(-1) || event.recordedAt,
+                  )} · ${event.lines[0]?.reference ?? ""}`
+                : `${totals.paidCount} of ${totals.count} paid`
+            }
+          />
+          {!totals.settled && (
+            <div className="mt-1.5 ml-4 h-1 w-24 rounded-full bg-muted" aria-hidden>
+              <div
+                className="h-1 rounded-full bg-green-600"
+                style={{ width: `${(totals.paidCount / Math.max(1, totals.count)) * 100}%` }}
+              />
+            </div>
+          )}
+        </div>
+        <div className="lg:text-right">
           {!totals.settled && (
             <Button variant="outline" size="sm" onClick={() => onPay()}>
               Confirm all remaining
             </Button>
           )}
         </div>
-      </header>
-      <ul className="divide-y border-y">
-        {event.lines.map((line) => (
-          <li key={line.id} className={`grid items-center gap-x-4 gap-y-1 py-3 ${COLUMNS}`}>
-            <div className="min-w-0">
-              <Link
-                to={`/luca/investors/${line.investorId}`}
-                className="block truncate text-sm font-medium hover:underline"
-              >
-                {line.investorName}
-              </Link>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                Holding #{line.holdingId}
+      </div>
+      {open && (
+        <ul className="mb-4 divide-y rounded-lg bg-muted/40 px-4">
+          {event.lines.map((line) => (
+            <li key={line.id} className={`grid items-center gap-x-4 gap-y-1 py-3 ${COLUMNS}`}>
+              <div className="min-w-0 lg:pl-6">
+                <Link
+                  to={`/luca/investors/${line.investorId}`}
+                  className="block truncate text-sm hover:underline"
+                >
+                  {line.investorName}
+                </Link>
+              </div>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {line.units.toLocaleString("en-US")} units
               </p>
-            </div>
-            <p className="text-sm text-muted-foreground tabular-nums">
-              {line.units.toLocaleString("en-US")} units
-            </p>
-            <p className="text-sm font-semibold tabular-nums lg:text-right">
-              {formatPriceCents(line.amount)}
-            </p>
-            <div>
-              <p
-                className={`text-sm ${line.status === "processed" ? "text-green-700" : "text-amber-700"}`}
-              >
-                {DISTRIBUTION_STATUS_LABELS[line.status]}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {line.status === "processed"
-                  ? `${line.paidAt ? day(line.paidAt) : ""}${line.reference ? ` · ${line.reference}` : ""}`
-                  : "To the investor's own bank account"}
-              </p>
-            </div>
-            <div className="lg:text-right">
-              {line.status === "due" && (
-                <Button variant="outline" size="sm" onClick={() => onPay(line)}>
-                  Confirm paid
-                </Button>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </article>
+              <p className="text-sm tabular-nums lg:text-right">{formatPriceCents(line.amount)}</p>
+              <Status
+                tone={line.status === "processed" ? "paid" : "due"}
+                label={line.status === "processed" ? "Paid" : "To pay"}
+                detail={
+                  line.status === "processed"
+                    ? `${line.paidAt ? day(line.paidAt) : ""}${line.reference ? ` · ${line.reference}` : ""}`
+                    : undefined
+                }
+              />
+              <div className="lg:text-right">
+                {line.status === "due" && (
+                  <Button variant="outline" size="sm" onClick={() => onPay(line)}>
+                    Confirm paid
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 

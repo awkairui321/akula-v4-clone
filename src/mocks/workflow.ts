@@ -1,3 +1,4 @@
+import { seedDistributions } from "./distribution-seed";
 import {
   DISTRIBUTION_KINDS,
   distributionKindLabel,
@@ -29,7 +30,7 @@ export const workflow: WorkflowState = {
   acclimeMessages: [],
   packs: [],
   navRecords: [],
-  distributions: [],
+  distributions: seedDistributions(),
   versions: [],
   dealChanges: [],
   unpublished: [],

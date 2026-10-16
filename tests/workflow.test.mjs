@@ -34,6 +34,7 @@ for (const file of [
   "src/mocks/communications.ts",
   "src/features/eam/revenue-statement.ts",
   "src/mocks/db.ts",
+  "src/mocks/distribution-seed.ts",
   "src/mocks/workflow.ts",
   "src/mocks/onboarding.ts",
   "src/mocks/handlers/workflow.ts",
@@ -3572,7 +3573,7 @@ test("distributions: the Fund Manager records them, each payment is confirmed, a
   assert.equal((await record(manager(), income)).status, 200);
 
   const events = async (user) => (await (await request("workflows", user)).json()).distributions;
-  const [event] = await events(manager());
+  const event = (await events(manager())).at(-1);
   assert.equal(event.lines.length, held.length);
   for (const line of event.lines) {
     const holding = held.find((h) => h.id === line.holdingId);
@@ -3623,7 +3624,7 @@ test("distributions: the Fund Manager records them, each payment is confirmed, a
     note: null,
   };
   assert.equal((await record(manager(), exit)).status, 200);
-  const exitEvent = (await events(manager())).find((e) => e.kind === "exit_proceeds");
+  const exitEvent = (await events(manager())).findLast((e) => e.kind === "exit_proceeds");
   assert.equal((await confirm2(exitEvent.id, { text: "ACC-EXIT" })).status, 200);
   function confirm2(id, body) {
     return request("workflows", manager(), "POST", { type: "confirm-distribution", id, ...body });
@@ -3649,4 +3650,30 @@ test("distributions: the Fund Manager records them, each payment is confirmed, a
   );
   // Nothing is left to pay on a fund whose holdings have all been sold.
   assert.equal((await record(manager(), income)).status, 422);
+});
+
+test("seeded payouts: past distributions are already paid and match each investor's holdings", async () => {
+  const dist = await import("../.test-runtime/src/lib/distributions.mjs");
+  const seeded = w.workflow.distributions.filter((e) => e.id >= 9001 && e.id <= 9004);
+  assert.equal(seeded.length, 4);
+  assert.ok(seeded.every((e) => dist.eventTotals(e).settled && e.lines.every((l) => l.reference)));
+  const received = new Map();
+  for (const e of seeded)
+    for (const l of e.lines) received.set(l.holdingId, (received.get(l.holdingId) ?? 0) + l.amount);
+  for (const [holdingId, total] of received) {
+    const holding = db.holdings.find((h) => h.id === holdingId);
+    // Holdings seeded before this test file's other cases may have received later payments too.
+    assert.ok(
+      Number(holding.distributions) >= total - 0.005,
+      `holding ${holdingId} ${holding.distributions} ${total}`,
+    );
+  }
+  const exit = seeded.find((e) => e.kind === "exit_proceeds");
+  const closed = db.holdings.find((h) => h.id === exit.lines[0].holdingId);
+  assert.equal(closed.state, "realized");
+  assert.equal(Number(closed.final_proceeds), exit.lines[0].amount);
+  // The demo investor sees those payments against their own holdings.
+  const mine = (await (await request("holdings", investor())).json()).holdings;
+  assert.ok(mine.some((h) => h.distribution_payments.some((p) => p.kind === "exit_proceeds")));
+  assert.ok(mine.find((h) => h.id === 2).distribution_payments.length >= 2);
 });
