@@ -5356,6 +5356,34 @@ export function publicUser(user: MockUser): PublicUser {
   };
 }
 
+/** Each time an investor declares accredited status at sign-in: the one basis and the proof on file. */
+export type AccreditedDeclaration = {
+  id: number;
+  investor_id: number;
+  basis: string;
+  declared_at: string;
+  evidence: string[];
+};
+export const accreditedDeclarations: AccreditedDeclaration[] = [];
+let accreditedDeclarationAutoId = 1;
+export function recordAccreditedDeclaration(
+  investorId: number,
+  basis: string,
+  evidence: string[],
+): AccreditedDeclaration {
+  const declaration = {
+    id: accreditedDeclarationAutoId++,
+    investor_id: investorId,
+    basis,
+    declared_at: new Date().toISOString(),
+    evidence,
+  };
+  accreditedDeclarations.push(declaration);
+  return declaration;
+}
+export const latestAccreditedDeclaration = (investorId: number) =>
+  accreditedDeclarations.filter((d) => d.investor_id === investorId).at(-1) ?? null;
+
 const demoArrays = {
   users,
   investorProfiles,
@@ -5378,6 +5406,7 @@ const demoArrays = {
   documentRequests,
   clientEvents,
   transferAccounts,
+  accreditedDeclarations,
 };
 export function exportDemoState() {
   return structuredClone({
@@ -5393,6 +5422,7 @@ export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
     "documentRequests",
     "clientEvents",
     "transferAccounts",
+    "accreditedDeclarations",
   ];
   if (
     !saved ||
@@ -5425,6 +5455,7 @@ export function restoreDemoState(saved: ReturnType<typeof exportDemoState>) {
         .map((x) => x.id),
     ) + 1;
   subscriptionAutoId = high;
+  accreditedDeclarationAutoId = high;
   eventAutoId = high;
   bankTransferAutoId = high;
   holdingAutoId = high;

@@ -1,7 +1,13 @@
 import { commercialTerms, fundForSegment } from "../../lib/investor-access";
 import { validUploadedFile, type UploadedFile } from "@/lib/file-upload";
 import { DOCUMENT_REQUEST_KINDS } from "@/lib/document-catalogue";
-import { ACCREDITED_BASES, labelForBasis } from "@/lib/accredited-investor";
+import { labelForBasis } from "@/lib/accredited-investor";
+import {
+  EVIDENCE_KINDS,
+  evidenceLabel,
+  missingEvidence,
+  optionFor,
+} from "@/lib/accredited-evidence";
 import {
   OFFERING_DOCUMENTS,
   documentLabel,
@@ -70,6 +76,8 @@ import {
   findReferralCode,
   clientEvents,
   transferAccountView,
+  recordAccreditedDeclaration,
+  latestAccreditedDeclaration,
 } from "../db";
 
 function unauthorized() {
@@ -77,8 +85,16 @@ function unauthorized() {
 }
 
 export const investorHandlers = [
+  // GET /api/v1/investor/declaration — the investor's last declaration, so the next one starts
+  // from the same choice and the proof already on file.
+  http.get("*/api/v1/investor/declaration", ({ request }) => {
+    const user = currentUser(request);
+    if (!user?.has_investor_profile) return unauthorized();
+    return HttpResponse.json({ declaration: latestAccreditedDeclaration(user.id) });
+  }),
   // POST /api/v1/investor/declaration — the accredited investor declaration and consent made
-  // when the investor enters the portal. Recorded in the audit trail and the client's timeline.
+  // when the investor enters the portal. One basis, with the documents that basis needs already
+  // on file. Recorded in the audit trail and the client's timeline.
   http.post("*/api/v1/investor/declaration", async ({ request }) => {
     const user = currentUser(request);
     if (!user?.has_investor_profile) return unauthorized();
@@ -87,35 +103,48 @@ export const investorHandlers = [
       declared?: unknown;
       consented?: unknown;
     };
-    const basis = Array.isArray(body.basis)
+    const chosen = Array.isArray(body.basis)
       ? [...new Set(body.basis.filter((b): b is string => typeof b === "string"))]
-      : [];
-    if (basis.length === 0 || basis.some((b) => !ACCREDITED_BASES.some((o) => o.value === b)))
+      : typeof body.basis === "string"
+        ? [body.basis]
+        : [];
+    if (chosen.length !== 1 || !optionFor(chosen[0]))
       return HttpResponse.json(
-        { error: "Select the basis on which you qualify as an accredited investor." },
+        { error: "Choose the one way in which you qualify as an accredited investor." },
         { status: 422 },
       );
+    const basis = chosen[0];
     if (body.declared !== true || body.consented !== true)
       return HttpResponse.json(
         { error: "Make the declaration and give your consent to continue." },
         { status: 422 },
       );
-    const labels = basis.map(labelForBasis).join("; ");
+    const missing = missingEvidence(basis, verificationDocumentsByInvestor[user.id] ?? []);
+    if (missing.length > 0)
+      return HttpResponse.json(
+        {
+          error: `Upload your proof before you continue: ${missing.map(evidenceLabel).join(", ").toLowerCase()}.`,
+        },
+        { status: 422 },
+      );
+    const label = labelForBasis(basis);
+    const evidence = optionFor(basis)!.evidence;
     const profile = findInvestorProfileByUserId(user.id);
     const name = profile ? `${profile.first_name} ${profile.last_name}`.trim() : "";
+    const declaration = recordAccreditedDeclaration(user.id, basis, evidence);
     recordAudit(
       user.id,
-      `Investor ${user.email} declared accredited investor status (${labels}) and consented to be treated as an accredited investor.`,
+      `Investor ${user.email} declared accredited investor status (${label}), with ${evidence.length} supporting documents on file, and consented to be treated as an accredited investor.`,
     );
     recordClientEvent(
       user.id,
       "milestone",
-      `Declared accredited investor status (${labels}) and consented to be treated as an accredited investor.`,
+      `Declared accredited investor status (${label}) with supporting documents on file, and consented to be treated as an accredited investor.`,
       name || user.email,
       ["luca", "rm", "investor"],
     );
     persist();
-    return HttpResponse.json({ declared_at: new Date().toISOString(), basis });
+    return HttpResponse.json({ declared_at: declaration.declared_at, basis: [basis] });
   }),
   http.get("*/api/v1/demo/investor-segment", ({ request }) => {
     const user = currentUser(request);
@@ -287,7 +316,7 @@ export const investorHandlers = [
     const body = (await request.json()) as { name?: string; kind?: string; file_data_url?: string };
     if (
       !body.name?.trim() ||
-      !["passport", "accreditation_letter"].includes(body.kind ?? "") ||
+      !["passport", "accreditation_letter", ...EVIDENCE_KINDS].includes(body.kind ?? "") ||
       !body.file_data_url ||
       !/^data:(application\/pdf|image\/(png|jpeg));base64,[A-Za-z0-9+/]+={0,2}$/.test(
         body.file_data_url,
@@ -311,7 +340,11 @@ export const investorHandlers = [
     recordClientEvent(
       user.id,
       "documents",
-      `Uploaded ${body.kind === "passport" ? "an identity document" : "accreditation evidence"}.`,
+      body.kind === "passport"
+        ? "Uploaded an identity document."
+        : EVIDENCE_KINDS.some((kind) => kind === body.kind)
+          ? `Uploaded ${evidenceLabel(body.kind!).toLowerCase()} as accreditation evidence.`
+          : "Uploaded accreditation evidence.",
       body.name.trim() ? (findAdminInvestorSeed(user.id)?.full_name ?? user.email) : user.email,
     );
     const profile = findInvestorProfileByUserId(user.id);

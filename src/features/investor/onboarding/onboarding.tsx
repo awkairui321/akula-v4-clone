@@ -43,6 +43,8 @@ import {
 import { StepTracker, type StepState } from "@/components/ui/step-tracker";
 import { ConsentList, useConsents, allRequiredGranted } from "@/features/investor/consent-section";
 import type { InvestmentChannel } from "@/lib/types";
+import { optionFor, evidenceLabel, latestByKind } from "@/lib/accredited-evidence";
+import { useOnboardingDocuments } from "@/features/investor/evidence-upload";
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -149,7 +151,7 @@ const SECTIONS: {
   },
   {
     key: "eligibility",
-    label: "Eligibility",
+    label: "Accredited Investor",
     icon: ScaleIcon,
     description: {
       locked: "Complete the previous section first",
@@ -413,23 +415,8 @@ function ChannelSection({
 }
 
 // ---------------------------------------------------------------------------
-// Eligibility gate
+// Accredited investor verification
 // ---------------------------------------------------------------------------
-
-const ACCREDITATION_BASES = [
-  {
-    value: "income",
-    label: "My income in the preceding 12 months was not less than SGD 300,000",
-  },
-  {
-    value: "net_personal_assets",
-    label: "My net personal assets exceed SGD 2,000,000 (or equivalent)",
-  },
-  {
-    value: "net_financial_assets",
-    label: "My net financial assets exceed SGD 1,000,000 (or equivalent)",
-  },
-];
 
 function EligibilitySection({
   profile,
@@ -438,84 +425,83 @@ function EligibilitySection({
   profile: InvestorProfile | null;
   onComplete: (p: InvestorProfile) => void;
 }) {
-  const [bases, setBases] = useState<string[]>(profile?.accreditation_basis ?? []);
-  const [acknowledged, setAcknowledged] = useState(Boolean(profile?.eligibility_confirmed_at));
   const mutation = useProfileMutation(onComplete, profile ? "PATCH" : "POST");
-
-  function toggleBasis(value: string) {
-    setBases((prev) => (prev.includes(value) ? prev.filter((b) => b !== value) : [...prev, value]));
-  }
-
-  const valid = bases.length > 0 && acknowledged;
+  const { data } = useQuery({
+    queryKey: ["accreditedDeclaration"],
+    queryFn: () =>
+      api<{ declaration: { basis: string; declared_at: string; evidence: string[] } | null }>(
+        "/api/v1/investor/declaration",
+      ),
+  });
+  const { data: uploaded } = useOnboardingDocuments();
+  const declaration = data?.declaration ?? null;
+  const option = optionFor(declaration?.basis);
+  const latest = latestByKind(uploaded?.documents ?? []);
 
   return (
     <>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold">Confirm your eligibility</h2>
+        <h2 className="text-2xl font-bold">Your accredited investor status</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Akula deals are only offered to accredited investors under the Securities and Futures Act.
-          Select every basis on which you qualify.
+          You made this declaration when you signed in. Check it is right, then continue. LUCA
+          reviews your documents before your account is approved.
         </p>
       </div>
 
-      <div className="space-y-2">
-        {ACCREDITATION_BASES.map((option) => (
-          <label
-            key={option.value}
-            className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-muted/50"
-          >
-            <input
-              type="checkbox"
-              checked={bases.includes(option.value)}
-              onChange={() => toggleBasis(option.value)}
-              className="mt-0.5 size-4 rounded border-border"
-            />
-            <span className="text-sm">{option.label}</span>
-          </label>
-        ))}
-      </div>
-
-      <div className="mt-6 max-h-48 overflow-y-auto rounded-lg border bg-muted/30 p-4 text-xs text-muted-foreground">
-        <p className="mb-2 font-medium text-foreground">First Schedule warning</p>
-        <p>
-          The offer or invitation is made in reliance of an exemption under Section 275 of the
-          Securities and Futures Act 2001 which exempts an issuer from the requirement to lodge a
-          prospectus with the Monetary Authority of Singapore prior to making an offer of
-          securities. You should therefore consider carefully whether the investment is suitable for
-          you, and you have the necessary knowledge and experience to understand the risks involved.
-          Investments of this kind are illiquid, may result in the total loss of your capital, and
-          are not covered by any investor compensation or deposit protection scheme. This offer is
-          available only to persons who qualify as accredited investors, and by proceeding you
-          confirm that you meet at least one of the bases selected above.
+      {declaration && option ? (
+        <dl className="divide-y border-y text-sm">
+          <div className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]">
+            <dt className="text-muted-foreground">You qualify through</dt>
+            <dd>
+              <span className="font-medium">{option.title}</span> · {option.test}
+            </dd>
+          </div>
+          <div className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]">
+            <dt className="text-muted-foreground">Declared on</dt>
+            <dd>
+              {new Date(declaration.declared_at).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </dd>
+          </div>
+          <div className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]">
+            <dt className="text-muted-foreground">Proof on file</dt>
+            <dd>
+              <ul className="space-y-1">
+                {option.evidence.map((kind) => (
+                  <li key={kind}>
+                    {evidenceLabel(kind)}
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · {latest.get(kind)?.notes ?? "not found"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="border-l-2 border-amber-500 bg-amber-500/5 px-4 py-3 text-sm">
+          We could not find your declaration. Sign out and sign in again to make it.
         </p>
-      </div>
-
-      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-muted/50">
-        <input
-          type="checkbox"
-          checked={acknowledged}
-          onChange={(e) => setAcknowledged(e.target.checked)}
-          className="mt-0.5 size-4 rounded border-border"
-        />
-        <span className="text-sm">
-          I have read and understood the First Schedule warning above, and I confirm the
-          accreditation basis I have selected is accurate.
-        </span>
-      </label>
+      )}
 
       <MutationError error={mutation.error as Error | null} />
 
       <Button
         className="mt-6 w-full"
-        disabled={!valid || mutation.isPending}
+        disabled={!declaration || mutation.isPending}
         onClick={() =>
           mutation.mutate({
-            accreditation_basis: bases,
-            eligibility_confirmed_at: new Date().toISOString(),
+            accreditation_basis: declaration ? [declaration.basis] : [],
+            eligibility_confirmed_at: profile?.eligibility_confirmed_at ?? new Date().toISOString(),
           })
         }
       >
-        {mutation.isPending ? "Saving..." : "Continue"}
+        {mutation.isPending ? "Saving..." : "Confirm and continue"}
       </Button>
     </>
   );

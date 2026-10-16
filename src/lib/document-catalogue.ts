@@ -38,6 +38,37 @@ export const DOCUMENT_REQUEST_KINDS: DocumentRequestKind[] = [
     appliesTo: "both",
   },
   {
+    key: "notice_of_assessment",
+    label: "Notice of assessment",
+    reason: "Evidence of income for accredited investor status. Dated within the last 3 months.",
+    group: "Eligibility",
+    appliesTo: "individual",
+  },
+  {
+    key: "bank_statement",
+    label: "Bank account statement",
+    reason:
+      "Evidence of net financial or personal assets for accredited investor status. Dated within the last 3 months.",
+    group: "Eligibility",
+    appliesTo: "individual",
+  },
+  {
+    key: "property_deed",
+    label: "Property deed",
+    reason:
+      "Shows the value of the property, for net personal assets. Dated within the last 3 months.",
+    group: "Eligibility",
+    appliesTo: "individual",
+  },
+  {
+    key: "financial_statements",
+    label: "Latest financial statements",
+    reason:
+      "Evidence of the company's net assets for accredited investor status. The latest statements.",
+    group: "Eligibility",
+    appliesTo: "entity",
+  },
+  {
     key: "source_of_funds",
     label: "Source of funds declaration",
     reason: "Anti-money-laundering check on where the money for this investment comes from.",
@@ -46,7 +77,7 @@ export const DOCUMENT_REQUEST_KINDS: DocumentRequestKind[] = [
   },
   {
     key: "source_of_wealth",
-    label: "Source of wealth statement",
+    label: "Source of wealth declaration",
     reason:
       "Anti-money-laundering check on how the investor’s wealth was built. Needed for larger tickets.",
     group: "Source of funds",

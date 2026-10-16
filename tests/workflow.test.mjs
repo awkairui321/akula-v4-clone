@@ -19,6 +19,7 @@ for (const file of [
   "src/lib/document-catalogue.ts",
   "src/lib/format-date.ts",
   "src/lib/accredited-investor.ts",
+  "src/lib/accredited-evidence.ts",
   "src/lib/offering.ts",
   "src/lib/receipts.ts",
   "src/lib/acclime.ts",
@@ -2500,34 +2501,70 @@ test("subscribe access follows the whole audience: named clients can subscribe; 
   );
 });
 
-test("the accredited investor declaration needs a basis, a declaration and consent, and is recorded", async () => {
+test("the accredited investor declaration needs one basis, its proof, a declaration and consent", async () => {
+  const evidence = await import("../.test-runtime/src/lib/accredited-evidence.mjs");
   const user = investor();
   const declare = (body) => request("investor/declaration", user, "POST", body);
-  const before = w.workflow.events.length;
-  const timeline = db.clientEvents.length;
+  const file = "data:application/pdf;base64,JVBERi0xLjQK";
+  const upload = (kind) =>
+    request("onboarding/documents", user, "POST", {
+      name: `${kind}.pdf`,
+      kind,
+      file_data_url: file,
+    });
+  const full = { declared: true, consented: true };
 
+  // Nothing is accepted without exactly one known basis, the declaration and the consent.
   for (const incomplete of [
-    { basis: [], declared: true, consented: true },
-    { basis: ["lottery_win"], declared: true, consented: true },
+    { basis: [], ...full },
+    { basis: ["lottery_win"], ...full },
+    { basis: ["income", "net_financial_assets"], ...full },
     { basis: ["income"], declared: true, consented: false },
     { basis: ["income"], declared: false, consented: true },
   ])
     assert.equal((await declare(incomplete)).status, 422);
-  assert.equal(w.workflow.events.length, before, "rejected declarations leave no record");
 
-  const ok = await declare({
-    basis: ["income", "income", "net_financial_assets"],
-    declared: true,
-    consented: true,
-  });
+  // The proof is part of the gate: none, or only some of it, is not enough.
+  const noProof = await declare({ basis: ["net_personal_assets"], ...full });
+  assert.equal(noProof.status, 422);
+  assert.match((await noProof.json()).error, /Upload your proof/);
+  for (const kind of ["bank_statement", "source_of_wealth"]) await upload(kind);
+  const recorded = w.workflow.events.length;
+  const partial = await declare({ basis: ["net_personal_assets"], ...full });
+  assert.equal(partial.status, 422);
+  assert.match((await partial.json()).error, /property deed/);
+  // Proof for a different basis does not count towards this one.
+  assert.equal((await declare({ basis: ["income"], ...full })).status, 422);
+  assert.equal(w.workflow.events.length, recorded, "rejected declarations leave no record");
+  assert.equal(db.latestAccreditedDeclaration(user.id), null);
+
+  await upload("property_deed");
+  const before = w.workflow.events.length;
+  const timeline = db.clientEvents.length;
+  const ok = await declare({ basis: ["net_personal_assets"], ...full });
   assert.equal(ok.status, 200);
-  assert.deepEqual((await ok.json()).basis, ["income", "net_financial_assets"]);
+  assert.deepEqual((await ok.json()).basis, ["net_personal_assets"]);
   assert.equal(w.workflow.events.length, before + 1);
   assert.match(w.workflow.events.at(-1).label, /declared accredited investor status/);
+  assert.match(w.workflow.events.at(-1).label, /3 supporting documents/);
   const entry = db.clientEvents.at(-1);
   assert.equal(db.clientEvents.length, timeline + 1);
   assert.equal(entry.investor_id, user.id);
   assert.ok(entry.audience.includes("luca") && !entry.audience.includes("partner"));
+
+  // The last choice is remembered, so the next sign-in starts from it.
+  const last = (await (await request("investor/declaration", user)).json()).declaration;
+  assert.equal(last.basis, "net_personal_assets");
+  assert.deepEqual(last.evidence, evidence.optionFor("net_personal_assets").evidence);
+
+  // Proof on file stays valid for six months, then fresh copies are needed.
+  assert.equal((await declare({ basis: ["net_personal_assets"], ...full })).status, 200);
+  const old = new Date();
+  old.setMonth(old.getMonth() - 7);
+  for (const doc of db.verificationDocumentsByInvestor[user.id]) doc.created_at = old.toISOString();
+  const stale = await declare({ basis: ["net_personal_assets"], ...full });
+  assert.equal(stale.status, 422);
+  assert.match((await stale.json()).error, /Upload your proof/);
 
   assert.equal((await request("investor/declaration", manager(), "POST", {})).status, 401);
 });
@@ -3233,4 +3270,78 @@ test("the Clients tab compares each client's latest NAV with the capital committ
   const none = book.all.clients.find((c) => c.holdings.length === 0);
   assert.equal(none.navCost, 0);
   assert.equal(none.navValue, 0);
+});
+
+test("accredited investor evidence: one choice, its own documents, and what reaches the Fund Manager", async () => {
+  const evidence = await import("../.test-runtime/src/lib/accredited-evidence.mjs");
+  const catalogue = await import("../.test-runtime/src/lib/document-catalogue.mjs");
+
+  // Each way of qualifying has its own list, and every list ends with the source of wealth.
+  assert.deepEqual(evidence.optionFor("income").evidence, [
+    "notice_of_assessment",
+    "source_of_wealth",
+  ]);
+  assert.deepEqual(evidence.optionFor("net_financial_assets").evidence, [
+    "bank_statement",
+    "source_of_wealth",
+  ]);
+  assert.deepEqual(evidence.optionFor("net_personal_assets").evidence, [
+    "bank_statement",
+    "property_deed",
+    "source_of_wealth",
+  ]);
+  assert.deepEqual(evidence.optionFor("entity_net_assets").evidence, [
+    "financial_statements",
+    "source_of_wealth",
+  ]);
+  for (const option of evidence.QUALIFYING_OPTIONS) {
+    assert.ok(option.evidence.at(-1) === "source_of_wealth");
+    for (const kind of option.evidence)
+      assert.notEqual(catalogue.documentKindLabel(kind), kind, `${kind} has a readable name`);
+  }
+
+  // What is missing depends on the choice, and an older upload is replaced by a newer one.
+  const now = Date.parse("2026-10-16T00:00:00Z");
+  const docs = [
+    { document_type: "bank_statement", created_at: "2026-09-01T00:00:00Z" },
+    { document_type: "property_deed", created_at: "2026-03-01T00:00:00Z" },
+    { document_type: "property_deed", created_at: "2026-10-01T00:00:00Z" },
+  ];
+  assert.deepEqual(evidence.missingEvidence("net_personal_assets", docs, now), [
+    "source_of_wealth",
+  ]);
+  assert.deepEqual(evidence.missingEvidence("income", docs, now), [
+    "notice_of_assessment",
+    "source_of_wealth",
+  ]);
+  assert.deepEqual(evidence.missingEvidence("unknown", docs, now), []);
+  assert.equal(evidence.isCurrent("2026-04-17T00:00:00Z", now), true);
+  assert.equal(evidence.isCurrent("2026-04-15T00:00:00Z", now), false, "older than six months");
+
+  // Uploads of every kind are accepted, anything else is not, and each reaches LUCA's queue.
+  const user = investor();
+  const file = "data:application/pdf;base64,JVBERi0xLjQK";
+  const upload = (kind) =>
+    request("onboarding/documents", user, "POST", {
+      name: `${kind}.pdf`,
+      kind,
+      file_data_url: file,
+    });
+  for (const kind of evidence.EVIDENCE_KINDS) assert.equal((await upload(kind)).status, 200, kind);
+  assert.equal((await upload("not_a_document")).status, 422);
+  const mine = db.documents.filter(
+    (d) => d.owner_id === user.id && evidence.EVIDENCE_KINDS.includes(d.kind),
+  );
+  assert.deepEqual(mine.map((d) => d.kind).sort(), [...evidence.EVIDENCE_KINDS].sort());
+  assert.ok(
+    mine.every((d) => d.review_state === "received"),
+    "each waits for LUCA's review",
+  );
+  const listed = (await (await request("admin/documents", manager())).json()).documents;
+  for (const doc of mine)
+    assert.ok(
+      listed.some((d) => d.id === doc.id),
+      `${doc.kind} is listed`,
+    );
+  assert.equal(catalogue.documentKindLabel("source_of_wealth"), "Source of wealth declaration");
 });
